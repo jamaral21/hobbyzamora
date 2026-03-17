@@ -1,0 +1,582 @@
+// API Client for HobbyZamora
+// Replaces mock data with real API calls
+
+const API_BASE = '/api';
+
+// Types matching the database schema
+export interface Product {
+  id: string;
+  sku: string;
+  name: string;
+  category: string;
+  price: number;
+  cost: number;
+  stock: number;
+  images: string[];
+  description: string | null;
+  status: 'ACTIVE' | 'DRAFT' | 'ARCHIVED';
+  isPresale?: boolean;
+  presaleMaxQty?: number;
+  presaleAvailQty?: number;
+  presaleEndDate?: string;
+  variants?: ProductVariant[];
+}
+
+export interface ProductVariant {
+  id: string;
+  name: string;
+  options: string[];
+  stock: number;
+  price?: number | null;
+}
+
+export interface Order {
+  id: string;
+  orderNumber: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone?: string;
+  createdAt: string;
+  subtotal: number;
+  tax: number;
+  shipping: number;
+  discount: number;
+  total: number;
+  status: 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'REFUNDED';
+  source: 'ONLINE' | 'POS' | 'INSTAGRAM';
+  items: OrderItem[];
+  payments?: Payment[];
+}
+
+export interface OrderItem {
+  id: string;
+  productId: string;
+  name: string;
+  sku: string;
+  price: number;
+  cost: number;
+  quantity: number;
+  variantName?: string | null;
+  product?: { images: string[] };
+}
+
+export interface Payment {
+  id: string;
+  method: 'CARD' | 'CASH' | 'TRANSFER' | 'GETNET';
+  status: 'PENDING' | 'APPROVED' | 'DECLINED' | 'CANCELLED' | 'REFUNDED';
+  amount: number;
+  paidAt?: string;
+}
+
+export interface CartItem {
+  id: string;
+  productId: string;
+  variantId?: string | null;
+  quantity: number;
+  product: {
+    id: string;
+    name: string;
+    sku: string;
+    price: number;
+    images: string[];
+    stock: number;
+  };
+  variant?: {
+    id: string;
+    name: string;
+    options: string[];
+    price?: number | null;
+  } | null;
+}
+
+export interface Cart {
+  id: string;
+  items: CartItem[];
+  subtotal: number;
+  itemCount: number;
+}
+
+export interface Customer {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  joinDate: string;
+  totalOrders: number;
+  totalSpent: number;
+}
+
+export interface DashboardStats {
+  dailySales: number;
+  weeklySales: number;
+  monthlySales: number;
+  revenue: number;
+  profit: number;
+  inventoryValue: number;
+  lowStockItems: number;
+}
+
+export interface InstagramConversation {
+  id: string;
+  customerName: string;
+  username: string;
+  lastMessage: string;
+  status: 'ACTIVE' | 'PENDING' | 'RESOLVED';
+  unread: boolean;
+  handedOver: boolean;
+  updatedAt: string;
+}
+
+export interface InstagramMessage {
+  id: string;
+  sender: 'CUSTOMER' | 'BOT' | 'AGENT';
+  content: string;
+  productId?: string;
+  createdAt: string;
+}
+
+export interface InventoryItem {
+  productId: string;
+  productName: string;
+  productSku: string;
+  totalQuantity: number;
+  totalValue: number;
+  batches: InventoryBatch[];
+}
+
+export interface InventoryBatch {
+  id: string;
+  batchCode: string;
+  quantity: number;
+  remaining: number;
+  unitCost: number;
+  receivedAt: string;
+}
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: 'ADMIN' | 'STAFF' | 'CUSTOMER';
+  phone?: string;
+}
+
+// API Error class
+export class ApiError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+// Base fetch function with auth
+async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const token = localStorage.getItem('token');
+  
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+      ...options?.headers,
+    },
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({ error: 'Request failed' }));
+    throw new ApiError(response.status, data.error || response.statusText);
+  }
+
+  return response.json();
+}
+
+// Auth API
+export const authAPI = {
+  login: async (email: string, password: string) => {
+    const data = await fetchAPI<{ user: User; token: string }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    localStorage.setItem('token', data.token);
+    return data;
+  },
+
+  register: async (email: string, password: string, name: string, phone?: string) => {
+    const data = await fetchAPI<{ user: User; token: string }>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ email, password, name, phone }),
+    });
+    localStorage.setItem('token', data.token);
+    return data;
+  },
+
+  logout: () => {
+    localStorage.removeItem('token');
+  },
+
+  getMe: () => fetchAPI<User>('/auth/me'),
+
+  updateProfile: (data: { name?: string; phone?: string }) =>
+    fetchAPI<User>('/auth/me', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  googleLogin: async (credential: string) => {
+    const data = await fetchAPI<{ user: User; token: string }>('/auth/google', {
+      method: 'POST',
+      body: JSON.stringify({ credential }),
+    });
+    localStorage.setItem('token', data.token);
+    return data;
+  },
+};
+
+// Products API
+export const productsAPI = {
+  getAll: (params?: {
+    category?: string;
+    status?: string;
+    search?: string;
+    presale?: boolean;
+    page?: number;
+    limit?: number;
+  }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.category) searchParams.set('category', params.category);
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.presale) searchParams.set('presale', 'true');
+    if (params?.page) searchParams.set('page', String(params.page));
+    if (params?.limit) searchParams.set('limit', String(params.limit));
+    
+    const query = searchParams.toString();
+    return fetchAPI<{ products: Product[]; pagination: any }>(`/products${query ? `?${query}` : ''}`);
+  },
+
+  getById: (id: string) => fetchAPI<Product>(`/products/${id}`),
+
+  create: (data: Partial<Product> & { initialStock?: number }) =>
+    fetchAPI<Product>('/products', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  update: (id: string, data: Partial<Product>) =>
+    fetchAPI<Product>(`/products/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  delete: (id: string) =>
+    fetchAPI<{ message: string }>(`/products/${id}`, { method: 'DELETE' }),
+
+  getCategories: () => fetchAPI<string[]>('/products/meta/categories'),
+
+  importCSV: (products: Record<string, string>[]) =>
+    fetchAPI<{ created: number; skipped: number; errors: string[] }>('/products/import', {
+      method: 'POST',
+      body: JSON.stringify({ products }),
+    }),
+};
+
+// Orders API
+export const ordersAPI = {
+  getAll: (params?: {
+    status?: string;
+    source?: string;
+    startDate?: string;
+    endDate?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.source) searchParams.set('source', params.source);
+    if (params?.startDate) searchParams.set('startDate', params.startDate);
+    if (params?.endDate) searchParams.set('endDate', params.endDate);
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.page) searchParams.set('page', String(params.page));
+    if (params?.limit) searchParams.set('limit', String(params.limit));
+    
+    const query = searchParams.toString();
+    return fetchAPI<{ orders: Order[]; pagination: any }>(`/orders${query ? `?${query}` : ''}`);
+  },
+
+  getById: (id: string) => fetchAPI<Order>(`/orders/${id}`),
+
+  create: (data: {
+    items: Array<{ productId: string; variantId?: string; quantity: number }>;
+    customerName: string;
+    customerEmail: string;
+    customerPhone?: string;
+    shipping?: { cost: number };
+    shippingAddress?: {
+      street: string;
+      city: string;
+      state: string;
+      zipCode: string;
+      country: string;
+    };
+  }) =>
+    fetchAPI<Order>('/orders', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateStatus: (id: string, status: string) =>
+    fetchAPI<Order>(`/orders/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+
+  getMyOrders: () => fetchAPI<Order[]>('/orders/my/orders'),
+};
+
+// Cart API
+export const cartAPI = {
+  getCart: () => fetchAPI<Cart>('/cart'),
+
+  addItem: (productId: string, quantity: number, variantId?: string) =>
+    fetchAPI<CartItem>('/cart/items', {
+      method: 'POST',
+      body: JSON.stringify({ productId, quantity, variantId }),
+    }),
+
+  updateItem: (itemId: string, quantity: number) =>
+    fetchAPI<CartItem>(`/cart/items/${itemId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ quantity }),
+    }),
+
+  removeItem: (itemId: string) =>
+    fetchAPI<{ message: string }>(`/cart/items/${itemId}`, { method: 'DELETE' }),
+
+  clearCart: () =>
+    fetchAPI<{ message: string }>('/cart', { method: 'DELETE' }),
+};
+
+// Inventory API
+export const inventoryAPI = {
+  getAll: (params?: { productId?: string; lowStock?: boolean }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.productId) searchParams.set('productId', params.productId);
+    if (params?.lowStock) searchParams.set('lowStock', 'true');
+    
+    const query = searchParams.toString();
+    return fetchAPI<{
+      inventory: InventoryItem[];
+      summary: { totalProducts: number; totalValue: number; lowStockCount: number };
+    }>(`/inventory${query ? `?${query}` : ''}`);
+  },
+
+  receive: (productId: string, quantity: number, unitCost: number, batchCode?: string) =>
+    fetchAPI<InventoryBatch>('/inventory/receive', {
+      method: 'POST',
+      body: JSON.stringify({ productId, quantity, unitCost, batchCode }),
+    }),
+
+  adjust: (batchId: string, adjustment: number, reason?: string) =>
+    fetchAPI<InventoryBatch>('/inventory/adjust', {
+      method: 'POST',
+      body: JSON.stringify({ batchId, adjustment, reason }),
+    }),
+
+  getMovements: (params?: {
+    productId?: string;
+    type?: string;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.productId) searchParams.set('productId', params.productId);
+    if (params?.type) searchParams.set('type', params.type);
+    if (params?.startDate) searchParams.set('startDate', params.startDate);
+    if (params?.endDate) searchParams.set('endDate', params.endDate);
+    if (params?.page) searchParams.set('page', String(params.page));
+    if (params?.limit) searchParams.set('limit', String(params.limit));
+    
+    const query = searchParams.toString();
+    return fetchAPI<{ movements: any[]; pagination: any }>(`/inventory/movements${query ? `?${query}` : ''}`);
+  },
+
+  importCSV: (batches: Record<string, string>[]) =>
+    fetchAPI<{ created: number; skipped: number; errors: string[] }>('/inventory/import', {
+      method: 'POST',
+      body: JSON.stringify({ batches }),
+    }),
+};
+
+// POS API
+export const posAPI = {
+  getProducts: (search?: string, category?: string) => {
+    const searchParams = new URLSearchParams();
+    if (search) searchParams.set('search', search);
+    if (category) searchParams.set('category', category);
+    
+    const query = searchParams.toString();
+    return fetchAPI<Product[]>(`/pos/products${query ? `?${query}` : ''}`);
+  },
+
+  scanProduct: (code: string) => fetchAPI<Product>(`/pos/scan/${code}`),
+
+  createSale: (data: {
+    items: Array<{ productId: string; quantity: number; price?: number; variantName?: string }>;
+    customerName?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+    paymentMethod: 'CASH' | 'CARD' | 'TRANSFER';
+    amountPaid?: number;
+    notes?: string;
+  }) =>
+    fetchAPI<Order & { change: number }>('/pos/sale', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  getTodaySales: () =>
+    fetchAPI<{
+      sales: Order[];
+      summary: { count: number; totalSales: number; totalItems: number };
+    }>('/pos/today'),
+
+  getRegister: () =>
+    fetchAPI<{
+      total: number;
+      byMethod: Record<string, { count: number; total: number }>;
+      transactionCount: number;
+    }>('/pos/register'),
+};
+
+// Analytics API
+export const analyticsAPI = {
+  getDashboard: () => fetchAPI<DashboardStats>('/analytics/dashboard'),
+
+  getSalesChart: (days?: number) => {
+    const query = days ? `?days=${days}` : '';
+    return fetchAPI<Array<{ date: string; sales: number; revenue: number }>>(`/analytics/sales-chart${query}`);
+  },
+
+  getTopProducts: (limit?: number, period?: 'week' | 'month' | 'year') => {
+    const searchParams = new URLSearchParams();
+    if (limit) searchParams.set('limit', String(limit));
+    if (period) searchParams.set('period', period);
+    
+    const query = searchParams.toString();
+    return fetchAPI<Array<{ name: string; sales: number; revenue: number }>>(`/analytics/top-products${query ? `?${query}` : ''}`);
+  },
+
+  getOrdersBySource: (period?: 'week' | 'month') => {
+    const query = period ? `?period=${period}` : '';
+    return fetchAPI<Array<{ source: string; count: number; total: number }>>(`/analytics/orders-by-source${query}`);
+  },
+
+  getOrdersByStatus: () =>
+    fetchAPI<Array<{ status: string; count: number }>>('/analytics/orders-by-status'),
+};
+
+// Customers API
+export const customersAPI = {
+  getAll: (params?: { search?: string; page?: number; limit?: number }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.page) searchParams.set('page', String(params.page));
+    if (params?.limit) searchParams.set('limit', String(params.limit));
+    
+    const query = searchParams.toString();
+    return fetchAPI<{ customers: Customer[]; pagination: any }>(`/customers${query ? `?${query}` : ''}`);
+  },
+
+  getById: (id: string) => fetchAPI<Customer & { recentOrders: Order[] }>(`/customers/${id}`),
+
+  getTopCustomers: (limit?: number) => {
+    const query = limit ? `?limit=${limit}` : '';
+    return fetchAPI<Customer[]>(`/customers/stats/top${query}`);
+  },
+};
+
+// Instagram API
+export const instagramAPI = {
+  getConversations: (params?: { status?: string; search?: string }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.search) searchParams.set('search', params.search);
+    
+    const query = searchParams.toString();
+    return fetchAPI<InstagramConversation[]>(`/instagram/conversations${query ? `?${query}` : ''}`);
+  },
+
+  getConversation: (id: string) =>
+    fetchAPI<InstagramConversation & { messages: InstagramMessage[] }>(`/instagram/conversations/${id}`),
+
+  sendMessage: (conversationId: string, content: string, productId?: string) =>
+    fetchAPI<InstagramMessage>(`/instagram/conversations/${conversationId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ content, productId }),
+    }),
+
+  takeOver: (conversationId: string) =>
+    fetchAPI<InstagramConversation>(`/instagram/conversations/${conversationId}/takeover`, {
+      method: 'POST',
+    }),
+
+  returnToBot: (conversationId: string) =>
+    fetchAPI<InstagramConversation>(`/instagram/conversations/${conversationId}/return-to-bot`, {
+      method: 'POST',
+    }),
+
+  updateStatus: (conversationId: string, status: 'ACTIVE' | 'PENDING' | 'RESOLVED') =>
+    fetchAPI<InstagramConversation>(`/instagram/conversations/${conversationId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+
+  getStats: () =>
+    fetchAPI<{
+      activeConversations: number;
+      pendingConversations: number;
+      todayConversations: number;
+      todayMessages: number;
+      conversionRate: number;
+      avgResponseTime: string;
+    }>('/instagram/stats'),
+};
+
+// Payments API
+export const paymentsAPI = {
+  checkout: (orderId: string) =>
+    fetchAPI<{ paymentId: string; checkoutUrl?: string; requestId?: number; status: string; mode: string }>('/payments/checkout', {
+      method: 'POST',
+      body: JSON.stringify({ orderId }),
+    }),
+
+  querySession: (params: { requestId?: number; paymentId?: string }) =>
+    fetchAPI<{ id: string; status: string; orderId: string; orderStatus: string; getnetStatus?: string }>('/payments/getnet/query', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    }),
+
+  getStatus: (paymentId: string) =>
+    fetchAPI<Payment & { order: { orderNumber: string; status: string } }>(`/payments/${paymentId}/status`),
+
+  processManual: (data: {
+    orderId: string;
+    method: 'CASH' | 'CARD' | 'TRANSFER';
+    amount: number;
+    cardLast4?: string;
+    cardBrand?: string;
+  }) =>
+    fetchAPI<Payment>('/payments/manual', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  refund: (paymentId: string, amount?: number, reason?: string) =>
+    fetchAPI<{ message: string }>(`/payments/${paymentId}/refund`, {
+      method: 'POST',
+      body: JSON.stringify({ amount, reason }),
+    }),
+};

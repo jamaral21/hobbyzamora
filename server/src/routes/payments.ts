@@ -1,0 +1,454 @@
+import { Router } from 'express';
+import crypto from 'crypto';
+import { prisma } from '../index.js';
+import { authenticate, optionalAuth, requireRole, AuthRequest } from '../middleware/auth.js';
+
+const router = Router();
+
+// Getnet Chile (PlacetoPay) API configuration
+const GETNET_ENDPOINT = process.env.GETNET_ENDPOINT || 'https://checkout.test.getnet.cl';
+const GETNET_LOGIN = process.env.GETNET_LOGIN || '';
+const GETNET_TRANKEY = process.env.GETNET_TRANKEY || '';
+
+// Generate PlacetoPay auth object
+function generatePlacetoPayAuth() {
+  const nonce = crypto.randomBytes(16);
+  const seed = new Date().toISOString();
+  const digest = crypto
+    .createHash('sha256')
+    .update(nonce.toString('base64') + seed + GETNET_TRANKEY)
+    .digest('base64');
+
+  return {
+    login: GETNET_LOGIN,
+    tranKey: digest,
+    nonce: nonce.toString('base64'),
+    seed,
+  };
+}
+
+// Unified checkout endpoint - routes to dev auto-approve or Getnet Chile
+router.post('/checkout', optionalAuth, async (req: AuthRequest, res) => {
+  try {
+    const { orderId } = req.body;
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true },
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    // Development mode without Getnet credentials: auto-approve payment
+    if (process.env.NODE_ENV !== 'production' && !GETNET_LOGIN) {
+      const payment = await prisma.payment.create({
+        data: {
+          orderId: order.id,
+          method: 'CARD',
+          status: 'APPROVED',
+          amount: parseFloat(order.total.toString()),
+          cardLast4: '0000',
+          cardBrand: 'DEV',
+          paidAt: new Date(),
+        },
+      });
+
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { status: 'PROCESSING' },
+      });
+
+      return res.json({
+        paymentId: payment.id,
+        status: 'APPROVED',
+        mode: 'development',
+      });
+    }
+
+    // Getnet Chile (PlacetoPay) Web Checkout
+    const total = parseFloat(order.total.toString());
+    const expiration = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(); // 2 hours
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+
+    const sessionData = {
+      auth: generatePlacetoPayAuth(),
+      payment: {
+        reference: order.orderNumber,
+        description: `Orden ${order.orderNumber} - HobbyZamora`,
+        amount: {
+          currency: 'MXN',
+          total,
+        },
+      },
+      expiration,
+      returnUrl: `${frontendUrl}/store/order-confirmation?orderId=${order.id}`,
+      ipAddress: (req.ip === '::1' ? '127.0.0.1' : req.ip) || '127.0.0.1',
+      userAgent: req.headers['user-agent'] || 'HobbyZamora/1.0',
+      buyer: {
+        name: order.customerName.split(' ')[0],
+        surname: order.customerName.split(' ').slice(1).join(' ') || 'N/A',
+        email: order.customerEmail,
+        mobile: order.customerPhone || undefined,
+      },
+    };
+
+    const response = await fetch(`${GETNET_ENDPOINT}/api/session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sessionData),
+    });
+
+    const sessionResponse = await response.json();
+
+    if (sessionResponse.status?.status === 'ERROR' || !sessionResponse.processUrl) {
+      console.error('Getnet session error:', JSON.stringify(sessionResponse));
+      return res.status(500).json({
+        error: 'Failed to create payment session',
+        detail: sessionResponse.status?.message || 'Unknown error',
+      });
+    }
+
+    const payment = await prisma.payment.create({
+      data: {
+        orderId: order.id,
+        method: 'GETNET',
+        status: 'PENDING',
+        amount: total,
+        getnetPaymentId: String(sessionResponse.requestId),
+        getnetCheckoutUrl: sessionResponse.processUrl,
+      },
+    });
+
+    res.json({
+      paymentId: payment.id,
+      checkoutUrl: sessionResponse.processUrl,
+      requestId: sessionResponse.requestId,
+      status: 'PENDING',
+      mode: 'getnet',
+    });
+  } catch (error) {
+    console.error('Checkout payment error:', error);
+    res.status(500).json({ error: 'Failed to process checkout' });
+  }
+});
+
+// Query Getnet session status (used after user returns from payment page)
+router.post('/getnet/query', optionalAuth, async (req: AuthRequest, res) => {
+  try {
+    const { requestId, paymentId } = req.body;
+
+    // Find payment record
+    const payment = await prisma.payment.findFirst({
+      where: paymentId
+        ? { id: paymentId }
+        : { getnetPaymentId: String(requestId) },
+      include: { order: true },
+    });
+
+    if (!payment) {
+      return res.status(404).json({ error: 'Payment not found' });
+    }
+
+    // If already resolved, return current status
+    if (payment.status !== 'PENDING') {
+      return res.json({
+        id: payment.id,
+        status: payment.status,
+        orderId: payment.orderId,
+        orderStatus: payment.order.status,
+      });
+    }
+
+    // Query Getnet Chile for session status
+    const queryResponse = await fetch(
+      `${GETNET_ENDPOINT}/api/session/${payment.getnetPaymentId}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ auth: generatePlacetoPayAuth() }),
+      }
+    );
+
+    const sessionStatus = await queryResponse.json();
+    console.log('Getnet session status:', JSON.stringify(sessionStatus));
+
+    let paymentStatus: string = 'PENDING';
+    let orderStatus: string = 'PENDING';
+
+    const placetoPayStatus = sessionStatus.status?.status;
+    switch (placetoPayStatus) {
+      case 'APPROVED':
+        paymentStatus = 'APPROVED';
+        orderStatus = 'PROCESSING';
+        break;
+      case 'REJECTED':
+      case 'FAILED':
+        paymentStatus = 'DECLINED';
+        orderStatus = 'CANCELLED';
+        break;
+      case 'PENDING':
+      case 'PENDING_VALIDATION':
+        paymentStatus = 'PENDING';
+        orderStatus = 'PENDING';
+        break;
+      default:
+        paymentStatus = 'PENDING';
+        orderStatus = 'PENDING';
+    }
+
+    // Extract card info from Getnet response if available
+    const txn = sessionStatus.payment?.[0] ?? null;
+    const cardBrand = txn?.franchise || null;
+    const cardLast4 = txn?.issuerName || null;
+
+    // Update payment record
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: paymentStatus,
+        cardBrand,
+        cardLast4,
+        paidAt: paymentStatus === 'APPROVED' ? new Date() : null,
+      },
+    });
+
+    // Update order status
+    if (orderStatus !== 'PENDING') {
+      await prisma.order.update({
+        where: { id: payment.orderId },
+        data: { status: orderStatus },
+      });
+    }
+
+    res.json({
+      id: payment.id,
+      status: paymentStatus,
+      orderId: payment.orderId,
+      orderStatus,
+      getnetStatus: placetoPayStatus,
+    });
+  } catch (error) {
+    console.error('Getnet query error:', error);
+    res.status(500).json({ error: 'Failed to query payment status' });
+  }
+});
+
+// Getnet notification callback (webhook - PlacetoPay sends POST)
+router.post('/getnet/callback', async (req, res) => {
+  try {
+    const { requestId, status } = req.body;
+    console.log('Getnet callback received:', JSON.stringify(req.body));
+
+    if (!requestId) {
+      return res.status(400).json({ error: 'Missing requestId' });
+    }
+
+    // Find payment by Getnet request ID
+    const payment = await prisma.payment.findFirst({
+      where: { getnetPaymentId: String(requestId) },
+      include: { order: true },
+    });
+
+    if (!payment) {
+      console.error('Payment not found for Getnet callback:', requestId);
+      return res.status(404).json({ error: 'Payment not found' });
+    }
+
+    // Query Getnet to get authoritative status
+    const queryResponse = await fetch(
+      `${GETNET_ENDPOINT}/api/session/${requestId}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ auth: generatePlacetoPayAuth() }),
+      }
+    );
+
+    const sessionStatus = await queryResponse.json();
+
+    let paymentStatus: string = 'PENDING';
+    let orderStatus: string = 'PENDING';
+
+    const placetoPayStatus = sessionStatus.status?.status || status?.status;
+    switch (placetoPayStatus) {
+      case 'APPROVED':
+        paymentStatus = 'APPROVED';
+        orderStatus = 'PROCESSING';
+        break;
+      case 'REJECTED':
+      case 'FAILED':
+        paymentStatus = 'DECLINED';
+        orderStatus = 'CANCELLED';
+        break;
+    }
+
+    const txn = sessionStatus.payment?.[0] ?? null;
+
+    await prisma.payment.update({
+      where: { id: payment.id },
+      data: {
+        status: paymentStatus,
+        cardBrand: txn?.franchise || null,
+        cardLast4: txn?.issuerName || null,
+        paidAt: paymentStatus === 'APPROVED' ? new Date() : null,
+      },
+    });
+
+    if (orderStatus !== 'PENDING') {
+      await prisma.order.update({
+        where: { id: payment.orderId },
+        data: { status: orderStatus },
+      });
+    }
+
+    res.json({ received: true });
+  } catch (error) {
+    console.error('Getnet callback error:', error);
+    res.status(500).json({ error: 'Failed to process callback' });
+  }
+});
+
+// Check payment status
+router.get('/:paymentId/status', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const payment = await prisma.payment.findUnique({
+      where: { id: req.params.paymentId },
+      include: {
+        order: {
+          select: { orderNumber: true, status: true },
+        },
+      },
+    });
+
+    if (!payment) {
+      return res.status(404).json({ error: 'Payment not found' });
+    }
+
+    res.json({
+      id: payment.id,
+      status: payment.status,
+      method: payment.method,
+      amount: parseFloat(payment.amount.toString()),
+      cardLast4: payment.cardLast4,
+      cardBrand: payment.cardBrand,
+      paidAt: payment.paidAt,
+      order: payment.order,
+    });
+  } catch (error) {
+    console.error('Get payment status error:', error);
+    res.status(500).json({ error: 'Failed to get payment status' });
+  }
+});
+
+// Process manual payment (for POS cash/card)
+router.post('/manual', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
+  try {
+    const { orderId, method, amount, cardLast4, cardBrand } = req.body;
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    const payment = await prisma.payment.create({
+      data: {
+        orderId,
+        method,
+        status: 'APPROVED',
+        amount,
+        cardLast4,
+        cardBrand,
+        paidAt: new Date(),
+      },
+    });
+
+    // Update order status
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { status: 'PROCESSING' },
+    });
+
+    res.status(201).json({
+      ...payment,
+      amount: parseFloat(payment.amount.toString()),
+    });
+  } catch (error) {
+    console.error('Process manual payment error:', error);
+    res.status(500).json({ error: 'Failed to process payment' });
+  }
+});
+
+// Refund payment
+router.post('/:paymentId/refund', authenticate, requireRole('ADMIN'), async (req: AuthRequest, res) => {
+  try {
+    const { paymentId } = req.params;
+    const { amount, reason } = req.body;
+
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: { order: true },
+    });
+
+    if (!payment) {
+      return res.status(404).json({ error: 'Payment not found' });
+    }
+
+    if (payment.status !== 'APPROVED') {
+      return res.status(400).json({ error: 'Payment cannot be refunded' });
+    }
+
+    // For Getnet payments, call PlacetoPay reverse API
+    if (payment.method === 'GETNET' && payment.getnetPaymentId) {
+      const reverseData = {
+        auth: generatePlacetoPayAuth(),
+        internalReference: payment.getnetPaymentId,
+      };
+
+      const response = await fetch(`${GETNET_ENDPOINT}/api/reverse`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reverseData),
+      });
+
+      const reverseResponse = await response.json();
+
+      if (reverseResponse.status?.status !== 'APPROVED') {
+        console.error('Getnet reverse error:', JSON.stringify(reverseResponse));
+        return res.status(500).json({
+          error: 'Failed to process refund with Getnet',
+          detail: reverseResponse.status?.message,
+        });
+      }
+    }
+
+    // Update payment status
+    await prisma.payment.update({
+      where: { id: paymentId },
+      data: { status: 'REFUNDED' },
+    });
+
+    // Update order status
+    await prisma.order.update({
+      where: { id: payment.orderId },
+      data: { 
+        status: 'REFUNDED',
+        notes: payment.order.notes 
+          ? `${payment.order.notes}\n\nRefunded: ${reason || 'No reason provided'}`
+          : `Refunded: ${reason || 'No reason provided'}`,
+      },
+    });
+
+    res.json({ message: 'Payment refunded successfully' });
+  } catch (error) {
+    console.error('Refund payment error:', error);
+    res.status(500).json({ error: 'Failed to refund payment' });
+  }
+});
+
+export default router;

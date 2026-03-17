@@ -1,0 +1,280 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== USER & AUTH ====================
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      String   @default("CUSTOMER")
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders    Order[]
+  cart      Cart?
+  addresses Address[]
+
+  @@map("users")
+}
+
+model Address {
+  id        String  @id @default(uuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  street    String
+  city      String
+  state     String
+  zipCode   String
+  country   String
+  phone     String?
+  isDefault Boolean @default(false)
+
+  orders Order[]
+
+  @@map("addresses")
+}
+
+// ==================== PRODUCTS ====================
+
+model Product {
+  id          String   @id @default(uuid())
+  sku         String   @unique
+  name        String
+  description String?
+  category    String
+  price       Decimal
+  cost        Decimal
+  stock       Int      @default(0)
+  images      String
+  status      String   @default("ACTIVE")
+
+  isPresale         Boolean   @default(false)
+  presaleMaxQty     Int?
+  presaleAvailQty   Int?
+  presaleEndDate    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  variants         ProductVariant[]
+  inventoryBatches InventoryBatch[]
+  orderItems       OrderItem[]
+  cartItems        CartItem[]
+
+  @@map("products")
+}
+
+model ProductVariant {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name      String
+  options   String
+  sku       String?
+  price     Decimal?
+  stock     Int      @default(0)
+
+  orderItems OrderItem[]
+  cartItems  CartItem[]
+
+  @@map("product_variants")
+}
+
+// ==================== INVENTORY (FIFO) ====================
+
+model InventoryBatch {
+  id         String   @id @default(uuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  batchCode  String
+  quantity   Int
+  remaining  Int
+  unitCost   Decimal
+  receivedAt DateTime @default(now())
+
+  inventoryMovements InventoryMovement[]
+
+  @@map("inventory_batches")
+}
+
+model InventoryMovement {
+  id        String   @id @default(uuid())
+  batchId   String
+  batch     InventoryBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  type      String
+  quantity  Int
+  reference String?
+  createdAt DateTime @default(now())
+
+  @@map("inventory_movements")
+}
+
+// ==================== ORDERS ====================
+
+model Order {
+  id          String   @id @default(uuid())
+  orderNumber String   @unique
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id])
+
+  customerName  String
+  customerEmail String
+  customerPhone String?
+
+  addressId       String?
+  address         Address? @relation(fields: [addressId], references: [id])
+  shippingStreet  String?
+  shippingCity    String?
+  shippingState   String?
+  shippingZip     String?
+  shippingCountry String?
+
+  subtotal Decimal
+  tax      Decimal @default(0)
+  shipping Decimal @default(0)
+  discount Decimal @default(0)
+  total    Decimal
+
+  status String @default("PENDING")
+  source String @default("ONLINE")
+  notes  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items    OrderItem[]
+  payments Payment[]
+
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String   @id @default(uuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+
+  name        String
+  sku         String
+  price       Decimal
+  cost        Decimal
+  quantity    Int
+  variantName String?
+
+  @@map("order_items")
+}
+
+// ==================== PAYMENTS ====================
+
+model Payment {
+  id      String @id @default(uuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  method String
+  status String @default("PENDING")
+  amount Decimal
+
+  getnetPaymentId   String?
+  getnetOrderId     String?
+  getnetCheckoutUrl String?
+
+  cardLast4 String?
+  cardBrand String?
+
+  paidAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("payments")
+}
+
+// ==================== CART ====================
+
+model Cart {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items CartItem[]
+
+  @@map("carts")
+}
+
+model CartItem {
+  id        String   @id @default(uuid())
+  cartId    String
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id])
+  variantId String?
+  variant   ProductVariant? @relation(fields: [variantId], references: [id])
+  quantity  Int
+
+  @@unique([cartId, productId, variantId])
+  @@map("cart_items")
+}
+
+// ==================== INSTAGRAM AGENT ====================
+
+model InstagramConversation {
+  id              String   @id @default(uuid())
+  instagramUserId String   @unique
+  customerName    String
+  profilePicUrl   String?
+  status          String   @default("ACTIVE")
+  isBot           Boolean  @default(true)
+  lastMessageAt   DateTime @default(now())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  messages InstagramMessage[]
+
+  @@map("instagram_conversations")
+}
+
+model InstagramMessage {
+  id             String @id @default(uuid())
+  conversationId String
+  conversation   InstagramConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  sender    String
+  content   String
+  productId String?
+  createdAt DateTime @default(now())
+
+  @@map("instagram_messages")
+}
+
+// ==================== ANALYTICS ====================
+
+model DailyStat {
+  id            String   @id @default(uuid())
+  date          DateTime @unique
+  orders        Int      @default(0)
+  revenue       Decimal  @default(0)
+  profit        Decimal  @default(0)
+  customers     Int      @default(0)
+  avgOrderValue Decimal  @default(0)
+
+  @@map("daily_stats")
+}
