@@ -43,7 +43,7 @@ router.post('/register', async (req, res) => {
     const token = jwt.sign(
       { userId: user.id },
       process.env.JWT_SECRET || 'secret',
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      { expiresIn: '7d' as any }
     );
 
     res.status(201).json({ user, token });
@@ -74,7 +74,7 @@ router.post('/login', async (req, res) => {
     const token = jwt.sign(
       { userId: user.id },
       process.env.JWT_SECRET || 'secret',
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      { expiresIn: '7d' as any }
     );
 
     res.json({
@@ -216,7 +216,7 @@ router.post('/google', async (req, res) => {
     const token = jwt.sign(
       { userId: user.id },
       process.env.JWT_SECRET || 'secret',
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      { expiresIn: '7d' as any }
     );
 
     res.json({

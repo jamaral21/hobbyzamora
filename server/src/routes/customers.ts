@@ -75,7 +75,7 @@ router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) =>
 router.get('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) => {
   try {
     const user = await prisma.user.findUnique({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       select: {
         id: true,
         name: true,
@@ -134,7 +134,7 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
     const { name, phone } = req.body;
 
     const user = await prisma.user.update({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       data: { name, phone },
       select: {
         id: true,

@@ -25,17 +25,17 @@ router.get('/products', authenticate, requireRole('ADMIN', 'STAFF'), async (req,
 
     if (search) {
       where.OR = [
-        { name: { contains: search as string, mode: 'insensitive' } },
-        { sku: { contains: search as string, mode: 'insensitive' } },
+        { name: { contains: search as string } },
+        { sku: { contains: search as string } },
       ];
     }
 
     if (category) {
-      where.category = category;
+      where.category = category as string;
     }
 
     if (barcode) {
-      where.sku = barcode;
+      where.sku = barcode as string;
     }
 
     const products = await prisma.product.findMany({
@@ -80,8 +80,8 @@ router.get('/scan/:code', authenticate, requireRole('ADMIN', 'STAFF'), async (re
     const product = await prisma.product.findFirst({
       where: {
         OR: [
-          { sku: req.params.code },
-          { sku: { contains: req.params.code, mode: 'insensitive' } },
+          { sku: req.params.code as string },
+          { sku: { contains: req.params.code as string } },
         ],
         status: 'ACTIVE',
       },
