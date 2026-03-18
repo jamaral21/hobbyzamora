@@ -128,7 +128,7 @@ rollback() {
   if [ -n "${previous_release}" ] && [ -d "${previous_release}" ]; then
     log "Rolling back to previous release: ${previous_release}"
     ln -sfn "${previous_release}" "${CURRENT_LINK}"
-    systemctl restart "${SERVICE_NAME}" || true
+    sudo systemctl restart "${SERVICE_NAME}" || true
   else
     error "No previous release found to rollback"
   fi
@@ -199,7 +199,7 @@ main() {
   ln -sfn "${release_dir}" "${CURRENT_LINK}"
 
   log "Restarting systemd service: ${SERVICE_NAME}"
-  systemctl restart "${SERVICE_NAME}"
+  sudo systemctl restart "${SERVICE_NAME}"
 
   log "Checking service health: ${HEALTH_URL}"
   if ! health_check; then
