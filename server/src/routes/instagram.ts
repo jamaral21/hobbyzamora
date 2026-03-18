@@ -17,15 +17,15 @@ router.get('/conversations', authenticate, requireRole('ADMIN', 'STAFF'), async 
 
     if (search) {
       where.OR = [
-        { customerName: { contains: search as string, mode: 'insensitive' } },
-        { username: { contains: search as string, mode: 'insensitive' } },
+        { customerName: { contains: search as string } },
+        { instagramUserId: { contains: search as string } },
       ];
     }
 
     const conversations = await prisma.instagramConversation.findMany({
       where,
       orderBy: [
-        { unread: 'desc' },
+        { lastMessageAt: 'desc' },
         { updatedAt: 'desc' },
       ],
     });
@@ -40,8 +40,9 @@ router.get('/conversations', authenticate, requireRole('ADMIN', 'STAFF'), async 
 // Get single conversation with messages
 router.get('/conversations/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) => {
   try {
+    const id = req.params.id as string;
     const conversation = await prisma.instagramConversation.findUnique({
-      where: { id: req.params.id },
+      where: { id },
       include: {
         messages: {
           orderBy: { createdAt: 'asc' },
@@ -52,12 +53,6 @@ router.get('/conversations/:id', authenticate, requireRole('ADMIN', 'STAFF'), as
     if (!conversation) {
       return res.status(404).json({ error: 'Conversation not found' });
     }
-
-    // Mark as read
-    await prisma.instagramConversation.update({
-      where: { id: req.params.id },
-      data: { unread: false },
-    });
 
     res.json(conversation);
   } catch (error) {
@@ -70,7 +65,7 @@ router.get('/conversations/:id', authenticate, requireRole('ADMIN', 'STAFF'), as
 router.post('/conversations/:id/messages', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
   try {
     const { content, productId } = req.body;
-    const conversationId = req.params.id;
+    const conversationId = req.params.id as string;
 
     const conversation = await prisma.instagramConversation.findUnique({
       where: { id: conversationId },
@@ -90,17 +85,13 @@ router.post('/conversations/:id/messages', authenticate, requireRole('ADMIN', 'S
       },
     });
 
-    // Update conversation
+    // Update conversation timestamp
     await prisma.instagramConversation.update({
       where: { id: conversationId },
       data: {
-        lastMessage: content.substring(0, 100),
-        updatedAt: new Date(),
+        lastMessageAt: new Date(),
       },
     });
-
-    // TODO: Send message via Instagram API
-    // await sendInstagramMessage(conversation.customerId, content);
 
     res.status(201).json(message);
   } catch (error) {
@@ -112,9 +103,10 @@ router.post('/conversations/:id/messages', authenticate, requireRole('ADMIN', 'S
 // Take over conversation (human agent)
 router.post('/conversations/:id/takeover', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
   try {
+    const id = req.params.id as string;
     const conversation = await prisma.instagramConversation.update({
-      where: { id: req.params.id },
-      data: { handedOver: true },
+      where: { id },
+      data: { isBot: false },
     });
 
     res.json(conversation);
@@ -127,9 +119,10 @@ router.post('/conversations/:id/takeover', authenticate, requireRole('ADMIN', 'S
 // Return to bot
 router.post('/conversations/:id/return-to-bot', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
   try {
+    const id = req.params.id as string;
     const conversation = await prisma.instagramConversation.update({
-      where: { id: req.params.id },
-      data: { handedOver: false },
+      where: { id },
+      data: { isBot: true },
     });
 
     res.json(conversation);
@@ -143,9 +136,10 @@ router.post('/conversations/:id/return-to-bot', authenticate, requireRole('ADMIN
 router.patch('/conversations/:id/status', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
   try {
     const { status } = req.body;
+    const id = req.params.id as string;
 
     const conversation = await prisma.instagramConversation.update({
-      where: { id: req.params.id },
+      where: { id },
       data: { status },
     });
 
@@ -181,27 +175,23 @@ router.post('/webhook', async (req, res) => {
 
         // Find or create conversation
         let conversation = await prisma.instagramConversation.findFirst({
-          where: { customerId: senderId },
+          where: { instagramUserId: senderId },
         });
 
         if (!conversation) {
-          // Get user info from Instagram (simplified)
           conversation = await prisma.instagramConversation.create({
             data: {
-              customerId: senderId,
+              instagramUserId: senderId,
               customerName: `Instagram User ${senderId.substring(0, 8)}`,
-              username: `@user_${senderId.substring(0, 8)}`,
               status: 'ACTIVE',
-              lastMessage: text.substring(0, 100),
-              unread: true,
+              lastMessageAt: new Date(),
             },
           });
         } else {
           await prisma.instagramConversation.update({
             where: { id: conversation.id },
             data: {
-              lastMessage: text.substring(0, 100),
-              unread: true,
+              lastMessageAt: new Date(),
             },
           });
         }
@@ -215,8 +205,8 @@ router.post('/webhook', async (req, res) => {
           },
         });
 
-        // If not handed over, generate bot response
-        if (!conversation.handedOver) {
+        // If bot is active, generate bot response
+        if (conversation.isBot) {
           const botResponse = await generateBotResponse(text, conversation.id);
           
           // Save bot response
@@ -227,9 +217,6 @@ router.post('/webhook', async (req, res) => {
               content: botResponse,
             },
           });
-
-          // TODO: Send response via Instagram API
-          // await sendInstagramMessage(senderId, botResponse);
         }
       }
     }
@@ -342,7 +329,7 @@ router.get('/stats', authenticate, requireRole('ADMIN', 'STAFF'), async (req, re
 router.post('/conversations/:id/create-order', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
   try {
     const { items, shippingAddress } = req.body;
-    const conversationId = req.params.id;
+    const conversationId = req.params.id as string;
 
     const conversation = await prisma.instagramConversation.findUnique({
       where: { id: conversationId },

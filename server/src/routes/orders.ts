@@ -44,9 +44,9 @@ router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) =>
 
     if (search) {
       where.OR = [
-        { orderNumber: { contains: search as string, mode: 'insensitive' } },
-        { customerName: { contains: search as string, mode: 'insensitive' } },
-        { customerEmail: { contains: search as string, mode: 'insensitive' } },
+        { orderNumber: { contains: search as string } },
+        { customerName: { contains: search as string } },
+        { customerEmail: { contains: search as string } },
       ];
     }
 
@@ -105,7 +105,7 @@ router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) =>
 router.get('/:id', optionalAuth, async (req: AuthRequest, res) => {
   try {
     const order = await prisma.order.findUnique({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       include: {
         items: {
           include: {
@@ -205,7 +205,7 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
         const variant = product.variants.find(v => v.id === item.variantId);
         if (variant) {
           itemPrice = variant.price ? parseFloat(variant.price.toString()) : itemPrice;
-          variantName = `${variant.name}: ${variant.options.join(', ')}`;
+          variantName = `${variant.name}: ${variant.options}`;
         }
       }
 
@@ -289,7 +289,7 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
 router.patch('/:id/status', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
   try {
     const { status } = req.body;
-    const { id } = req.params;
+    const id = req.params.id as string;
 
     const order = await prisma.order.findUnique({
       where: { id },

@@ -145,12 +145,16 @@ router.post('/getnet/query', optionalAuth, async (req: AuthRequest, res) => {
       where: paymentId
         ? { id: paymentId }
         : { getnetPaymentId: String(requestId) },
-      include: { order: true },
     });
 
     if (!payment) {
       return res.status(404).json({ error: 'Payment not found' });
     }
+
+    // Find associated order
+    const order = await prisma.order.findUnique({
+      where: { id: payment.orderId },
+    });
 
     // If already resolved, return current status
     if (payment.status !== 'PENDING') {
@@ -158,7 +162,7 @@ router.post('/getnet/query', optionalAuth, async (req: AuthRequest, res) => {
         id: payment.id,
         status: payment.status,
         orderId: payment.orderId,
-        orderStatus: payment.order.status,
+        orderStatus: order?.status,
       });
     }
 
@@ -249,7 +253,6 @@ router.post('/getnet/callback', async (req, res) => {
     // Find payment by Getnet request ID
     const payment = await prisma.payment.findFirst({
       where: { getnetPaymentId: String(requestId) },
-      include: { order: true },
     });
 
     if (!payment) {
@@ -315,7 +318,7 @@ router.post('/getnet/callback', async (req, res) => {
 router.get('/:paymentId/status', authenticate, async (req: AuthRequest, res) => {
   try {
     const payment = await prisma.payment.findUnique({
-      where: { id: req.params.paymentId },
+      where: { id: req.params.paymentId as string },
       include: {
         order: {
           select: { orderNumber: true, status: true },
@@ -387,12 +390,11 @@ router.post('/manual', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
 // Refund payment
 router.post('/:paymentId/refund', authenticate, requireRole('ADMIN'), async (req: AuthRequest, res) => {
   try {
-    const { paymentId } = req.params;
+    const paymentId = req.params.paymentId as string;
     const { amount, reason } = req.body;
 
     const payment = await prisma.payment.findUnique({
       where: { id: paymentId },
-      include: { order: true },
     });
 
     if (!payment) {
@@ -402,6 +404,11 @@ router.post('/:paymentId/refund', authenticate, requireRole('ADMIN'), async (req
     if (payment.status !== 'APPROVED') {
       return res.status(400).json({ error: 'Payment cannot be refunded' });
     }
+
+    // Find associated order
+    const order = await prisma.order.findUnique({
+      where: { id: payment.orderId },
+    });
 
     // For Getnet payments, call PlacetoPay reverse API
     if (payment.method === 'GETNET' && payment.getnetPaymentId) {
@@ -438,8 +445,8 @@ router.post('/:paymentId/refund', authenticate, requireRole('ADMIN'), async (req
       where: { id: payment.orderId },
       data: { 
         status: 'REFUNDED',
-        notes: payment.order.notes 
-          ? `${payment.order.notes}\n\nRefunded: ${reason || 'No reason provided'}`
+        notes: order?.notes 
+          ? `${order.notes}\n\nRefunded: ${reason || 'No reason provided'}`
           : `Refunded: ${reason || 'No reason provided'}`,
       },
     });

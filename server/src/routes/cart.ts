@@ -174,7 +174,7 @@ router.post('/items', authenticate, async (req: AuthRequest, res) => {
 // Update cart item quantity
 router.patch('/items/:itemId', authenticate, async (req: AuthRequest, res) => {
   try {
-    const { itemId } = req.params;
+    const itemId = req.params.itemId as string;
     const { quantity } = req.body;
 
     const item = await prisma.cartItem.findUnique({
@@ -226,7 +226,7 @@ router.patch('/items/:itemId', authenticate, async (req: AuthRequest, res) => {
 // Remove item from cart
 router.delete('/items/:itemId', authenticate, async (req: AuthRequest, res) => {
   try {
-    const { itemId } = req.params;
+    const itemId = req.params.itemId as string;
 
     const item = await prisma.cartItem.findUnique({
       where: { id: itemId },
