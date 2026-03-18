@@ -59,22 +59,22 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl text-gray-900 dark:text-gray-100 mb-2">{presalesOnly ? 'Presale Items' : 'All Products'}</h1>
-          <p className="text-gray-500 dark:text-gray-400">
-            {presalesOnly ? 'Get exclusive early access to upcoming products' : 'Browse our complete collection of creative supplies'}
+          <h1 className="text-3xl text-foreground mb-2">{presalesOnly ? 'Preventas' : 'Todos los Productos'}</h1>
+          <p className="text-muted-foreground">
+            {presalesOnly ? 'Acceso exclusivo a productos próximos' : 'Explora nuestra colección completa de coleccionables'}
           </p>
         </div>
 
         {/* Filters */}
         <div className="flex flex-col md:flex-row gap-4 mb-8">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Search products..."
+              placeholder="Buscar productos..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full pl-10 pr-4 py-3 rounded-lg border border-border bg-input-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
 
@@ -85,7 +85,7 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
           >
             {categories.map((cat) => (
               <option key={cat} value={cat}>
-                {cat === 'all' ? 'All Categories' : cat}
+                {cat === 'all' ? 'Todas las Categorías' : cat}
               </option>
             ))}
           </Select>
@@ -95,22 +95,22 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
             onChange={(e) => setSortBy(e.target.value)}
             className="md:w-48"
           >
-            <option value="featured">Featured</option>
-            <option value="price-low">Price: Low to High</option>
-            <option value="price-high">Price: High to Low</option>
-            <option value="name">Name A-Z</option>
+            <option value="featured">Destacados</option>
+            <option value="price-low">Precio: Menor a Mayor</option>
+            <option value="price-high">Precio: Mayor a Menor</option>
+            <option value="name">Nombre A-Z</option>
           </Select>
 
           <Button variant="outline">
             <SlidersHorizontal className="w-4 h-4" />
-            Filters
+            Filtros
           </Button>
         </div>
 
         {/* Results */}
         <div className="mb-4">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Showing {filteredProducts.length} products
+          <p className="text-sm text-muted-foreground">
+            Mostrando {filteredProducts.length} productos
           </p>
         </div>
 
@@ -123,7 +123,7 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
 
         {filteredProducts.length === 0 && (
           <div className="text-center py-12">
-            <p className="text-gray-500 dark:text-gray-400">No products found</p>
+            <p className="text-muted-foreground">No se encontraron productos</p>
           </div>
         )}
       </div>

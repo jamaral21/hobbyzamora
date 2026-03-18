@@ -1,84 +1,96 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  /* === HobbyZamora Design Tokens === */
   --font-size: 16px;
-  --background: #ffffff;
-  --foreground: oklch(0.145 0 0);
-  --card: #ffffff;
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: #030213;
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.95 0.0058 264.53);
-  --secondary-foreground: #030213;
-  --muted: #ececf0;
-  --muted-foreground: #717182;
-  --accent: #e9ebef;
-  --accent-foreground: #030213;
-  --destructive: #d4183d;
+  --font-display: 'Press Start 2P', monospace;
+  --font-body: 'Outfit', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Core palette — Dark-first with electric accents */
+  --background: #0a0a0f;
+  --foreground: #e8e6f0;
+  --card: #12121a;
+  --card-foreground: #e8e6f0;
+  --popover: #12121a;
+  --popover-foreground: #e8e6f0;
+
+  /* Brand colors */
+  --primary: #ffd60a;          /* Electric yellow — Pikachu energy */
+  --primary-foreground: #0a0a0f;
+  --secondary: #1a1a2e;
+  --secondary-foreground: #e8e6f0;
+  --muted: #1a1a2e;
+  --muted-foreground: #8b8a9e;
+  --accent: #00d4ff;           /* Cyan — secondary accent */
+  --accent-foreground: #0a0a0f;
+
+  /* Functional */
+  --destructive: #ff3b5c;
   --destructive-foreground: #ffffff;
-  --border: rgba(0, 0, 0, 0.1);
+  --success: #00e676;
+  --warning: #ffab00;
+  --border: rgba(255, 214, 10, 0.12);
   --input: transparent;
-  --input-background: #f3f3f5;
-  --switch-background: #cbced4;
+  --input-background: #1a1a2e;
+  --switch-background: #2a2a3e;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: #030213;
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --ring: rgba(255, 214, 10, 0.4);
+
+  /* Charts */
+  --chart-1: #ffd60a;
+  --chart-2: #00d4ff;
+  --chart-3: #ff3b5c;
+  --chart-4: #00e676;
+  --chart-5: #a855f7;
+
+  --radius: 0.5rem;
+
+  /* Sidebar */
+  --sidebar: #0e0e16;
+  --sidebar-foreground: #e8e6f0;
+  --sidebar-primary: #ffd60a;
+  --sidebar-primary-foreground: #0a0a0f;
+  --sidebar-accent: #1a1a2e;
+  --sidebar-accent-foreground: #e8e6f0;
+  --sidebar-border: rgba(255, 214, 10, 0.08);
+  --sidebar-ring: rgba(255, 214, 10, 0.4);
+
+  /* Custom tokens */
+  --glow-primary: 0 0 20px rgba(255, 214, 10, 0.3);
+  --glow-accent: 0 0 20px rgba(0, 212, 255, 0.3);
+  --noise-opacity: 0.03;
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  --ring: oklch(0.439 0 0);
-  --font-weight-medium: 500;
-  --font-weight-normal: 400;
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
-  --sidebar-ring: oklch(0.439 0 0);
+/* Light mode override — still dark-leaning but softer */
+.light {
+  --background: #f5f3ff;
+  --foreground: #0a0a0f;
+  --card: #ffffff;
+  --card-foreground: #0a0a0f;
+  --popover: #ffffff;
+  --popover-foreground: #0a0a0f;
+  --primary: #d4a800;
+  --primary-foreground: #0a0a0f;
+  --secondary: #ede9fe;
+  --secondary-foreground: #0a0a0f;
+  --muted: #f0edf7;
+  --muted-foreground: #64618a;
+  --accent: #0099cc;
+  --accent-foreground: #ffffff;
+  --border: rgba(10, 10, 15, 0.1);
+  --input-background: #f0edf7;
+  --switch-background: #d4d0e0;
+  --ring: rgba(212, 168, 0, 0.4);
+  --sidebar: #faf8ff;
+  --sidebar-border: rgba(10, 10, 15, 0.06);
 }
 
 @theme inline {
+  --font-display: var(--font-display);
+  --font-body: var(--font-body);
+  --font-mono: var(--font-mono);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -126,54 +138,57 @@
 
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-body);
   }
-
-  /**
-  * Default typography styles for HTML elements (h1-h4, p, label, button, input).
-  * These are in @layer base, so Tailwind utility classes (like text-sm, text-lg) automatically override them.
-  */
 
   html {
     font-size: var(--font-size);
   }
 
   h1 {
-    font-size: var(--text-2xl);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+    font-family: var(--font-display);
+    font-size: clamp(1.25rem, 3vw, 1.75rem);
+    line-height: 1.6;
+    letter-spacing: 0.02em;
   }
 
   h2 {
-    font-size: var(--text-xl);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+    font-family: var(--font-display);
+    font-size: clamp(0.875rem, 2vw, 1.125rem);
+    line-height: 1.6;
+    letter-spacing: 0.02em;
   }
 
   h3 {
+    font-family: var(--font-body);
     font-size: var(--text-lg);
-    font-weight: var(--font-weight-medium);
+    font-weight: 600;
     line-height: 1.5;
   }
 
   h4 {
+    font-family: var(--font-body);
     font-size: var(--text-base);
-    font-weight: var(--font-weight-medium);
+    font-weight: 600;
     line-height: 1.5;
   }
 
   label {
+    font-family: var(--font-body);
     font-size: var(--text-base);
     font-weight: var(--font-weight-medium);
     line-height: 1.5;
   }
 
   button {
+    font-family: var(--font-body);
     font-size: var(--text-base);
     font-weight: var(--font-weight-medium);
     line-height: 1.5;
   }
 
   input {
+    font-family: var(--font-body);
     font-size: var(--text-base);
     font-weight: var(--font-weight-normal);
     line-height: 1.5;

@@ -2,36 +2,38 @@ import { forwardRef, ButtonHTMLAttributes } from 'react';
 import { clsx } from 'clsx';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'accent';
   size?: 'sm' | 'md' | 'lg';
   fullWidth?: boolean;
+  pixel?: boolean;
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ variant = 'primary', size = 'md', fullWidth = false, className, children, disabled, ...props }, ref) => {
+  ({ variant = 'primary', size = 'md', fullWidth = false, pixel = false, className, children, disabled, ...props }, ref) => {
     return (
       <button
         ref={ref}
         disabled={disabled}
         className={clsx(
-          'inline-flex items-center justify-center rounded-lg transition-all duration-200',
-          'focus:outline-none focus:ring-2 focus:ring-offset-2',
-          'disabled:opacity-50 disabled:cursor-not-allowed',
+          'inline-flex items-center justify-center rounded-lg transition-all duration-200 cursor-pointer',
+          'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-background',
+          'disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none',
           {
             // Variants
-            'bg-purple-600 text-white hover:bg-purple-700 focus:ring-purple-500': variant === 'primary',
-            'bg-gray-100 text-gray-900 hover:bg-gray-200 focus:ring-gray-500 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700': variant === 'secondary',
-            'border border-gray-300 bg-transparent hover:bg-gray-50 focus:ring-purple-500 dark:border-gray-700 dark:hover:bg-gray-800': variant === 'outline',
-            'bg-transparent hover:bg-gray-100 focus:ring-purple-500 dark:hover:bg-gray-800': variant === 'ghost',
-            'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500': variant === 'danger',
-            
+            'bg-primary text-primary-foreground hover:brightness-110 focus:ring-primary shadow-[0_0_16px_rgba(255,214,10,0.2)] hover:shadow-[0_0_24px_rgba(255,214,10,0.35)]': variant === 'primary',
+            'bg-secondary text-secondary-foreground hover:bg-secondary/80 focus:ring-muted-foreground': variant === 'secondary',
+            'border border-border bg-transparent text-foreground hover:bg-secondary hover:border-primary/30 focus:ring-primary': variant === 'outline',
+            'bg-transparent text-foreground hover:bg-secondary focus:ring-muted-foreground': variant === 'ghost',
+            'bg-destructive text-destructive-foreground hover:brightness-110 focus:ring-destructive': variant === 'danger',
+            'bg-accent text-accent-foreground hover:brightness-110 focus:ring-accent shadow-[0_0_16px_rgba(0,212,255,0.2)]': variant === 'accent',
+
             // Sizes
             'px-3 py-1.5 text-sm gap-1.5': size === 'sm',
-            'px-4 py-2 text-base gap-2': size === 'md',
-            'px-6 py-3 text-lg gap-2': size === 'lg',
-            
-            // Full width
+            'px-5 py-2.5 text-base gap-2': size === 'md',
+            'px-7 py-3.5 text-lg gap-2.5': size === 'lg',
+
             'w-full': fullWidth,
+            'font-[family-name:var(--font-display)] text-xs tracking-wider uppercase': pixel,
           },
           className
         )}

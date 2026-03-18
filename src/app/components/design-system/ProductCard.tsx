@@ -1,7 +1,7 @@
 import { Link } from 'react-router';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import { ShoppingCart, Eye } from 'lucide-react';
+import { ShoppingCart, Eye, Flame } from 'lucide-react';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 
 interface ProductCardProps {
@@ -31,68 +31,83 @@ export function ProductCard({
   const isOutOfStock = stock === 0;
 
   return (
-    <div className="group bg-white rounded-lg border overflow-hidden hover:shadow-lg transition-shadow">
-      <Link to={`/products/${id}`} className="block relative aspect-square overflow-hidden bg-gray-100">
+    <div className="group relative bg-card rounded-xl border border-border overflow-hidden transition-all duration-300 hover:border-primary/25 hover:shadow-[0_0_24px_rgba(255,214,10,0.08)]">
+      {/* Image */}
+      <Link to={`/store/product/${id}`} className="block relative aspect-square overflow-hidden bg-secondary">
         <ImageWithFallback
           src={image}
           alt={name}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
-        {isPresale && (
-          <Badge className="absolute top-3 left-3 bg-purple-600">
-            Presale
-          </Badge>
-        )}
-        {isLowStock && !isOutOfStock && (
-          <Badge variant="destructive" className="absolute top-3 right-3">
-            Low Stock
-          </Badge>
-        )}
-        {isOutOfStock && (
-          <Badge variant="secondary" className="absolute top-3 right-3">
-            Out of Stock
-          </Badge>
-        )}
-        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-          <Button size="sm" variant="secondary">
-            <Eye className="h-4 w-4 mr-2" />
-            Quick View
+
+        {/* Badges */}
+        <div className="absolute top-3 left-3 flex flex-col gap-1.5">
+          {isPresale && (
+            <Badge className="bg-gradient-to-r from-primary/90 to-accent/90 text-primary-foreground border-0 shadow-[0_0_10px_rgba(255,214,10,0.3)]">
+              <Flame className="w-3 h-3 mr-1" />
+              Preventa
+            </Badge>
+          )}
+          {isLowStock && !isOutOfStock && (
+            <Badge variant="destructive" className="bg-destructive/90 border-0">
+              Últimas {stock}
+            </Badge>
+          )}
+          {isOutOfStock && (
+            <Badge variant="secondary" className="bg-secondary/90 border-0">
+              Agotado
+            </Badge>
+          )}
+        </div>
+
+        {/* Hover overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-background/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end justify-center pb-6">
+          <Button size="sm" variant="secondary" className="backdrop-blur-sm">
+            <Eye className="h-4 w-4 mr-1.5" />
+            Ver Detalle
           </Button>
         </div>
       </Link>
-      
+
+      {/* Content */}
       <div className="p-4">
         {category && (
-          <p className="text-xs text-gray-500 mb-1">{category}</p>
+          <p className="text-xs text-muted-foreground mb-1 uppercase tracking-wider">{category}</p>
         )}
-        <Link to={`/products/${id}`}>
-          <h3 className="font-medium mb-2 line-clamp-2 hover:text-purple-600 transition-colors">
+        <Link to={`/store/product/${id}`}>
+          <h3 className="font-semibold text-foreground mb-2 line-clamp-2 hover:text-primary transition-colors font-[family-name:var(--font-body)]">
             {name}
           </h3>
         </Link>
-        
+
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-lg font-semibold text-purple-600">
-              ${price.toFixed(2)}
+            <p className="text-lg font-bold text-primary font-[family-name:var(--font-mono)]">
+              ${price.toLocaleString('es-CL')}
             </p>
             {isPresale && maxPurchase && (
-              <p className="text-xs text-gray-500">Max {maxPurchase} per order</p>
+              <p className="text-xs text-muted-foreground">Máx {maxPurchase} por orden</p>
             )}
           </div>
-          <Button 
-            size="icon" 
+          <Button
+            size="icon"
             disabled={isOutOfStock}
-            className="rounded-full"
+            className="rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground border border-primary/20 hover:shadow-[0_0_12px_rgba(255,214,10,0.3)] transition-all"
           >
             <ShoppingCart className="h-4 w-4" />
           </Button>
         </div>
-        
+
         {stock <= 10 && stock > 0 && (
-          <p className="text-xs text-orange-600 mt-2">
-            Only {stock} left in stock
-          </p>
+          <div className="mt-2 flex items-center gap-1.5">
+            <div className="h-1 flex-1 rounded-full bg-secondary overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-destructive to-warning transition-all"
+                style={{ width: `${Math.max(10, (stock / 10) * 100)}%` }}
+              />
+            </div>
+            <span className="text-xs text-muted-foreground">{stock} left</span>
+          </div>
         )}
       </div>
     </div>

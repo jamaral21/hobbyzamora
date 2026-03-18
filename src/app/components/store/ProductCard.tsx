@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { ShoppingCart, AlertCircle } from 'lucide-react';
+import { ShoppingCart, AlertCircle, Flame } from 'lucide-react';
 import { Card } from '../design-system/Card';
 import { Button } from '../design-system/Button';
 import { Badge } from '../design-system/Badge';
@@ -13,47 +13,56 @@ export function ProductCard({ product }: ProductCardProps) {
   const isLowStock = product.stock < 10;
 
   return (
-    <Card padding="none" hover className="group overflow-hidden">
+    <Card padding="none" hover className="group overflow-hidden flex flex-col">
       <Link to={`/store/product/${product.id}`}>
-        <div className="aspect-square overflow-hidden bg-gray-100 dark:bg-gray-800">
+        <div className="aspect-square overflow-hidden bg-secondary relative">
           <img
             src={product.images[0]}
             alt={product.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
           />
+          {product.isPresale && (
+            <Badge variant="presale" pixel className="absolute top-3 left-3">
+              <Flame className="w-3 h-3 mr-1" />
+              Preventa
+            </Badge>
+          )}
+          {/* Hover gradient */}
+          <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
         </div>
       </Link>
 
-      <div className="p-4">
+      <div className="p-4 flex flex-col flex-1">
         <div className="flex items-start justify-between gap-2 mb-2">
           <Link to={`/store/product/${product.id}`}>
-            <h3 className="text-gray-900 dark:text-gray-100 group-hover:text-purple-600 transition-colors">
+            <h3 className="text-foreground group-hover:text-primary transition-colors font-semibold">
               {product.name}
             </h3>
           </Link>
-          {product.isPresale && (
-            <Badge variant="purple" size="sm">Presale</Badge>
-          )}
         </div>
 
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">{product.category}</p>
+        <p className="text-muted-foreground mb-3 uppercase tracking-wider text-xs">{product.category}</p>
 
-        <div className="flex items-center justify-between">
+        <div className="flex items-end justify-between mt-auto">
           <div>
-            <span className="text-xl text-gray-900 dark:text-gray-100">
-              ${product.price.toFixed(2)}
+            <span className="text-xl text-primary font-bold font-[family-name:var(--font-mono)]">
+              ${product.price.toLocaleString('es-CL')}
             </span>
             {isLowStock && (
-              <div className="flex items-center gap-1 mt-1">
-                <AlertCircle className="w-3 h-3 text-orange-500" />
-                <span className="text-xs text-orange-500">Only {product.stock} left</span>
+              <div className="flex items-center gap-1 mt-1.5">
+                <AlertCircle className="w-3 h-3 text-destructive" />
+                <span className="text-xs text-destructive">Quedan {product.stock}</span>
               </div>
             )}
           </div>
 
-          <Button size="sm" onClick={() => console.log('Add to cart', product.id)}>
+          <Button
+            size="sm"
+            className="bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground border border-primary/20 hover:shadow-[0_0_12px_rgba(255,214,10,0.3)]"
+            onClick={() => console.log('Add to cart', product.id)}
+          >
             <ShoppingCart className="w-4 h-4" />
-            Add
+            Agregar
           </Button>
         </div>
       </div>

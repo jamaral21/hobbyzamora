@@ -41,7 +41,7 @@ function AccountContent() {
       await updateProfile({ name: form.name, phone: form.phone || undefined });
       setIsEditing(false);
     } catch {
-      // keep editing open on error
+      // mantener edición abierta en caso de error
     } finally {
       setIsSaving(false);
     }
@@ -58,17 +58,26 @@ function AccountContent() {
     }
   };
 
+  const statusLabel: Record<string, string> = {
+    PENDING: 'Pendiente',
+    PROCESSING: 'En Proceso',
+    SHIPPED: 'Enviado',
+    DELIVERED: 'Entregado',
+    CANCELLED: 'Cancelado',
+    REFUNDED: 'Reembolsado',
+  };
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      <h1 className="text-3xl text-gray-900 dark:text-gray-100">Mi Cuenta</h1>
+      <h1 className="text-primary">MI CUENTA</h1>
 
-      {/* Profile */}
+      {/* Perfil */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                <User className="w-5 h-5 text-purple-600" />
+              <div className="w-10 h-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
+                <User className="w-5 h-5 text-primary" />
               </div>
               <CardTitle>Perfil</CardTitle>
             </div>
@@ -104,22 +113,22 @@ function AccountContent() {
             </div>
           ) : (
             <div className="space-y-2 text-sm">
-              <p><span className="text-gray-500 dark:text-gray-400">Nombre:</span> <span className="text-gray-900 dark:text-gray-100">{user?.name}</span></p>
-              <p><span className="text-gray-500 dark:text-gray-400">Email:</span> <span className="text-gray-900 dark:text-gray-100">{user?.email}</span></p>
+              <p><span className="text-muted-foreground">Nombre:</span> <span className="text-foreground">{user?.name}</span></p>
+              <p><span className="text-muted-foreground">Email:</span> <span className="text-foreground">{user?.email}</span></p>
               {user?.phone && (
-                <p><span className="text-gray-500 dark:text-gray-400">Teléfono:</span> <span className="text-gray-900 dark:text-gray-100">{user.phone}</span></p>
+                <p><span className="text-muted-foreground">Teléfono:</span> <span className="text-foreground">{user.phone}</span></p>
               )}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Orders */}
+      {/* Pedidos */}
       <Card>
         <CardHeader>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-              <Package className="w-5 h-5 text-blue-600" />
+            <div className="w-10 h-10 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center">
+              <Package className="w-5 h-5 text-accent" />
             </div>
             <CardTitle>Mis Pedidos</CardTitle>
           </div>
@@ -127,13 +136,13 @@ function AccountContent() {
         <CardContent>
           {loadingOrders ? (
             <div className="flex justify-center py-8">
-              <Loader2 className="w-6 h-6 animate-spin text-purple-600" />
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
             </div>
           ) : orders.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-gray-500 dark:text-gray-400 mb-4">Aún no tienes pedidos</p>
+              <p className="text-muted-foreground mb-4">Aún no tienes pedidos</p>
               <Link to="/store/products">
-                <Button variant="outline">Explorar productos</Button>
+                <Button variant="outline">Explorar Productos</Button>
               </Link>
             </div>
           ) : (
@@ -142,23 +151,23 @@ function AccountContent() {
                 <Link
                   key={order.id}
                   to={`/store/order-confirmation?orderId=${order.id}`}
-                  className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
+                  className="flex items-center justify-between p-4 rounded-lg border border-border hover:border-primary/25 hover:bg-secondary/50 transition-all"
                 >
                   <div className="space-y-1">
-                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{order.orderNumber}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {new Date(order.createdAt).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    <p className="text-sm font-medium text-foreground font-[family-name:var(--font-mono)]">{order.orderNumber}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(order.createdAt).toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' })}
                       {' · '}{order.items.length} {order.items.length === 1 ? 'artículo' : 'artículos'}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="text-right">
-                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100">${order.total.toFixed(2)}</p>
+                      <p className="text-sm font-bold text-primary font-[family-name:var(--font-mono)]">${order.total.toFixed(2)}</p>
                       <Badge variant={statusColor(order.status)} className="text-xs">
-                        {order.status}
+                        {statusLabel[order.status] || order.status}
                       </Badge>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-gray-400" />
+                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
                   </div>
                 </Link>
               ))}
@@ -167,8 +176,8 @@ function AccountContent() {
         </CardContent>
       </Card>
 
-      {/* Logout */}
-      <Button variant="outline" onClick={logout} className="text-red-600 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20">
+      {/* Cerrar Sesión */}
+      <Button variant="outline" onClick={logout} className="text-destructive border-destructive/30 hover:bg-destructive/10">
         <LogOut className="w-4 h-4 mr-2" />
         Cerrar Sesión
       </Button>

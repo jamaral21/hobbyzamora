@@ -36,7 +36,7 @@ export default function ProductDetailPage() {
     return (
       <StoreLayout>
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
       </StoreLayout>
     );
@@ -46,9 +46,9 @@ export default function ProductDetailPage() {
     return (
       <StoreLayout>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-center">
-          <h1 className="text-2xl text-gray-900 dark:text-gray-100 mb-4">Product not found</h1>
+          <h1 className="text-2xl text-foreground mb-4">Producto no encontrado</h1>
           <Link to="/store/products">
-            <Button>Back to Products</Button>
+            <Button>Volver a Productos</Button>
           </Link>
         </div>
       </StoreLayout>
@@ -61,18 +61,18 @@ export default function ProductDetailPage() {
     <StoreLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Breadcrumb */}
-        <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 mb-8">
-          <Link to="/" className="hover:text-purple-600">Home</Link>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-8">
+          <Link to="/" className="hover:text-primary">Inicio</Link>
           <span>/</span>
-          <Link to="/store/products" className="hover:text-purple-600">Products</Link>
+          <Link to="/store/products" className="hover:text-primary">Productos</Link>
           <span>/</span>
-          <span className="text-gray-900 dark:text-gray-100">{product.name}</span>
+          <span className="text-foreground">{product.name}</span>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 mb-12">
           {/* Images */}
           <div>
-            <div className="aspect-square bg-gray-100 dark:bg-gray-800 rounded-xl overflow-hidden mb-4">
+            <div className="aspect-square bg-secondary rounded-xl overflow-hidden mb-4">
               <img
                 src={product.images[selectedImage]}
                 alt={product.name}
@@ -80,17 +80,17 @@ export default function ProductDetailPage() {
               />
             </div>
             <div className="grid grid-cols-4 gap-3">
-              {product.images.map((image, idx) => (
+              {product.images.map((image: string, idx: number) => (
                 <button
                   key={idx}
                   onClick={() => setSelectedImage(idx)}
-                  className={`aspect-square rounded-lg overflow-hidden border-2 ${
+                  className={`aspect-square rounded-lg overflow-hidden border-2 transition-colors ${
                     selectedImage === idx
-                      ? 'border-purple-600'
-                      : 'border-transparent'
+                      ? 'border-primary'
+                      : 'border-transparent hover:border-border'
                   }`}
                 >
-                  <img src={image} alt={`View ${idx + 1}`} className="w-full h-full object-cover" />
+                  <img src={image} alt={`Vista ${idx + 1}`} className="w-full h-full object-cover" />
                 </button>
               ))}
             </div>
@@ -101,53 +101,53 @@ export default function ProductDetailPage() {
             <div className="flex items-start justify-between mb-4">
               <div className="flex-1">
                 {product.isPresale && (
-                  <Badge variant="purple" className="mb-2">Presale Item</Badge>
+                  <Badge variant="presale" pixel className="mb-2">Preventa</Badge>
                 )}
-                <h1 className="text-3xl text-gray-900 dark:text-gray-100 mb-2">
+                <h1 className="text-3xl text-foreground mb-2 font-[family-name:var(--font-body)]">
                   {product.name}
                 </h1>
-                <p className="text-gray-500 dark:text-gray-400">{product.category}</p>
+                <p className="text-muted-foreground">{product.category}</p>
               </div>
               <div className="flex gap-2">
-                <button className="p-2 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
-                  <Heart className="w-5 h-5" />
+                <button className="p-2 rounded-lg border border-border hover:bg-secondary transition-colors">
+                  <Heart className="w-5 h-5 text-muted-foreground" />
                 </button>
-                <button className="p-2 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800">
-                  <Share2 className="w-5 h-5" />
+                <button className="p-2 rounded-lg border border-border hover:bg-secondary transition-colors">
+                  <Share2 className="w-5 h-5 text-muted-foreground" />
                 </button>
               </div>
             </div>
 
             <div className="mb-6">
-              <span className="text-4xl text-gray-900 dark:text-gray-100">
-                ${product.price.toFixed(2)}
+              <span className="text-4xl text-primary font-bold font-[family-name:var(--font-mono)]">
+                ${product.price.toLocaleString('es-CL')}
               </span>
             </div>
 
             {/* Stock Status */}
             {isLowStock && (
-              <div className="flex items-center gap-2 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg mb-6">
-                <AlertCircle className="w-5 h-5 text-orange-600" />
-                <span className="text-sm text-orange-600">
-                  Only {product.stock} left in stock
+              <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg mb-6">
+                <AlertCircle className="w-5 h-5 text-destructive" />
+                <span className="text-sm text-destructive">
+                  Quedan solo {product.stock} en stock
                 </span>
               </div>
             )}
 
             {/* Presale Info */}
             {product.isPresale && product.presaleData && (
-              <Card className="mb-6 bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800">
+              <Card glow="primary" className="mb-6">
                 <div className="flex items-start gap-3">
-                  <Clock className="w-5 h-5 text-purple-600 mt-0.5" />
+                  <Clock className="w-5 h-5 text-primary mt-0.5" />
                   <div>
-                    <h3 className="text-sm text-purple-900 dark:text-purple-100 mb-1">
-                      Presale Information
+                    <h3 className="text-sm text-foreground mb-1">
+                      Información de Preventa
                     </h3>
-                    <p className="text-sm text-purple-700 dark:text-purple-300">
-                      Limited to {product.presaleData.maxQuantity} per customer
+                    <p className="text-sm text-muted-foreground">
+                      Limitado a {product.presaleData.maxQuantity} por cliente
                     </p>
-                    <p className="text-sm text-purple-700 dark:text-purple-300">
-                      {product.presaleData.availableQuantity} available
+                    <p className="text-sm text-muted-foreground">
+                      {product.presaleData.availableQuantity} disponibles
                     </p>
                   </div>
                 </div>
@@ -166,13 +166,13 @@ export default function ProductDetailPage() {
 
             {/* Quantity */}
             <div className="mb-6">
-              <label className="text-sm text-gray-700 dark:text-gray-300 mb-2 block">
-                Quantity
+              <label className="text-sm text-muted-foreground mb-2 block">
+                Cantidad
               </label>
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  className="w-10 h-10 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  className="w-10 h-10 rounded-lg border border-border hover:bg-secondary text-foreground transition-colors"
                 >
                   -
                 </button>
@@ -182,11 +182,11 @@ export default function ProductDetailPage() {
                   max={product.stock}
                   value={quantity}
                   onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
-                  className="w-20 px-3 py-2 text-center rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+                  className="w-20 px-3 py-2 text-center rounded-lg border border-border bg-input-background text-foreground"
                 />
                 <button
                   onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
-                  className="w-10 h-10 rounded-lg border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                  className="w-10 h-10 rounded-lg border border-border hover:bg-secondary text-foreground transition-colors"
                 >
                   +
                 </button>
@@ -197,35 +197,35 @@ export default function ProductDetailPage() {
             <div className="flex gap-3 mb-8">
               <Button fullWidth size="lg" onClick={() => addItem(product, quantity)} disabled={product.stock === 0}>
                 <ShoppingCart className="w-5 h-5" />
-                Add to Cart
+                Agregar al Carrito
               </Button>
               <Button variant="outline" size="lg" onClick={() => { addItem(product, quantity); window.location.href = '/store/checkout'; }} disabled={product.stock === 0}>
-                Buy Now
+                Comprar Ahora
               </Button>
             </div>
 
             {/* Description */}
-            <div className="border-t border-gray-200 dark:border-gray-800 pt-6">
-              <h3 className="text-gray-900 dark:text-gray-100 mb-3">Description</h3>
-              <p className="text-gray-600 dark:text-gray-400">{product.description}</p>
+            <div className="border-t border-border pt-6">
+              <h3 className="text-foreground mb-3">Descripción</h3>
+              <p className="text-muted-foreground">{product.description}</p>
             </div>
 
             {/* Details */}
-            <div className="border-t border-gray-200 dark:border-gray-800 pt-6 mt-6">
-              <h3 className="text-gray-900 dark:text-gray-100 mb-3">Product Details</h3>
+            <div className="border-t border-border pt-6 mt-6">
+              <h3 className="text-foreground mb-3">Detalles del Producto</h3>
               <dl className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <dt className="text-gray-500 dark:text-gray-400">SKU</dt>
-                  <dd className="text-gray-900 dark:text-gray-100">{product.sku}</dd>
+                  <dt className="text-muted-foreground">SKU</dt>
+                  <dd className="text-foreground font-[family-name:var(--font-mono)]">{product.sku}</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-gray-500 dark:text-gray-400">Category</dt>
-                  <dd className="text-gray-900 dark:text-gray-100">{product.category}</dd>
+                  <dt className="text-muted-foreground">Categoría</dt>
+                  <dd className="text-foreground">{product.category}</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-gray-500 dark:text-gray-400">Availability</dt>
-                  <dd className="text-gray-900 dark:text-gray-100">
-                    {product.stock > 0 ? `${product.stock} in stock` : 'Out of stock'}
+                  <dt className="text-muted-foreground">Disponibilidad</dt>
+                  <dd className="text-foreground">
+                    {product.stock > 0 ? `${product.stock} en stock` : 'Agotado'}
                   </dd>
                 </div>
               </dl>

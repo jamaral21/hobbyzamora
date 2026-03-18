@@ -4,37 +4,36 @@ import { clsx } from 'clsx';
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
-  fullWidth?: boolean;
+  hint?: string;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, fullWidth = false, className, ...props }, ref) => {
+  ({ label, error, hint, className, id, ...props }, ref) => {
+    const inputId = id || label?.toLowerCase().replace(/\s+/g, '-');
+
     return (
-      <div className={clsx('flex flex-col gap-1.5', { 'w-full': fullWidth })}>
+      <div className="space-y-1.5">
         {label && (
-          <label className="text-sm text-gray-700 dark:text-gray-300">
+          <label htmlFor={inputId} className="block text-sm font-medium text-foreground">
             {label}
           </label>
         )}
         <input
           ref={ref}
+          id={inputId}
           className={clsx(
-            'px-3 py-2 rounded-lg border bg-white dark:bg-gray-900',
-            'text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-600',
-            'border-gray-300 dark:border-gray-700',
-            'focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent',
-            'disabled:opacity-50 disabled:cursor-not-allowed',
-            'transition-all duration-200',
-            {
-              'border-red-500 focus:ring-red-500': error,
-            },
+            'w-full px-4 py-2.5 rounded-lg text-foreground placeholder:text-muted-foreground',
+            'bg-input-background border transition-all duration-200',
+            'focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-offset-background',
+            error
+              ? 'border-destructive/50 focus:ring-destructive/40'
+              : 'border-border focus:border-primary/40 focus:ring-primary/30',
             className
           )}
           {...props}
         />
-        {error && (
-          <span className="text-sm text-red-600 dark:text-red-400">{error}</span>
-        )}
+        {error && <p className="text-xs text-destructive">{error}</p>}
+        {hint && !error && <p className="text-xs text-muted-foreground">{hint}</p>}
       </div>
     );
   }
@@ -42,74 +41,82 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
 
 Input.displayName = 'Input';
 
-export const Textarea = forwardRef<HTMLTextAreaElement, InputHTMLAttributes<HTMLTextAreaElement> & { label?: string; error?: string }>(
-  ({ label, error, className, ...props }, ref) => {
-    return (
-      <div className="flex flex-col gap-1.5">
-        {label && (
-          <label className="text-sm text-gray-700 dark:text-gray-300">
-            {label}
-          </label>
-        )}
-        <textarea
-          ref={ref}
-          className={clsx(
-            'px-3 py-2 rounded-lg border bg-white dark:bg-gray-900',
-            'text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-600',
-            'border-gray-300 dark:border-gray-700',
-            'focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent',
-            'disabled:opacity-50 disabled:cursor-not-allowed',
-            'transition-all duration-200 resize-y',
-            {
-              'border-red-500 focus:ring-red-500': error,
-            },
-            className
-          )}
-          {...props}
-        />
-        {error && (
-          <span className="text-sm text-red-600 dark:text-red-400">{error}</span>
-        )}
-      </div>
-    );
-  }
-);
+export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElement> {
+  label?: string;
+  error?: string;
+}
 
-Textarea.displayName = 'Textarea';
+export const Select = forwardRef<HTMLSelectElement, SelectProps>(
+  ({ label, error, className, id, children, ...props }, ref) => {
+    const selectId = id || label?.toLowerCase().replace(/\s+/g, '-');
 
-export const Select = forwardRef<HTMLSelectElement, InputHTMLAttributes<HTMLSelectElement> & { label?: string; error?: string; children: React.ReactNode }>(
-  ({ label, error, className, children, ...props }, ref) => {
     return (
-      <div className="flex flex-col gap-1.5">
+      <div className="space-y-1.5">
         {label && (
-          <label className="text-sm text-gray-700 dark:text-gray-300">
+          <label htmlFor={selectId} className="block text-sm font-medium text-foreground">
             {label}
           </label>
         )}
         <select
           ref={ref}
+          id={selectId}
           className={clsx(
-            'px-3 py-2 rounded-lg border bg-white dark:bg-gray-900',
-            'text-gray-900 dark:text-gray-100',
-            'border-gray-300 dark:border-gray-700',
-            'focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent',
-            'disabled:opacity-50 disabled:cursor-not-allowed',
-            'transition-all duration-200',
-            {
-              'border-red-500 focus:ring-red-500': error,
-            },
+            'w-full px-4 py-2.5 rounded-lg text-foreground',
+            'bg-input-background border transition-all duration-200 appearance-none',
+            'focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-offset-background',
+            error
+              ? 'border-destructive/50 focus:ring-destructive/40'
+              : 'border-border focus:border-primary/40 focus:ring-primary/30',
             className
           )}
           {...props}
         >
           {children}
         </select>
-        {error && (
-          <span className="text-sm text-red-600 dark:text-red-400">{error}</span>
-        )}
+        {error && <p className="text-xs text-destructive">{error}</p>}
       </div>
     );
   }
 );
 
 Select.displayName = 'Select';
+
+export interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
+  label?: string;
+  error?: string;
+  hint?: string;
+}
+
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
+  ({ label, error, hint, className, id, ...props }, ref) => {
+    const textareaId = id || label?.toLowerCase().replace(/\s+/g, '-');
+
+    return (
+      <div className="space-y-1.5">
+        {label && (
+          <label htmlFor={textareaId} className="block text-sm font-medium text-foreground">
+            {label}
+          </label>
+        )}
+        <textarea
+          ref={ref}
+          id={textareaId}
+          className={clsx(
+            'w-full px-4 py-2.5 rounded-lg text-foreground placeholder:text-muted-foreground',
+            'bg-input-background border transition-all duration-200 resize-vertical min-h-[80px]',
+            'focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-offset-background',
+            error
+              ? 'border-destructive/50 focus:ring-destructive/40'
+              : 'border-border focus:border-primary/40 focus:ring-primary/30',
+            className
+          )}
+          {...props}
+        />
+        {error && <p className="text-xs text-destructive">{error}</p>}
+        {hint && !error && <p className="text-xs text-muted-foreground">{hint}</p>}
+      </div>
+    );
+  }
+);
+
+Textarea.displayName = 'Textarea';

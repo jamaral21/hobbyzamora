@@ -20,31 +20,27 @@ export default function OrderConfirmationPage() {
 
     async function loadOrder() {
       try {
-        // First load the order
         let orderData = await ordersAPI.getById(orderId!);
 
-        // If order is still PENDING, try to resolve payment via Getnet query
         if (orderData.status === 'PENDING' && orderData.payments?.length) {
           const pendingPayment = orderData.payments.find((p: any) => p.status === 'PENDING');
           if (pendingPayment) {
             try {
               await paymentsAPI.querySession({ paymentId: pendingPayment.id });
-              // Reload order to get updated status
               orderData = await ordersAPI.getById(orderId!);
             } catch {
-              // Ignore query errors — payment may not be resolved yet
+              // Ignorar errores de consulta
             }
           }
         }
 
         setOrder(orderData);
 
-        // Clear cart if payment was successful
         if (orderData.status === 'PROCESSING' || orderData.status === 'DELIVERED') {
           clearCart();
         }
       } catch (err) {
-        console.error('Failed to load order:', err);
+        console.error('Error al cargar pedido:', err);
       } finally {
         setIsLoading(false);
       }
@@ -57,7 +53,7 @@ export default function OrderConfirmationPage() {
     return (
       <StoreLayout>
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
       </StoreLayout>
     );
@@ -69,81 +65,93 @@ export default function OrderConfirmationPage() {
   deliveryStart.setDate(deliveryStart.getDate() + 5);
   const deliveryEnd = new Date();
   deliveryEnd.setDate(deliveryEnd.getDate() + 7);
-  const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const fmt = (d: Date) => d.toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  const statusLabel: Record<string, string> = {
+    PENDING: 'Pendiente',
+    PROCESSING: 'En Proceso',
+    SHIPPED: 'Enviado',
+    DELIVERED: 'Entregado',
+    CANCELLED: 'Cancelado',
+    REFUNDED: 'Reembolsado',
+  };
 
   return (
     <StoreLayout>
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <Card className="text-center">
           <CardContent>
-            <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="w-8 h-8 text-green-600" />
+            <div className="w-16 h-16 bg-[#00e676]/15 rounded-full flex items-center justify-center mx-auto mb-4">
+              <CheckCircle className="w-8 h-8 text-[#00e676]" />
             </div>
 
-            <h1 className="text-3xl text-gray-900 dark:text-gray-100 mb-2">
-              Order Confirmed!
-            </h1>
-            <p className="text-gray-500 dark:text-gray-400 mb-8">
-              Thank you for your purchase.{email ? ` We've sent a confirmation email to ${email}` : ''}
+            <h1 className="text-primary mb-2">PEDIDO CONFIRMADO</h1>
+            <p className="text-muted-foreground mb-8">
+              Gracias por tu compra.{email ? ` Enviamos una confirmación a ${email}` : ''}
             </p>
 
-            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 mb-8">
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Order Number</p>
-              <p className="text-2xl text-gray-900 dark:text-gray-100">{orderNumber}</p>
+            <div className="bg-secondary rounded-lg p-6 mb-8">
+              <p className="text-sm text-muted-foreground mb-1">Número de Pedido</p>
+              <p className="text-2xl text-primary font-bold font-[family-name:var(--font-mono)]">{orderNumber}</p>
             </div>
 
-            {/* Order Items */}
+            {/* Items del pedido */}
             {order?.items && order.items.length > 0 && (
               <div className="text-left mb-8">
-                <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">Items</h3>
-                <div className="divide-y divide-gray-200 dark:divide-gray-800">
+                <h3 className="text-sm font-medium text-foreground mb-3">Artículos</h3>
+                <div className="divide-y divide-border">
                   {order.items.map((item: any) => (
                     <div key={item.id} className="flex justify-between py-3 text-sm">
                       <div>
-                        <span className="text-gray-900 dark:text-gray-100">{item.name}</span>
-                        <span className="text-gray-500 dark:text-gray-400"> × {item.quantity}</span>
+                        <span className="text-foreground">{item.name}</span>
+                        <span className="text-muted-foreground"> × {item.quantity}</span>
                       </div>
-                      <span className="text-gray-900 dark:text-gray-100">${(item.price * item.quantity).toFixed(2)}</span>
+                      <span className="text-foreground font-[family-name:var(--font-mono)]">
+                        ${(item.price * item.quantity).toLocaleString('es-CL', { minimumFractionDigits: 2 })}
+                      </span>
                     </div>
                   ))}
                 </div>
-                <div className="border-t border-gray-200 dark:border-gray-800 pt-3 mt-1 space-y-1 text-sm">
-                  <div className="flex justify-between text-gray-500 dark:text-gray-400">
-                    <span>Subtotal</span><span>${order.subtotal?.toFixed(2)}</span>
+                <div className="border-t border-border pt-3 mt-1 space-y-1 text-sm">
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Subtotal</span>
+                    <span className="font-[family-name:var(--font-mono)]">${order.subtotal?.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between text-gray-500 dark:text-gray-400">
-                    <span>Tax</span><span>${order.tax?.toFixed(2)}</span>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Impuesto</span>
+                    <span className="font-[family-name:var(--font-mono)]">${order.tax?.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between font-medium text-gray-900 dark:text-gray-100 pt-2 border-t border-gray-200 dark:border-gray-800">
-                    <span>Total</span><span>${order.total?.toFixed(2)}</span>
+                  <div className="flex justify-between font-medium text-foreground pt-2 border-t border-border">
+                    <span>Total</span>
+                    <span className="text-primary font-bold font-[family-name:var(--font-mono)]">${order.total?.toFixed(2)}</span>
                   </div>
                 </div>
               </div>
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-              <div className="p-4 border border-gray-200 dark:border-gray-800 rounded-lg">
-                <Package className="w-6 h-6 text-purple-600 mx-auto mb-2" />
-                <h3 className="text-sm text-gray-900 dark:text-gray-100 mb-1">
-                  Estimated Delivery
+              <div className="p-4 border border-border rounded-lg">
+                <Package className="w-6 h-6 text-accent mx-auto mb-2" />
+                <h3 className="text-sm text-foreground mb-1">
+                  Entrega Estimada
                 </h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
+                <p className="text-sm text-muted-foreground">
                   {fmt(deliveryStart)} - {fmt(deliveryEnd)}
                 </p>
               </div>
-              <div className="p-4 border border-gray-200 dark:border-gray-800 rounded-lg">
-                <h3 className="text-sm text-gray-900 dark:text-gray-100 mb-1">
-                  Status
+              <div className="p-4 border border-border rounded-lg">
+                <h3 className="text-sm text-foreground mb-1">
+                  Estado
                 </h3>
-                <Badge variant={order?.status === 'PROCESSING' ? 'success' : 'default'}>
-                  {order?.status || 'PENDING'}
+                <Badge variant={order?.status === 'PROCESSING' ? 'success' : order?.status === 'DELIVERED' ? 'success' : 'warning'}>
+                  {statusLabel[order?.status] || order?.status || 'Pendiente'}
                 </Badge>
               </div>
             </div>
 
             <div className="space-y-3">
               <Link to="/store/products">
-                <Button fullWidth size="lg">Continue Shopping</Button>
+                <Button fullWidth size="lg">Seguir Comprando</Button>
               </Link>
             </div>
           </CardContent>
