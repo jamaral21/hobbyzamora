@@ -13,42 +13,43 @@ export function SalesChart({ data }: SalesChartProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Sales & Revenue</CardTitle>
+        <CardTitle>Ventas e Ingresos</CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-800" />
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,214,10,0.08)" />
             <XAxis
               dataKey="date"
-              className="text-xs text-gray-500"
-              tick={{ fill: 'currentColor' }}
+              className="text-xs"
+              tick={{ fill: '#8b8a9e' }}
             />
             <YAxis
-              className="text-xs text-gray-500"
-              tick={{ fill: 'currentColor' }}
+              className="text-xs"
+              tick={{ fill: '#8b8a9e' }}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                border: '1px solid #e5e7eb',
+                backgroundColor: '#12121a',
+                border: '1px solid rgba(255,214,10,0.12)',
                 borderRadius: '8px',
+                color: '#e8e6f0',
               }}
             />
             <Legend />
             <Line
               type="monotone"
               dataKey="sales"
-              stroke="#9333ea"
+              stroke="#ffd60a"
               strokeWidth={2}
-              dot={{ fill: '#9333ea', r: 4 }}
+              dot={{ fill: '#ffd60a', r: 4 }}
             />
             <Line
               type="monotone"
               dataKey="revenue"
-              stroke="#3b82f6"
+              stroke="#00d4ff"
               strokeWidth={2}
-              dot={{ fill: '#3b82f6', r: 4 }}
+              dot={{ fill: '#00d4ff', r: 4 }}
             />
           </LineChart>
         </ResponsiveContainer>

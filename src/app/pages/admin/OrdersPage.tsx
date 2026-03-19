@@ -40,7 +40,7 @@ export default function OrdersPage() {
     return (
       <AdminLayout>
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
       </AdminLayout>
     );
@@ -51,62 +51,67 @@ export default function OrdersPage() {
       <div className="mb-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-3xl text-gray-900 dark:text-gray-100 mb-2">Orders</h1>
-            <p className="text-gray-500 dark:text-gray-400">
-              Manage and track customer orders
+            <h1 className="text-3xl text-foreground mb-2">Pedidos</h1>
+            <p className="text-muted-foreground">
+              Gestiona y rastrea los pedidos de clientes
             </p>
           </div>
           <Button variant="outline">
             <Download className="w-4 h-4" />
-            Export
+            Exportar
           </Button>
         </div>
 
         {/* Filters */}
         <div className="flex gap-4 mb-6">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Search orders..."
+              placeholder="Buscar pedidos..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full pl-10 pr-4 py-2 rounded-lg border border-border bg-input-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
 
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            className="px-4 py-2 rounded-lg border border-border bg-input-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
           >
-            <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="processing">Processing</option>
-            <option value="shipped">Shipped</option>
-            <option value="delivered">Delivered</option>
-            <option value="cancelled">Cancelled</option>
+            <option value="all">Todos los Estados</option>
+            <option value="pending">Pendiente</option>
+            <option value="processing">Procesando</option>
+            <option value="shipped">Enviado</option>
+            <option value="delivered">Entregado</option>
+            <option value="cancelled">Cancelado</option>
           </select>
 
           <Button variant="outline">
             <Filter className="w-4 h-4" />
-            More Filters
+            Más Filtros
           </Button>
         </div>
 
         {/* Stats */}
         <div className="grid grid-cols-4 gap-4 mb-8">
-          {['pending', 'processing', 'shipped', 'delivered'].map((status) => {
-            const count = statusCounts[status] || 0;
+          {[
+            { key: 'pending', label: 'Pendiente' },
+            { key: 'processing', label: 'Procesando' },
+            { key: 'shipped', label: 'Enviado' },
+            { key: 'delivered', label: 'Entregado' },
+          ].map(({ key, label }) => {
+            const count = statusCounts[key] || 0;
             return (
               <div
-                key={status}
-                className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                key={key}
+                className="p-4 bg-secondary rounded-lg"
               >
-                <p className="text-sm text-gray-500 dark:text-gray-400 capitalize mb-1">
-                  {status}
+                <p className="text-sm text-muted-foreground mb-1">
+                  {label}
                 </p>
-                <p className="text-2xl text-gray-900 dark:text-gray-100">{count}</p>
+                <p className="text-2xl text-foreground">{count}</p>
               </div>
             );
           })}
@@ -117,25 +122,25 @@ export default function OrdersPage() {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Order</TableHead>
-            <TableHead>Customer</TableHead>
-            <TableHead>Date</TableHead>
-            <TableHead>Items</TableHead>
+            <TableHead>Pedido</TableHead>
+            <TableHead>Cliente</TableHead>
+            <TableHead>Fecha</TableHead>
+            <TableHead>Artículos</TableHead>
             <TableHead>Total</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Actions</TableHead>
+            <TableHead>Estado</TableHead>
+            <TableHead>Acciones</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {filteredOrders.map((order: any) => (
             <TableRow key={order.id}>
               <TableCell>
-                <p className="text-sm text-gray-900 dark:text-gray-100">{order.orderNumber}</p>
+                <p className="text-sm text-foreground">{order.orderNumber}</p>
               </TableCell>
               <TableCell>
                 <div>
-                  <p className="text-sm text-gray-900 dark:text-gray-100">{order.customerName}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{order.customerEmail}</p>
+                  <p className="text-sm text-foreground">{order.customerName}</p>
+                  <p className="text-xs text-muted-foreground">{order.customerEmail}</p>
                 </div>
               </TableCell>
               <TableCell>

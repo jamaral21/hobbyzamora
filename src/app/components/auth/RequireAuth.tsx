@@ -55,7 +55,6 @@ export function RequireAuth({ children, message = 'Inicia sesión para continuar
       }
     };
 
-    // Google script may already be loaded or still loading
     if (window.google) {
       initGoogle();
     } else {
@@ -86,7 +85,7 @@ export function RequireAuth({ children, message = 'Inicia sesión para continuar
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -120,8 +119,8 @@ export function RequireAuth({ children, message = 'Inicia sesión para continuar
   return (
     <div className="max-w-md mx-auto py-12 px-4">
       <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{message}</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+        <h2 className="text-primary mb-2">{message.toUpperCase()}</h2>
+        <p className="text-sm text-muted-foreground mt-2">
           {mode === 'login'
             ? 'Ingresa con tu cuenta para completar la compra'
             : 'Crea una cuenta para completar la compra'}
@@ -146,7 +145,7 @@ export function RequireAuth({ children, message = 'Inicia sesión para continuar
                 <Input
                   label="Teléfono (opcional)"
                   type="tel"
-                  placeholder="+1 (555) 123-4567"
+                  placeholder="+56 9 1234 5678"
                   value={form.phone}
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
                 />
@@ -170,7 +169,7 @@ export function RequireAuth({ children, message = 'Inicia sesión para continuar
             />
 
             {error && (
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+              <p className="text-sm text-destructive">{error}</p>
             )}
 
             <Button type="submit" fullWidth size="lg" disabled={isSubmitting}>
@@ -196,10 +195,10 @@ export function RequireAuth({ children, message = 'Inicia sesión para continuar
           {/* Divider */}
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200 dark:border-gray-700" />
+              <div className="w-full border-t border-border" />
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="bg-white dark:bg-gray-900 px-3 text-gray-500 dark:text-gray-400">o</span>
+              <span className="bg-card px-3 text-muted-foreground">o</span>
             </div>
           </div>
 
@@ -209,7 +208,7 @@ export function RequireAuth({ children, message = 'Inicia sesión para continuar
           <div className="mt-4 text-center">
             <button
               type="button"
-              className="text-sm text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300"
+              className="text-sm text-primary hover:text-primary/80 transition-colors"
               onClick={() => {
                 setMode(mode === 'login' ? 'register' : 'login');
                 setError('');

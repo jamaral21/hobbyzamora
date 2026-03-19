@@ -35,8 +35,8 @@ export function ProductEditorPage() {
 
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold">Create Product</h2>
-          <p className="text-gray-600">Add a new product to your catalog</p>
+          <h2 className="text-2xl font-bold">Crear Producto</h2>
+          <p className="text-muted-foreground">Agrega un nuevo producto a tu catálogo</p>
         </div>
         <div className="flex gap-3">
           <Link to="/admin/products">
@@ -102,21 +102,21 @@ export function ProductEditorPage() {
                 <div>
                   <Label htmlFor="price">Price</Label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
                     <Input id="price" type="number" placeholder="0.00" className="pl-7" />
                   </div>
                 </div>
                 <div>
                   <Label htmlFor="cost">Cost</Label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
                     <Input id="cost" type="number" placeholder="0.00" className="pl-7" />
                   </div>
                 </div>
               </div>
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-600">
-                  Profit: <span className="font-medium text-green-600">$0.00</span>
+              <div className="p-3 bg-secondary rounded-lg">
+                <p className="text-sm text-muted-foreground">
+                  Profit: <span className="font-medium text-[#00e676]">$0.00</span>
                   {' • '}
                   Margin: <span className="font-medium">0%</span>
                 </p>
@@ -182,10 +182,10 @@ export function ProductEditorPage() {
               <CardTitle>Product Images</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="border-2 border-dashed rounded-lg p-12 text-center hover:border-purple-300 transition-colors cursor-pointer">
-                <Upload className="h-10 w-10 mx-auto mb-4 text-gray-400" />
+              <div className="border-2 border-dashed rounded-lg p-12 text-center hover:border-primary/30 transition-colors cursor-pointer">
+                <Upload className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
                 <p className="font-medium mb-1">Click to upload images</p>
-                <p className="text-sm text-gray-500">PNG, JPG up to 10MB</p>
+                <p className="text-sm text-muted-foreground">PNG, JPG up to 10MB</p>
               </div>
             </CardContent>
           </Card>
@@ -233,7 +233,7 @@ export function ProductEditorPage() {
               <div>
                 <Label htmlFor="tags">Tags</Label>
                 <Input id="tags" placeholder="Add tags..." />
-                <p className="text-xs text-gray-500 mt-1">Separate with commas</p>
+                <p className="text-xs text-muted-foreground mt-1">Separate with commas</p>
               </div>
             </CardContent>
           </Card>

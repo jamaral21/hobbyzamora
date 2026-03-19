@@ -21,7 +21,7 @@ export default function DashboardPage() {
     return (
       <AdminLayout>
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
       </AdminLayout>
     ); 
@@ -39,40 +39,40 @@ export default function DashboardPage() {
       </div>
 
       <div className="mb-8">
-        <h1 className="text-3xl text-gray-900 dark:text-gray-100 mb-2">Dashboard</h1>
-        <p className="text-gray-500 dark:text-gray-400">
-          Welcome back! Here's what's happening today.
+        <h1 className="text-3xl text-foreground mb-2">Dashboard</h1>
+        <p className="text-muted-foreground">
+          Bienvenido de vuelta. Esto es lo que está pasando hoy.
         </p>
       </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <DashboardWidget
-          title="Daily Sales"
+          title="Ventas Diarias"
           value={`$${(stats?.dailySales || 0).toFixed(2)}`}
           icon={DollarSign}
-          variant="purple"
-          trend={{ value: 12.5, label: 'vs yesterday' }}
+          variant="primary"
+          trend={{ value: 12.5, label: 'vs ayer' }}
         />
         <DashboardWidget
-          title="Weekly Sales"
+          title="Ventas Semanales"
           value={`$${(stats?.weeklySales || 0).toFixed(2)}`}
           icon={TrendingUp}
-          variant="blue"
-          trend={{ value: 8.3, label: 'vs last week' }}
+          variant="accent"
+          trend={{ value: 8.3, label: 'vs semana pasada' }}
         />
         <DashboardWidget
-          title="Monthly Revenue"
+          title="Ingresos Mensuales"
           value={`$${(stats?.monthlySales || 0).toFixed(2)}`}
           icon={DollarSign}
-          variant="green"
-          trend={{ value: 15.7, label: 'vs last month' }}
+          variant="success"
+          trend={{ value: 15.7, label: 'vs mes pasado' }}
         />
         <DashboardWidget
-          title="Low Stock Items"
+          title="Stock Bajo"
           value={stats?.lowStockItems || 0}
           icon={AlertTriangle}
-          variant="orange"
+          variant="warning"
         />
       </div>
 
@@ -82,26 +82,26 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Top Selling Products</CardTitle>
+            <CardTitle>Productos Más Vendidos</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               {(topProducts || []).map((product, idx) => (
                 <div key={idx} className="flex items-center justify-between">
                   <div className="flex items-center gap-3 flex-1">
-                    <div className="w-8 h-8 bg-purple-100 dark:bg-purple-900/30 rounded-lg flex items-center justify-center">
-                      <Package className="w-4 h-4 text-purple-600" />
+                    <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                      <Package className="w-4 h-4 text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-900 dark:text-gray-100 truncate">
+                      <p className="text-sm text-foreground truncate">
                         {product.name}
                       </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {product.sales} sold
+                      <p className="text-xs text-muted-foreground">
+                        {product.sales} vendidos
                       </p>
                     </div>
                   </div>
-                  <span className="text-sm text-gray-900 dark:text-gray-100">
+                  <span className="text-sm text-foreground">
                     ${product.revenue.toFixed(2)}
                   </span>
                 </div>
@@ -114,18 +114,18 @@ export default function DashboardPage() {
       {/* Recent Orders */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Orders</CardTitle>
+          <CardTitle>Pedidos Recientes</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
             {recentOrders.map((order) => (
               <div
                 key={order.id}
-                className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 rounded-lg"
+                className="flex items-center justify-between p-4 bg-secondary rounded-lg"
               >
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-1">
-                    <span className="text-sm text-gray-900 dark:text-gray-100">
+                    <span className="text-sm text-foreground">
                       {order.orderNumber}
                     </span>
                     <Badge
@@ -143,11 +143,11 @@ export default function DashboardPage() {
                       {order.status.toLowerCase()}
                     </Badge>
                   </div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                  <p className="text-sm text-muted-foreground">
                     {order.customerName} • {new Date(order.createdAt).toLocaleDateString()}
                   </p>
                 </div>
-                <span className="text-sm text-gray-900 dark:text-gray-100">
+                <span className="text-sm text-foreground">
                   ${order.total.toFixed(2)}
                 </span>
               </div>

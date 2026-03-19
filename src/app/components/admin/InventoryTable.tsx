@@ -25,14 +25,14 @@ export function InventoryTable({ inventory, lowStockThreshold = 10 }: InventoryT
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Product</TableHead>
+            <TableHead>Producto</TableHead>
             <TableHead>SKU</TableHead>
-            <TableHead>Batch</TableHead>
-            <TableHead>Remaining</TableHead>
-            <TableHead>Unit Cost</TableHead>
-            <TableHead>Total Value</TableHead>
-            <TableHead>Date</TableHead>
-            <TableHead>Status</TableHead>
+            <TableHead>Lote</TableHead>
+            <TableHead>Restante</TableHead>
+            <TableHead>Costo Unit.</TableHead>
+            <TableHead>Valor Total</TableHead>
+            <TableHead>Fecha</TableHead>
+            <TableHead>Estado</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -44,7 +44,7 @@ export function InventoryTable({ inventory, lowStockThreshold = 10 }: InventoryT
               <TableRow key={item.id}>
                 <TableCell>
                   <div className="flex items-center gap-2">
-                    {isLowStock && <AlertTriangle className="w-4 h-4 text-orange-500" />}
+                    {isLowStock && <AlertTriangle className="w-4 h-4 text-[#ffab00]" />}
                     {item.productName}
                   </div>
                 </TableCell>
@@ -56,9 +56,9 @@ export function InventoryTable({ inventory, lowStockThreshold = 10 }: InventoryT
                 <TableCell>{new Date(item.receivedAt).toLocaleDateString()}</TableCell>
                 <TableCell>
                   {isLowStock ? (
-                    <Badge variant="warning">Low Stock</Badge>
+                    <Badge variant="warning">Stock Bajo</Badge>
                   ) : (
-                    <Badge variant="success">In Stock</Badge>
+                    <Badge variant="success">En Stock</Badge>
                   )}
                 </TableCell>
               </TableRow>

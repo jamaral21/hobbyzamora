@@ -62,7 +62,7 @@ export default function InstagramAgentPage() {
     return (
       <AdminLayout>
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
       </AdminLayout>
     );
@@ -71,9 +71,9 @@ export default function InstagramAgentPage() {
   return (
     <AdminLayout>
       <div className="mb-8">
-        <h1 className="text-3xl text-gray-900 dark:text-gray-100 mb-2">Instagram Sales Agent</h1>
-        <p className="text-gray-500 dark:text-gray-400">
-          Monitor AI agent conversations and take over when needed
+        <h1 className="text-3xl text-foreground mb-2">Agente de Instagram</h1>
+        <p className="text-muted-foreground">
+          Monitorea conversaciones del agente IA y toma el control cuando sea necesario
         </p>
       </div>
 
@@ -81,7 +81,7 @@ export default function InstagramAgentPage() {
         {/* Conversations List */}
         <Card className="lg:col-span-1">
           <div className="mb-4">
-            <h2 className="text-lg text-gray-900 dark:text-gray-100">Conversations</h2>
+            <h2 className="text-lg text-foreground">Conversaciones</h2>
           </div>
           <div className="space-y-1 max-h-[600px] overflow-y-auto">
             <ConversationList
@@ -115,36 +115,39 @@ export default function InstagramAgentPage() {
           <ProductQuickInsert
             products={products || []}
             onInsert={(product) => {
-              handleSendMessage(`Check out our ${product.name}! Price: $${product.price.toFixed(2)}. ${product.stock > 0 ? `We have ${product.stock} in stock.` : 'Currently out of stock.'}`);
+              const msg = product.stock > 0
+                ? `Mira nuestro ${product.name}! Precio: $${product.price.toFixed(2)}. Tenemos ${product.stock} en stock.`
+                : `Mira nuestro ${product.name}! Precio: $${product.price.toFixed(2)}. Actualmente agotado.`;
+              handleSendMessage(msg);
             }}
           />
 
           <Card className="mt-6">
-            <h3 className="text-sm text-gray-900 dark:text-gray-100 mb-3">
-              AI Agent Status
+            <h3 className="text-sm text-foreground mb-3">
+              Estado del Agente IA
             </h3>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500 dark:text-gray-400">Active</span>
+                <span className="text-sm text-muted-foreground">Activo</span>
                 <span className="w-2 h-2 bg-green-500 rounded-full"></span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  Response Time
+                <span className="text-sm text-muted-foreground">
+                  Tiempo de Respuesta
                 </span>
-                <span className="text-sm text-gray-900 dark:text-gray-100">~2s</span>
+                <span className="text-sm text-foreground">~2s</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  Today's Conversations
+                <span className="text-sm text-muted-foreground">
+                  Conversaciones Hoy
                 </span>
-                <span className="text-sm text-gray-900 dark:text-gray-100">12</span>
+                <span className="text-sm text-foreground">12</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  Conversion Rate
+                <span className="text-sm text-muted-foreground">
+                  Tasa de Conversión
                 </span>
-                <span className="text-sm text-gray-900 dark:text-gray-100">34%</span>
+                <span className="text-sm text-foreground">34%</span>
               </div>
             </div>
           </Card>

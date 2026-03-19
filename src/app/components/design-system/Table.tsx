@@ -22,7 +22,7 @@ export const TableHeader = forwardRef<HTMLTableSectionElement, HTMLAttributes<HT
     return (
       <thead
         ref={ref}
-        className={clsx('border-b border-gray-200 dark:border-gray-800', className)}
+        className={clsx('border-b border-border', className)}
         {...props}
       />
     );
@@ -45,8 +45,8 @@ export const TableRow = forwardRef<HTMLTableRowElement, HTMLAttributes<HTMLTable
       <tr
         ref={ref}
         className={clsx(
-          'border-b border-gray-100 dark:border-gray-800 transition-colors',
-          'hover:bg-gray-50 dark:hover:bg-gray-800/50',
+          'border-b border-border transition-colors',
+          'hover:bg-secondary',
           className
         )}
         {...props}
@@ -63,7 +63,7 @@ export const TableHead = forwardRef<HTMLTableCellElement, ThHTMLAttributes<HTMLT
       <th
         ref={ref}
         className={clsx(
-          'px-4 py-3 text-left text-sm text-gray-700 dark:text-gray-300',
+          'px-4 py-3 text-left text-sm text-muted-foreground',
           className
         )}
         {...props}
@@ -80,7 +80,7 @@ export const TableCell = forwardRef<HTMLTableCellElement, TdHTMLAttributes<HTMLT
       <td
         ref={ref}
         className={clsx(
-          'px-4 py-3 text-sm text-gray-900 dark:text-gray-100',
+          'px-4 py-3 text-sm text-foreground',
           className
         )}
         {...props}

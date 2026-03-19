@@ -36,7 +36,7 @@ export default function ProductsPage() {
   }, [products, searchQuery, isPresalesView]);
 
   const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this product?')) {
+    if (confirm('¿Estás seguro de que quieres eliminar este producto?')) {
       await deleteProduct.mutateAsync(id);
       refetch();
     }
@@ -122,7 +122,7 @@ export default function ProductsPage() {
     return (
       <AdminLayout>
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
       </AdminLayout>
     );
@@ -133,9 +133,9 @@ export default function ProductsPage() {
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-3xl text-gray-900 dark:text-gray-100 mb-2">{isPresalesView ? 'Presales' : 'Products'}</h1>
-            <p className="text-gray-500 dark:text-gray-400">
-              {isPresalesView ? 'Manage presale products' : 'Manage your product catalog'}
+            <h1 className="text-3xl text-foreground mb-2">{isPresalesView ? 'Preventas' : 'Productos'}</h1>
+            <p className="text-muted-foreground">
+              {isPresalesView ? 'Gestiona productos en preventa' : 'Gestiona tu catálogo de productos'}
             </p>
           </div>
           <div className="flex gap-3">
@@ -156,7 +156,7 @@ export default function ProductsPage() {
             </Button>
             <Button onClick={() => { setEditingProduct(null); setIsEditorOpen(true); }}>
               <Plus className="w-4 h-4" />
-              Add Product
+              Agregar Producto
             </Button>
           </div>
         </div>
@@ -165,24 +165,24 @@ export default function ProductsPage() {
         {importResult && (
           <div className={`mb-4 p-4 rounded-lg border ${
             importResult.errors.length > 0 && importResult.created === 0
-              ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+              ? 'bg-destructive/10 border-destructive/20'
               : importResult.errors.length > 0
-              ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
-              : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+              ? 'bg-[#ffab00]/10 border-[#ffab00]/20'
+              : 'bg-[#00e676]/10 border-[#00e676]/20'
           }`}>
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-3">
                 {importResult.created > 0 ? (
-                  <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
+                  <CheckCircle className="w-5 h-5 text-[#00e676] mt-0.5" />
                 ) : (
-                  <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+                  <AlertCircle className="w-5 h-5 text-destructive mt-0.5" />
                 )}
                 <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  <p className="text-sm font-medium text-foreground">
                     {importResult.created} producto(s) importado(s){importResult.skipped > 0 ? `, ${importResult.skipped} omitido(s)` : ''}
                   </p>
                   {importResult.errors.length > 0 && (
-                    <ul className="mt-1 text-sm text-gray-600 dark:text-gray-400 list-disc list-inside">
+                    <ul className="mt-1 text-sm text-muted-foreground list-disc list-inside">
                       {importResult.errors.slice(0, 5).map((err, i) => <li key={i}>{err}</li>)}
                       {importResult.errors.length > 5 && (
                         <li>...y {importResult.errors.length - 5} error(es) más</li>
@@ -191,7 +191,7 @@ export default function ProductsPage() {
                   )}
                 </div>
               </div>
-              <button onClick={() => setImportResult(null)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">&times;</button>
+              <button onClick={() => setImportResult(null)} className="text-muted-foreground hover:text-foreground text-lg leading-none">&times;</button>
             </div>
           </div>
         )}
@@ -199,18 +199,18 @@ export default function ProductsPage() {
         {/* Filters */}
         <div className="flex gap-4">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Search products..."
+              placeholder="Buscar productos..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              className="w-full pl-10 pr-4 py-2 rounded-lg border border-border bg-input-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
           <Button variant="outline">
             <Filter className="w-4 h-4" />
-            Filters
+            Filtros
           </Button>
         </div>
       </div>
@@ -219,13 +219,13 @@ export default function ProductsPage() {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Product</TableHead>
+            <TableHead>Producto</TableHead>
             <TableHead>SKU</TableHead>
-            <TableHead>Category</TableHead>
-            <TableHead>Price</TableHead>
+            <TableHead>Categoría</TableHead>
+            <TableHead>Precio</TableHead>
             <TableHead>Stock</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Actions</TableHead>
+            <TableHead>Estado</TableHead>
+            <TableHead>Acciones</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -239,9 +239,9 @@ export default function ProductsPage() {
                     className="w-10 h-10 rounded object-cover"
                   />
                   <div>
-                    <p className="text-sm text-gray-900 dark:text-gray-100">{product.name}</p>
+                    <p className="text-sm text-foreground">{product.name}</p>
                     {product.isPresale && (
-                      <Badge variant="purple" size="sm">Presale</Badge>
+                      <Badge variant="purple" size="sm">Preventa</Badge>
                     )}
                   </div>
                 </div>
@@ -253,7 +253,7 @@ export default function ProductsPage() {
                 <div className="flex items-center gap-2">
                   <span>{product.stock}</span>
                   {product.stock < 10 && (
-                    <Badge variant="warning" size="sm">Low</Badge>
+                    <Badge variant="warning" size="sm">Bajo</Badge>
                   )}
                 </div>
               </TableCell>
@@ -273,7 +273,7 @@ export default function ProductsPage() {
               <TableCell>
                 <Dropdown
                   trigger={
-                    <button className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors">
+                    <button className="p-2 hover:bg-secondary rounded-lg transition-colors">
                       <MoreVertical className="w-4 h-4" />
                     </button>
                   }
@@ -281,15 +281,15 @@ export default function ProductsPage() {
                 >
                   <DropdownItem onClick={() => console.log('View', product.id)}>
                     <Eye className="w-4 h-4 inline mr-2" />
-                    View
+                    Ver
                   </DropdownItem>
                   <DropdownItem onClick={() => { setEditingProduct(product as any); setIsEditorOpen(true); }}>
                     <Edit className="w-4 h-4 inline mr-2" />
-                    Edit
+                    Editar
                   </DropdownItem>
                   <DropdownItem danger onClick={() => handleDelete(product.id)}>
                     <Trash2 className="w-4 h-4 inline mr-2" />
-                    Delete
+                    Eliminar
                   </DropdownItem>
                 </Dropdown>
               </TableCell>

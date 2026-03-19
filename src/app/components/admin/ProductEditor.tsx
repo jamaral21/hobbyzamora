@@ -39,7 +39,7 @@ export function ProductEditor({ product, onSave, onCancel }: ProductEditorProps)
         <div className="lg:col-span-2 space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Product Details</CardTitle>
+              <CardTitle>Detalles del Producto</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -50,32 +50,32 @@ export function ProductEditor({ product, onSave, onCancel }: ProductEditorProps)
                   required
                 />
                 <Select
-                  label="Status"
+                  label="Estado"
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
                 >
-                  <option value="active">Active</option>
-                  <option value="draft">Draft</option>
-                  <option value="archived">Archived</option>
+                  <option value="active">Activo</option>
+                  <option value="draft">Borrador</option>
+                  <option value="archived">Archivado</option>
                 </Select>
               </div>
 
               <Input
-                label="Product Name"
+                label="Nombre del Producto"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
               />
 
               <Input
-                label="Category"
+                label="Categoría"
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                 required
               />
 
               <Textarea
-                label="Description"
+                label="Descripción"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 rows={4}
@@ -85,12 +85,12 @@ export function ProductEditor({ product, onSave, onCancel }: ProductEditorProps)
 
           <Card>
             <CardHeader>
-              <CardTitle>Pricing & Inventory</CardTitle>
+              <CardTitle>Precios e Inventario</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-3 gap-4">
                 <Input
-                  label="Price ($)"
+                  label="Precio ($)"
                   type="number"
                   step="0.01"
                   value={formData.price}
@@ -98,7 +98,7 @@ export function ProductEditor({ product, onSave, onCancel }: ProductEditorProps)
                   required
                 />
                 <Input
-                  label="Cost ($)"
+                  label="Costo ($)"
                   type="number"
                   step="0.01"
                   value={formData.cost}
@@ -115,9 +115,9 @@ export function ProductEditor({ product, onSave, onCancel }: ProductEditorProps)
               </div>
 
               {formData.price && formData.cost && (
-                <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                  <p className="text-sm text-gray-700 dark:text-gray-300">
-                    Profit Margin: ${(formData.price - formData.cost).toFixed(2)} (
+                <div className="p-3 bg-secondary rounded-lg">
+                  <p className="text-sm text-muted-foreground">
+                    Margen de Ganancia: ${(formData.price - formData.cost).toFixed(2)} (
                     {(((formData.price - formData.cost) / formData.price) * 100).toFixed(1)}%)
                   </p>
                 </div>
@@ -130,7 +130,7 @@ export function ProductEditor({ product, onSave, onCancel }: ProductEditorProps)
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Product Images</CardTitle>
+              <CardTitle>Imágenes del Producto</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
@@ -143,7 +143,7 @@ export function ProductEditor({ product, onSave, onCancel }: ProductEditorProps)
                     />
                     <button
                       type="button"
-                      className="absolute top-2 right-2 p-1 bg-red-600 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute top-2 right-2 p-1 bg-destructive text-destructive-foreground rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
                       onClick={() => {
                         const newImages = [...(formData.images || [])];
                         newImages.splice(index, 1);
@@ -157,10 +157,10 @@ export function ProductEditor({ product, onSave, onCancel }: ProductEditorProps)
 
                 <button
                   type="button"
-                  className="w-full h-32 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg flex flex-col items-center justify-center gap-2 hover:border-purple-600 transition-colors"
+                  className="w-full h-32 border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center gap-2 hover:border-primary transition-colors"
                 >
-                  <Upload className="w-6 h-6 text-gray-400" />
-                  <span className="text-sm text-gray-500">Upload Image</span>
+                  <Upload className="w-6 h-6 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Subir Imagen</span>
                 </button>
               </div>
             </CardContent>
@@ -168,12 +168,12 @@ export function ProductEditor({ product, onSave, onCancel }: ProductEditorProps)
 
           <Card>
             <CardHeader>
-              <CardTitle>Variants</CardTitle>
+              <CardTitle>Variantes</CardTitle>
             </CardHeader>
             <CardContent>
               <Button type="button" variant="outline" fullWidth size="sm">
                 <Plus className="w-4 h-4" />
-                Add Variant
+                Agregar Variante
               </Button>
             </CardContent>
           </Card>
@@ -183,9 +183,9 @@ export function ProductEditor({ product, onSave, onCancel }: ProductEditorProps)
       {/* Actions */}
       <div className="flex items-center justify-end gap-3 mt-6">
         <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
+          Cancelar
         </Button>
-        <Button type="submit">Save Product</Button>
+        <Button type="submit">Guardar Producto</Button>
       </div>
     </form>
   );

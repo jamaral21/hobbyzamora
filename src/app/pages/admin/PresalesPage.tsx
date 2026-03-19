@@ -78,8 +78,8 @@ export function PresalesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Presale Products</h2>
-          <p className="text-gray-600">Manage limited edition and presale items</p>
+          <h2 className="text-2xl font-bold">Productos en Preventa</h2>
+          <p className="text-muted-foreground">Gestiona artículos de edición limitada y preventas</p>
         </div>
         <Link to="/admin/products/new">
           <Button>
@@ -91,20 +91,20 @@ export function PresalesPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white border rounded-lg p-6">
-          <p className="text-sm text-gray-600 mb-1">Active Presales</p>
-          <p className="text-2xl font-bold text-purple-600">2</p>
+        <div className="bg-card border border-border rounded-lg p-6">
+          <p className="text-sm text-muted-foreground mb-1">Preventas Activas</p>
+          <p className="text-2xl font-bold text-primary">2</p>
         </div>
-        <div className="bg-white border rounded-lg p-6">
-          <p className="text-sm text-gray-600 mb-1">Total Reserved</p>
+        <div className="bg-card border border-border rounded-lg p-6">
+          <p className="text-sm text-muted-foreground mb-1">Total Reservados</p>
           <p className="text-2xl font-bold">164</p>
         </div>
-        <div className="bg-white border rounded-lg p-6">
-          <p className="text-sm text-gray-600 mb-1">Presale Revenue</p>
+        <div className="bg-card border border-border rounded-lg p-6">
+          <p className="text-sm text-muted-foreground mb-1">Ingresos Preventa</p>
           <p className="text-2xl font-bold">$37,048</p>
         </div>
-        <div className="bg-white border rounded-lg p-6">
-          <p className="text-sm text-gray-600 mb-1">Sold Out</p>
+        <div className="bg-card border border-border rounded-lg p-6">
+          <p className="text-sm text-muted-foreground mb-1">Agotados</p>
           <p className="text-2xl font-bold">1</p>
         </div>
       </div>
@@ -112,7 +112,7 @@ export function PresalesPage() {
       {/* Search */}
       <div className="flex items-center gap-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search presale products..."
             className="pl-9"
@@ -124,7 +124,7 @@ export function PresalesPage() {
       </div>
 
       {/* Presales Table */}
-      <div className="border rounded-lg bg-white">
+      <div className="border border-border rounded-lg bg-card">
         <Table>
           <TableHeader>
             <TableRow>
@@ -146,7 +146,7 @@ export function PresalesPage() {
                 <TableRow key={product.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded overflow-hidden bg-gray-100 flex-shrink-0">
+                      <div className="w-10 h-10 rounded overflow-hidden bg-secondary flex-shrink-0">
                         <ImageWithFallback
                           src={product.image}
                           alt={product.name}
@@ -155,7 +155,7 @@ export function PresalesPage() {
                       </div>
                       <div>
                         <p className="font-medium">{product.name}</p>
-                        <code className="text-xs text-gray-500">{product.sku}</code>
+                        <code className="text-xs text-muted-foreground">{product.sku}</code>
                       </div>
                     </div>
                   </TableCell>
@@ -167,9 +167,9 @@ export function PresalesPage() {
                       <p className="font-medium">
                         {product.reserved} / {product.totalStock}
                       </p>
-                      <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+                      <div className="w-full bg-secondary rounded-full h-1.5 mt-1">
                         <div
-                          className="bg-purple-600 h-1.5 rounded-full"
+                          className="bg-primary h-1.5 rounded-full"
                           style={{ width: `${percentReserved}%` }}
                         />
                       </div>
@@ -191,9 +191,9 @@ export function PresalesPage() {
                           Ends in {daysUntilEnd} days
                         </p>
                       ) : (
-                        <p className="text-gray-500">Ended</p>
+                        <p className="text-muted-foreground">Ended</p>
                       )}
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-muted-foreground mt-1">
                         {new Date(product.availableFrom).toLocaleDateString()} - {new Date(product.endsOn).toLocaleDateString()}
                       </p>
                     </div>
