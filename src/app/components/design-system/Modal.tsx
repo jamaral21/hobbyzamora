@@ -57,8 +57,8 @@ export function Modal({
       <div
         ref={modalRef}
         className={clsx(
-          'bg-white dark:bg-gray-900 rounded-xl shadow-xl',
-          'border border-gray-200 dark:border-gray-800',
+          'bg-card rounded-xl shadow-xl',
+          'border border-border',
           'w-full max-h-[90vh] overflow-auto',
           {
             'max-w-sm': size === 'sm',
@@ -69,14 +69,14 @@ export function Modal({
         )}
       >
         {(title || showCloseButton) && (
-          <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800">
-            {title && <h2 className="text-gray-900 dark:text-gray-100">{title}</h2>}
+          <div className="flex items-center justify-between p-6 border-b border-border">
+            {title && <h2 className="text-foreground">{title}</h2>}
             {showCloseButton && (
               <button
                 onClick={onClose}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                className="p-2 rounded-lg hover:bg-secondary transition-colors"
               >
-                <X className="w-5 h-5 text-gray-500" />
+                <X className="w-5 h-5 text-muted-foreground" />
               </button>
             )}
           </div>
@@ -89,7 +89,7 @@ export function Modal({
 
 export function ModalFooter({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={clsx('flex items-center justify-end gap-3 mt-6 pt-6 border-t border-gray-200 dark:border-gray-800', className)}>
+    <div className={clsx('flex items-center justify-end gap-3 mt-6 pt-6 border-t border-border', className)}>
       {children}
     </div>
   );

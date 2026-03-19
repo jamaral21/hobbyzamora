@@ -1,7 +1,6 @@
 import { CreditCard, Banknote, Smartphone } from 'lucide-react';
 import { Card } from '../design-system/Card';
 import { Button } from '../design-system/Button';
-import { clsx } from 'clsx';
 
 export type PaymentMethod = 'card' | 'cash' | 'digital';
 
@@ -13,20 +12,20 @@ export interface PaymentSelectorProps {
 
 export function PaymentSelector({ total, onSelectPayment, onCancel }: PaymentSelectorProps) {
   const paymentMethods = [
-    { id: 'card' as PaymentMethod, label: 'Card', icon: CreditCard },
-    { id: 'cash' as PaymentMethod, label: 'Cash', icon: Banknote },
-    { id: 'digital' as PaymentMethod, label: 'Digital Wallet', icon: Smartphone },
+    { id: 'card' as PaymentMethod, label: 'Tarjeta', icon: CreditCard },
+    { id: 'cash' as PaymentMethod, label: 'Efectivo', icon: Banknote },
+    { id: 'digital' as PaymentMethod, label: 'Billetera Digital', icon: Smartphone },
   ];
 
   return (
     <Card>
       <div className="text-center mb-6">
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">Total Amount</p>
-        <p className="text-4xl text-gray-900 dark:text-gray-100">${total.toFixed(2)}</p>
+        <p className="text-sm text-muted-foreground mb-2">Monto Total</p>
+        <p className="text-4xl text-foreground">${total.toLocaleString('es-CL', { minimumFractionDigits: 2 })}</p>
       </div>
 
       <div className="space-y-3 mb-6">
-        <p className="text-sm text-gray-700 dark:text-gray-300">Select Payment Method</p>
+        <p className="text-sm text-muted-foreground">Selecciona método de pago</p>
         <div className="grid grid-cols-1 gap-3">
           {paymentMethods.map((method) => {
             const Icon = method.icon;
@@ -34,12 +33,12 @@ export function PaymentSelector({ total, onSelectPayment, onCancel }: PaymentSel
               <button
                 key={method.id}
                 onClick={() => onSelectPayment(method.id)}
-                className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:border-purple-600 border border-transparent transition-all"
+                className="flex items-center gap-4 p-4 bg-secondary rounded-lg hover:bg-primary/10 hover:border-primary border border-transparent transition-all"
               >
-                <div className="w-12 h-12 bg-white dark:bg-gray-900 rounded-lg flex items-center justify-center">
-                  <Icon className="w-6 h-6 text-purple-600" />
+                <div className="w-12 h-12 bg-card rounded-lg flex items-center justify-center">
+                  <Icon className="w-6 h-6 text-primary" />
                 </div>
-                <span className="text-gray-900 dark:text-gray-100">{method.label}</span>
+                <span className="text-foreground">{method.label}</span>
               </button>
             );
           })}
@@ -47,7 +46,7 @@ export function PaymentSelector({ total, onSelectPayment, onCancel }: PaymentSel
       </div>
 
       <Button variant="outline" fullWidth onClick={onCancel}>
-        Cancel
+        Cancelar
       </Button>
     </Card>
   );

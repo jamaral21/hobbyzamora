@@ -99,10 +99,10 @@ export const mockProducts: Product[] = [
     cost: 90.00,
     stock: 45,
     images: ['https://images.unsplash.com/photo-1513364776144-60967b0f800f?w=800'],
-    description: 'Caja sellada de 36 sobres de la expansi\u00f3n Scarlet & Violet 151',
+    description: 'Caja sellada de 36 sobres de la expansión Scarlet & Violet 151',
     status: 'active',
     variants: [
-      { id: 'v1', name: 'Idioma', options: ['Espa\u00f1ol', 'Ingl\u00e9s', 'Japon\u00e9s'], stock: 45 }
+      { id: 'v1', name: 'Idioma', options: ['Español', 'Inglés', 'Japonés'], stock: 45 }
     ]
   },
   {
@@ -112,9 +112,9 @@ export const mockProducts: Product[] = [
     category: 'Elite Trainer Boxes',
     price: 54.99,
     cost: 32.00,
-    stock: 8,
+    stock: 3,
     images: ['https://images.unsplash.com/photo-1455390582262-044cdead277a?w=800'],
-    description: 'ETB con 9 sobres, protectores, energ\u00edas, dados y marcadores',
+    description: 'ETB con 9 sobres, protectores, energías, dados y marcadores',
     status: 'active'
   },
   {
@@ -124,9 +124,9 @@ export const mockProducts: Product[] = [
     category: 'Colecciones Premium',
     price: 149.99,
     cost: 85.00,
-    stock: 12,
+    stock: 0,
     images: ['https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?w=800'],
-    description: 'Colecci\u00f3n ultra premium con Charizard en metal y 16 sobres',
+    description: 'Colección ultra premium con Charizard en metal y 16 sobres',
     status: 'active'
   },
   {
@@ -136,7 +136,7 @@ export const mockProducts: Product[] = [
     category: 'Booster Boxes',
     price: 179.99,
     cost: 110.00,
-    stock: 3,
+    stock: 15,
     images: ['https://images.unsplash.com/photo-1452509133926-2b180c6d6245?w=800'],
     description: 'Caja sellada de 36 sobres de Prismatic Evolutions con Eeveeluciones',
     status: 'active',
@@ -162,13 +162,43 @@ export const mockProducts: Product[] = [
   {
     id: '6',
     sku: 'HBZ-006',
-    name: 'Tin Met\u00e1lica Pikachu ex',
+    name: 'Tin Metálica Pikachu ex',
     category: 'Tins y Latas',
     price: 29.99,
     cost: 16.00,
-    stock: 28,
+    stock: 1,
     images: ['https://images.unsplash.com/photo-1460661419201-fd4cecdf8a8b?w=800'],
     description: 'Lata coleccionable con Pikachu ex promo y 4 sobres',
+    status: 'active'
+  },
+  {
+    id: '7',
+    sku: 'HBZ-007',
+    name: 'ETB Surging Sparks',
+    category: 'Elite Trainer Boxes',
+    price: 64.99,
+    cost: 38.00,
+    stock: 20,
+    images: ['https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=800'],
+    description: 'Elite Trainer Box de Surging Sparks con 9 sobres y accesorios',
+    status: 'active',
+    isPresale: true,
+    presaleData: {
+      maxQuantity: 3,
+      availableQuantity: 20,
+      endDate: '2026-05-01T00:00:00Z'
+    }
+  },
+  {
+    id: '8',
+    sku: 'HBZ-008',
+    name: 'Blister Pack Temporal Forces',
+    category: 'Blisters',
+    price: 7.99,
+    cost: 4.50,
+    stock: 0,
+    images: ['https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800'],
+    description: 'Blister de 3 sobres de Temporal Forces con carta promo',
     status: 'active'
   }
 ];
