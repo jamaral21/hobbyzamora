@@ -12,14 +12,14 @@ export function ProductQuickInsert({ products, onInsert }: ProductQuickInsertPro
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Quick Insert Products</CardTitle>
+        <CardTitle>Insertar Producto</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="space-y-2 max-h-[400px] overflow-y-auto">
           {products.slice(0, 8).map((product) => (
             <div
               key={product.id}
-              className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg"
+              className="flex items-center gap-3 p-3 bg-secondary rounded-lg"
             >
               <img
                 src={product.images[0]}
@@ -27,10 +27,10 @@ export function ProductQuickInsert({ products, onInsert }: ProductQuickInsertPro
                 className="w-12 h-12 rounded object-cover"
               />
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-gray-900 dark:text-gray-100 truncate">
+                <p className="text-sm text-foreground truncate">
                   {product.name}
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+                <p className="text-xs text-muted-foreground">
                   ${product.price.toFixed(2)}
                 </p>
               </div>

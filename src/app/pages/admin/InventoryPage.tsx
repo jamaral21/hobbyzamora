@@ -24,7 +24,7 @@ export default function InventoryPage() {
     return (
       <AdminLayout>
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
       </AdminLayout>
     );
@@ -147,9 +147,9 @@ export default function InventoryPage() {
       <div className="mb-8">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-3xl text-gray-900 dark:text-gray-100 mb-2">Inventory</h1>
-            <p className="text-gray-500 dark:text-gray-400">
-              Track and manage your stock levels
+            <h1 className="text-3xl text-foreground mb-2">Inventario</h1>
+            <p className="text-muted-foreground">
+              Rastrea y gestiona tus niveles de stock
             </p>
           </div>
           <div className="flex gap-3">
@@ -164,11 +164,11 @@ export default function InventoryPage() {
             </Button>
             <Button variant="outline" onClick={handleExport}>
               <Download className="w-4 h-4" />
-              Export
+              Exportar
             </Button>
             <Button onClick={() => setIsAddBatchOpen(true)}>
               <Plus className="w-4 h-4" />
-              Add Batch
+              Agregar Lote
             </Button>
           </div>
         </div>
@@ -177,31 +177,31 @@ export default function InventoryPage() {
         {importResult && (
           <div className={`mb-4 p-4 rounded-lg border ${
             importResult.errors.length > 0 && importResult.created === 0
-              ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+              ? 'bg-destructive/10 border-destructive/20'
               : importResult.errors.length > 0
-              ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
-              : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+              ? 'bg-[#ffab00]/10 border-[#ffab00]/20'
+              : 'bg-[#00e676]/10 border-[#00e676]/20'
           }`}>
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-3">
                 {importResult.created > 0 ? (
-                  <CheckCircle className="w-5 h-5 text-green-600 mt-0.5" />
+                  <CheckCircle className="w-5 h-5 text-[#00e676] mt-0.5" />
                 ) : (
-                  <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
+                  <AlertCircle className="w-5 h-5 text-destructive mt-0.5" />
                 )}
                 <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                    {importResult.created} batch(es) importado(s){importResult.skipped > 0 ? `, ${importResult.skipped} omitido(s)` : ''}
+                  <p className="text-sm font-medium text-foreground">
+                    {importResult.created} lote(s) importado(s){importResult.skipped > 0 ? `, ${importResult.skipped} omitido(s)` : ''}
                   </p>
                   {importResult.errors.length > 0 && (
-                    <ul className="mt-1 text-sm text-gray-600 dark:text-gray-400 list-disc list-inside">
+                    <ul className="mt-1 text-sm text-muted-foreground list-disc list-inside">
                       {importResult.errors.slice(0, 5).map((err, i) => <li key={i}>{err}</li>)}
                       {importResult.errors.length > 5 && <li>...y {importResult.errors.length - 5} error(es) más</li>}
                     </ul>
                   )}
                 </div>
               </div>
-              <button onClick={() => setImportResult(null)} className="text-gray-400 hover:text-gray-600 text-lg leading-none">&times;</button>
+              <button onClick={() => setImportResult(null)} className="text-muted-foreground hover:text-foreground text-lg leading-none">&times;</button>
             </div>
           </div>
         )}
@@ -210,8 +210,8 @@ export default function InventoryPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <Card>
             <CardContent>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Inventory Value</p>
-              <p className="text-2xl text-gray-900 dark:text-gray-100">
+              <p className="text-sm text-muted-foreground mb-1">Valor Total del Inventario</p>
+              <p className="text-2xl text-foreground">
                 ${(summary.totalValue || stats?.inventoryValue || 0).toFixed(2)}
               </p>
             </CardContent>
@@ -219,8 +219,8 @@ export default function InventoryPage() {
 
           <Card>
             <CardContent>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Total Items</p>
-              <p className="text-2xl text-gray-900 dark:text-gray-100">
+              <p className="text-sm text-muted-foreground mb-1">Total de Artículos</p>
+              <p className="text-2xl text-foreground">
                 {totalItems}
               </p>
             </CardContent>
@@ -230,8 +230,8 @@ export default function InventoryPage() {
             <CardContent className="flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-orange-500 mt-1" />
               <div>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Low Stock Alerts</p>
-                <p className="text-2xl text-gray-900 dark:text-gray-100">
+                <p className="text-sm text-muted-foreground mb-1">Alertas de Stock Bajo</p>
+                <p className="text-2xl text-foreground">
                   {summary.lowStockCount || stats?.lowStockItems || 0}
                 </p>
               </div>
@@ -247,25 +247,25 @@ export default function InventoryPage() {
       <Modal isOpen={isAddBatchOpen} onClose={() => setIsAddBatchOpen(false)} size="md">
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl text-gray-900 dark:text-gray-100">Add Inventory Batch</h2>
-            <button onClick={() => setIsAddBatchOpen(false)} className="text-gray-400 hover:text-gray-600">
+            <h2 className="text-xl text-foreground">Agregar Lote de Inventario</h2>
+            <button onClick={() => setIsAddBatchOpen(false)} className="text-muted-foreground hover:text-foreground">
               <X className="w-5 h-5" />
             </button>
           </div>
           <div className="space-y-4">
             <Select
-              label="Product"
+              label="Producto"
               value={batchForm.productId}
               onChange={(e) => setBatchForm({ ...batchForm, productId: e.target.value })}
               required
             >
-              <option value="">Select a product...</option>
+              <option value="">Selecciona un producto...</option>
               {(products || []).map((p: any) => (
                 <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
               ))}
             </Select>
             <Input
-              label="Quantity"
+              label="Cantidad"
               type="number"
               min="1"
               value={batchForm.quantity}
@@ -273,7 +273,7 @@ export default function InventoryPage() {
               required
             />
             <Input
-              label="Unit Cost ($)"
+              label="Costo Unitario ($)"
               type="number"
               step="0.01"
               min="0"
@@ -283,13 +283,13 @@ export default function InventoryPage() {
             />
             <div className="flex gap-3 pt-2">
               <Button variant="outline" onClick={() => setIsAddBatchOpen(false)} fullWidth>
-                Cancel
+                Cancelar
               </Button>
               <Button onClick={handleAddBatch} fullWidth disabled={receiveBatch.isLoading}>
                 {receiveBatch.isLoading ? (
-                  <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Adding...</>
+                  <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Agregando...</>
                 ) : (
-                  'Add Batch'
+                  'Agregar Lote'
                 )}
               </Button>
             </div>

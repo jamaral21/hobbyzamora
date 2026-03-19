@@ -26,19 +26,19 @@ function AdminLogin() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-      <div className="w-full max-w-sm p-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg">
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="w-full max-w-sm p-8 bg-card rounded-xl shadow-lg border border-border">
         <div className="text-center mb-6">
-          <div className="w-12 h-12 bg-gradient-to-br from-purple-600 to-blue-600 rounded-xl mx-auto mb-3" />
-          <h1 className="text-xl text-gray-900 dark:text-gray-100">HobbyZamora Admin</h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Sign in to continue</p>
+          <img src="/logo.png" alt="HobbyZamora" className="w-12 h-12 rounded-xl mx-auto mb-3 object-contain" />
+          <h1 className="text-xl text-foreground font-body">HobbyZamora Admin</h1>
+          <p className="text-sm text-muted-foreground mt-1">Inicia sesión para continuar</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="admin@hobbyzamora.com" />
-          <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" />
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          <Input label="Contraseña" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" />
+          {error && <p className="text-sm text-destructive">{error}</p>}
           <Button type="submit" fullWidth disabled={isLoading}>
-            {isLoading ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Signing in...</> : 'Sign In'}
+            {isLoading ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Iniciando sesión...</> : 'Iniciar Sesión'}
           </Button>
         </form>
       </div>
@@ -51,8 +51,8 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <Loader2 className="w-8 h-8 animate-spin text-purple-600" />
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -62,7 +62,7 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900 overflow-hidden">
+    <div className="flex h-screen bg-background overflow-hidden">
       <AdminSidebar />
       <main className="flex-1 overflow-y-auto">
         <div className="max-w-7xl mx-auto p-6">
