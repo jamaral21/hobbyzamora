@@ -14,8 +14,8 @@ export interface CheckoutSummaryProps {
 
 export function CheckoutSummary({ items }: CheckoutSummaryProps) {
   const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const shipping = 9.99;
-  const tax = subtotal * 0.08;
+  const shipping = 0;
+  const tax = subtotal * 0.16; // 16% IVA
   const total = subtotal + shipping + tax;
 
   return (
@@ -34,7 +34,7 @@ export function CheckoutSummary({ items }: CheckoutSummaryProps) {
               )}
             </div>
             <span className="text-foreground font-[family-name:var(--font-mono)]">
-              ${(item.price * item.quantity).toLocaleString('es-CL', { minimumFractionDigits: 2 })}
+              ${(item.price * item.quantity).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
             </span>
           </div>
         ))}
@@ -42,19 +42,19 @@ export function CheckoutSummary({ items }: CheckoutSummaryProps) {
         <div className="pt-3 border-t border-border space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Subtotal</span>
-            <span className="text-foreground font-[family-name:var(--font-mono)]">${subtotal.toLocaleString('es-CL', { minimumFractionDigits: 2 })}</span>
+            <span className="text-foreground font-[family-name:var(--font-mono)]">${subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Envío</span>
-            <span className="text-foreground font-[family-name:var(--font-mono)]">${shipping.toLocaleString('es-CL', { minimumFractionDigits: 2 })}</span>
+            <span className="text-foreground font-[family-name:var(--font-mono)]">{shipping === 0 ? 'Gratis' : `$${shipping.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`}</span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Impuesto</span>
-            <span className="text-foreground font-[family-name:var(--font-mono)]">${tax.toLocaleString('es-CL', { minimumFractionDigits: 2 })}</span>
+            <span className="text-muted-foreground">IVA (16%)</span>
+            <span className="text-foreground font-[family-name:var(--font-mono)]">${tax.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
           </div>
           <div className="flex justify-between pt-2 border-t border-border">
             <span className="text-foreground font-semibold">Total</span>
-            <span className="text-xl text-primary font-bold font-[family-name:var(--font-mono)]">${total.toLocaleString('es-CL', { minimumFractionDigits: 2 })}</span>
+            <span className="text-xl text-primary font-bold font-[family-name:var(--font-mono)]">${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
           </div>
         </div>
       </CardContent>
