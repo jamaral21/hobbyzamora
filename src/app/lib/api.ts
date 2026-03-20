@@ -319,6 +319,7 @@ export const ordersAPI = {
       zipCode: string;
       country: string;
     };
+    paymentMethod?: 'credit' | 'debit';
   }) =>
     fetchAPI<Order>('/orders', {
       method: 'POST',
@@ -547,10 +548,10 @@ export const instagramAPI = {
 
 // Payments API
 export const paymentsAPI = {
-  checkout: (orderId: string) =>
+  checkout: (orderId: string, paymentMethod?: 'credit' | 'debit') =>
     fetchAPI<{ paymentId: string; checkoutUrl?: string; requestId?: number; status: string; mode: string }>('/payments/checkout', {
       method: 'POST',
-      body: JSON.stringify({ orderId }),
+      body: JSON.stringify({ orderId, paymentMethod }),
     }),
 
   querySession: (params: { requestId?: number; paymentId?: string }) =>

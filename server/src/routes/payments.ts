@@ -30,7 +30,7 @@ function generatePlacetoPayAuth() {
 // Unified checkout endpoint - routes to dev auto-approve or Getnet Chile
 router.post('/checkout', optionalAuth, async (req: AuthRequest, res) => {
   try {
-    const { orderId } = req.body;
+    const { orderId, paymentMethod } = req.body;
 
     const order = await prisma.order.findUnique({
       where: { id: orderId },
@@ -41,8 +41,11 @@ router.post('/checkout', optionalAuth, async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    // Development mode without Getnet credentials: auto-approve payment
-    if (process.env.NODE_ENV !== 'production' && !GETNET_LOGIN) {
+    // Determine card method label for Getnet
+    const cardMethodLabel = paymentMethod === 'debit' ? 'DEBIT' : 'CREDIT';
+
+    // Auto-approve only when NO Getnet credentials are configured
+    if (!GETNET_LOGIN) {
       const payment = await prisma.payment.create({
         data: {
           orderId: order.id,
@@ -50,7 +53,7 @@ router.post('/checkout', optionalAuth, async (req: AuthRequest, res) => {
           status: 'APPROVED',
           amount: parseFloat(order.total.toString()),
           cardLast4: '0000',
-          cardBrand: 'DEV',
+          cardBrand: cardMethodLabel === 'DEBIT' ? 'VISA_DEBIT' : 'VISA',
           paidAt: new Date(),
         },
       });
@@ -82,6 +85,7 @@ router.post('/checkout', optionalAuth, async (req: AuthRequest, res) => {
           currency: 'MXN',
           total,
         },
+        allowPartial: false,
       },
       expiration,
       returnUrl: `${frontendUrl}/store/order-confirmation?orderId=${order.id}`,
@@ -92,6 +96,13 @@ router.post('/checkout', optionalAuth, async (req: AuthRequest, res) => {
         surname: order.customerName.split(' ').slice(1).join(' ') || 'N/A',
         email: order.customerEmail,
         mobile: order.customerPhone || undefined,
+        address: order.shippingStreet ? {
+          street: order.shippingStreet,
+          city: order.shippingCity || '',
+          state: order.shippingState || '',
+          postalCode: order.shippingZip || '',
+          country: order.shippingCountry || 'MX',
+        } : undefined,
       },
     };
 
