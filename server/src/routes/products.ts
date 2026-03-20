@@ -1,8 +1,31 @@
 import { Router } from 'express';
+import path from 'path';
+import fs from 'fs';
+import os from 'os';
+import multer from 'multer';
+import AdmZip from 'adm-zip';
 import { prisma } from '../index.js';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
+
+// Configure multer for ZIP uploads — disk storage, no size limit
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: os.tmpdir(),
+    filename: (_req, file, cb) => {
+      cb(null, `hz-upload-${Date.now()}-${file.originalname}`);
+    },
+  }),
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === 'application/zip' || file.mimetype === 'application/x-zip-compressed' ||
+        file.originalname.endsWith('.zip')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Solo se permiten archivos .zip'));
+    }
+  },
+});
 
 // Helper to parse JSON fields stored as strings (for SQLite compatibility)
 const parseImages = (images: string): string[] => {
@@ -293,8 +316,9 @@ router.post('/import', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
       return res.status(400).json({ error: 'Maximum 500 products per import' });
     }
 
-    const results: { created: number; skipped: number; errors: string[] } = {
+    const results: { created: number; updated: number; skipped: number; errors: string[] } = {
       created: 0,
+      updated: 0,
       skipped: 0,
       errors: [],
     };
@@ -312,7 +336,7 @@ router.post('/import', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
 
       const price = parseFloat(row.price);
       const cost = parseFloat(row.cost);
-      const initialStock = parseInt(row.stock) || 0;
+      const stock = parseInt(row.stock) || 0;
 
       if (isNaN(price) || isNaN(cost) || price < 0 || cost < 0) {
         results.errors.push(`Línea ${lineNum} (${row.sku}): precio o costo inválido`);
@@ -320,32 +344,33 @@ router.post('/import', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
         continue;
       }
 
-      // Check SKU uniqueness
-      const existing = await prisma.product.findUnique({ where: { sku: row.sku } });
-      if (existing) {
-        results.errors.push(`Línea ${lineNum}: SKU "${row.sku}" ya existe`);
-        results.skipped++;
-        continue;
-      }
+      const productData = {
+        name: row.name,
+        description: row.description || null,
+        category: row.category,
+        price,
+        cost,
+        stock,
+        images: JSON.stringify(row.images ? row.images.split('|').map((s: string) => s.trim()) : []),
+        status: (row.status || 'ACTIVE').toUpperCase(),
+      };
 
       try {
-        const product = await prisma.product.create({
-          data: {
-            sku: row.sku,
-            name: row.name,
-            description: row.description || null,
-            category: row.category,
-            price,
-            cost,
-            stock: initialStock,
-            images: JSON.stringify(row.images ? row.images.split('|').map((s: string) => s.trim()) : []),
-            status: (row.status || 'ACTIVE').toUpperCase(),
-          },
-        });
-
-        results.created++;
+        const existing = await prisma.product.findUnique({ where: { sku: row.sku } });
+        if (existing) {
+          await prisma.product.update({
+            where: { sku: row.sku },
+            data: productData,
+          });
+          results.updated++;
+        } else {
+          await prisma.product.create({
+            data: { sku: row.sku, ...productData },
+          });
+          results.created++;
+        }
       } catch (err) {
-        results.errors.push(`Línea ${lineNum} (${row.sku}): error al crear producto`);
+        results.errors.push(`Línea ${lineNum} (${row.sku}): error al procesar producto`);
         results.skipped++;
       }
     }
@@ -369,6 +394,245 @@ router.get('/meta/categories', async (req, res) => {
   } catch (error) {
     console.error('Get categories error:', error);
     res.status(500).json({ error: 'Failed to get categories' });
+  }
+});
+
+// Upload ZIP with product images — chunked upload support
+// 1. POST /upload-images/init   → start session
+// 2. POST /upload-images/chunk  → send each 20MB chunk
+// 3. POST /upload-images/complete → process assembled ZIP
+const ALLOWED_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
+const activeUploads = new Map<string, { filePath: string; totalChunks: number; received: Set<number> }>();
+
+// Small multer for chunks (10MB max per chunk)
+const chunkUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
+
+router.post('/upload-images/init', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
+  try {
+    const { totalChunks, filename } = req.body;
+    if (!totalChunks || totalChunks < 1) {
+      return res.status(400).json({ error: 'totalChunks requerido' });
+    }
+    const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const filePath = path.join(os.tmpdir(), `hz-upload-${uploadId}.zip`);
+    // Create empty file
+    fs.writeFileSync(filePath, Buffer.alloc(0));
+    activeUploads.set(uploadId, { filePath, totalChunks, received: new Set() });
+    // Auto-cleanup after 30 minutes
+    setTimeout(() => {
+      const session = activeUploads.get(uploadId);
+      if (session) {
+        fs.unlink(session.filePath, () => {});
+        activeUploads.delete(uploadId);
+      }
+    }, 30 * 60 * 1000);
+    res.json({ uploadId });
+  } catch (error) {
+    console.error('Upload init error:', error);
+    res.status(500).json({ error: 'Error al iniciar upload' });
+  }
+});
+
+router.post('/upload-images/chunk', authenticate, requireRole('ADMIN', 'STAFF'), chunkUpload.single('chunk'), async (req: AuthRequest, res) => {
+  try {
+    const uploadId = req.headers['x-upload-id'] as string;
+    const chunkIndex = parseInt(req.headers['x-chunk-index'] as string);
+    const session = activeUploads.get(uploadId);
+    if (!session) {
+      return res.status(404).json({ error: 'Sesión de upload no encontrada' });
+    }
+    if (isNaN(chunkIndex) || chunkIndex < 0 || chunkIndex >= session.totalChunks) {
+      return res.status(400).json({ error: 'Índice de chunk inválido' });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: 'No se recibió chunk' });
+    }
+    // Append chunk at correct position — for simplicity, write sequentially
+    const fd = fs.openSync(session.filePath, 'a');
+    fs.writeSync(fd, req.file.buffer);
+    fs.closeSync(fd);
+    session.received.add(chunkIndex);
+    res.json({ received: session.received.size, total: session.totalChunks });
+  } catch (error) {
+    console.error('Upload chunk error:', error);
+    res.status(500).json({ error: 'Error al recibir chunk' });
+  }
+});
+
+router.post('/upload-images/complete', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
+  const { uploadId } = req.body;
+  const session = activeUploads.get(uploadId);
+  if (!session) {
+    return res.status(404).json({ error: 'Sesión de upload no encontrada' });
+  }
+  if (session.received.size !== session.totalChunks) {
+    return res.status(400).json({ error: `Faltan chunks: ${session.received.size}/${session.totalChunks}` });
+  }
+  try {
+    const uploadsDir = path.resolve(process.cwd(), 'uploads', 'products');
+    fs.mkdirSync(uploadsDir, { recursive: true });
+
+    const zip = new AdmZip(session.filePath);
+    const entries = zip.getEntries();
+
+    const extracted: string[] = [];
+    const skipped: string[] = [];
+
+    for (const entry of entries) {
+      if (entry.isDirectory) continue;
+      const filename = path.basename(entry.entryName);
+      if (filename.startsWith('.') || entry.entryName.includes('__MACOSX/')) continue;
+
+      const ext = path.extname(filename).toLowerCase();
+      if (!ALLOWED_IMAGE_EXTENSIONS.has(ext)) {
+        skipped.push(filename);
+        continue;
+      }
+
+      const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+      fs.writeFileSync(path.join(uploadsDir, safeName), entry.getData());
+      extracted.push(safeName);
+    }
+
+    // Update products
+    let updated = 0;
+    if (extracted.length > 0) {
+      const allProducts = await prisma.product.findMany({ select: { id: true, images: true } });
+      for (const product of allProducts) {
+        let images: string[];
+        try { images = JSON.parse(product.images); } catch { images = product.images ? [product.images] : []; }
+
+        let changed = false;
+        const updatedImages = images.map((img: string) => {
+          const basename = img.split('/').pop() || img;
+          const safeBasename = basename.replace(/[^a-zA-Z0-9._-]/g, '_');
+          if (extracted.includes(safeBasename) && !img.startsWith('/uploads/')) {
+            changed = true;
+            return `/uploads/products/${safeBasename}`;
+          }
+          return img;
+        });
+
+        if (changed) {
+          await prisma.product.update({
+            where: { id: product.id },
+            data: { images: JSON.stringify(updatedImages) },
+          });
+          updated++;
+        }
+      }
+    }
+
+    res.json({ extracted: extracted.length, skipped: skipped.length, productsUpdated: updated, files: extracted });
+  } catch (error) {
+    console.error('Upload complete error:', error);
+    res.status(500).json({ error: 'Error al procesar el archivo ZIP' });
+  } finally {
+    fs.unlink(session.filePath, () => {});
+    activeUploads.delete(uploadId);
+  }
+});
+
+// Keep legacy single-request endpoint for small files
+router.post('/upload-images', authenticate, requireRole('ADMIN', 'STAFF'), upload.single('zip'), async (req: AuthRequest, res) => {
+  let tmpPath: string | null = null;
+  try {
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ error: 'No se proporcionó archivo ZIP' });
+    }
+    tmpPath = file.path;
+
+    const uploadsDir = path.resolve(process.cwd(), 'uploads', 'products');
+    fs.mkdirSync(uploadsDir, { recursive: true });
+
+    const zip = new AdmZip(tmpPath);
+    const entries = zip.getEntries();
+
+    const extracted: string[] = [];
+    const skipped: string[] = [];
+    const debugEntries: string[] = [];
+
+    for (const entry of entries) {
+      debugEntries.push(entry.entryName);
+
+      // Skip directories
+      if (entry.isDirectory) continue;
+
+      // Skip macOS metadata and hidden files (check basename, not full path)
+      const filename = path.basename(entry.entryName);
+      if (filename.startsWith('.') || filename.startsWith('__MACOSX') || entry.entryName.includes('__MACOSX/')) {
+        continue;
+      }
+
+      const ext = path.extname(filename).toLowerCase();
+
+      if (!ALLOWED_IMAGE_EXTENSIONS.has(ext)) {
+        skipped.push(filename);
+        continue;
+      }
+
+      // Sanitize filename — only allow alphanumeric, dash, underscore, dot
+      const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const destPath = path.join(uploadsDir, safeName);
+
+      fs.writeFileSync(destPath, entry.getData());
+      extracted.push(safeName);
+    }
+
+    // Update products: replace bare filenames with served URLs
+    let updated = 0;
+    if (extracted.length > 0) {
+      const allProducts = await prisma.product.findMany({ select: { id: true, images: true } });
+
+      for (const product of allProducts) {
+        let images: string[];
+        try {
+          images = JSON.parse(product.images);
+        } catch {
+          images = product.images ? [product.images] : [];
+        }
+
+        let changed = false;
+        const updatedImages = images.map((img: string) => {
+          const basename = img.split('/').pop() || img;
+          // Sanitize the same way as extracted files
+          const safeBasename = basename.replace(/[^a-zA-Z0-9._-]/g, '_');
+          if (extracted.includes(safeBasename) && !img.startsWith('/uploads/')) {
+            changed = true;
+            return `/uploads/products/${safeBasename}`;
+          }
+          return img;
+        });
+
+        if (changed) {
+          await prisma.product.update({
+            where: { id: product.id },
+            data: { images: JSON.stringify(updatedImages) },
+          });
+          updated++;
+        }
+      }
+    }
+
+    res.json({
+      extracted: extracted.length,
+      skipped: skipped.length,
+      productsUpdated: updated,
+      files: extracted,
+      debug: { zipEntries: debugEntries, skippedFiles: skipped },
+    });
+  } catch (error) {
+    console.error('Upload images error:', error);
+    res.status(500).json({ error: 'Error al procesar el archivo ZIP' });
+  } finally {
+    // Clean up temp file
+    if (tmpPath) {
+      fs.unlink(tmpPath, () => {});
+    }
   }
 });
 

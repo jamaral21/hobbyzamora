@@ -5,8 +5,10 @@ import { Button } from '../../components/design-system/Button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/design-system/Table';
 import { Badge } from '../../components/design-system/Badge';
 import { customersAPI, type Customer } from '../../lib/api';
+import { useAdminAuth } from '../../contexts/AdminAuthContext';
 
 export default function CustomersPage() {
+  const { isAuthenticated } = useAdminAuth();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -26,13 +28,14 @@ export default function CustomersPage() {
   };
 
   useEffect(() => {
-    fetchCustomers();
-  }, []);
+    if (isAuthenticated) fetchCustomers();
+  }, [isAuthenticated]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     const timeout = setTimeout(() => fetchCustomers(), 300);
     return () => clearTimeout(timeout);
-  }, [search]);
+  }, [search, isAuthenticated]);
 
   const totalSpentAll = customers.reduce((s, c) => s + c.totalSpent, 0);
   const avgSpent = customers.length > 0 ? totalSpentAll / customers.length : 0;

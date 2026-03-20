@@ -25,8 +25,10 @@ interface UseFetchState<T> {
 
 function useFetch<T>(
   fetchFn: () => Promise<T>,
-  deps: any[] = []
+  deps: any[] = [],
+  options?: { enabled?: boolean }
 ): UseFetchState<T> {
+  const enabled = options?.enabled !== false;
   const [data, setData] = useState<T | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -45,10 +47,12 @@ function useFetch<T>(
   }, deps);
 
   useEffect(() => {
-    fetch();
-  }, [fetch]);
+    if (enabled) {
+      fetch();
+    }
+  }, [fetch, enabled]);
 
-  return { data, isLoading, error, refetch: fetch };
+  return { data, isLoading: enabled ? isLoading : true, error, refetch: fetch };
 }
 
 // Products hooks
@@ -59,10 +63,11 @@ export function useProducts(params?: {
   presale?: boolean;
   page?: number;
   limit?: number;
-}) {
+}, options?: { enabled?: boolean }) {
   return useFetch(
     () => productsAPI.getAll(params).then((res) => res.products),
-    [params?.category, params?.status, params?.search, params?.presale, params?.page, params?.limit]
+    [params?.category, params?.status, params?.search, params?.presale, params?.page, params?.limit],
+    options
   );
 }
 
@@ -86,10 +91,11 @@ export function useOrders(params?: {
   search?: string;
   page?: number;
   limit?: number;
-}) {
+}, options?: { enabled?: boolean }) {
   return useFetch(
     () => ordersAPI.getAll(params).then((res) => res.orders),
-    [params?.status, params?.source, params?.startDate, params?.endDate, params?.search, params?.page, params?.limit]
+    [params?.status, params?.source, params?.startDate, params?.endDate, params?.search, params?.page, params?.limit],
+    options
   );
 }
 
@@ -113,23 +119,24 @@ export function useInventory(params?: { productId?: string; lowStock?: boolean }
 }
 
 // Analytics hooks
-export function useDashboardStats() {
-  return useFetch(() => analyticsAPI.getDashboard(), []);
+export function useDashboardStats(options?: { enabled?: boolean }) {
+  return useFetch(() => analyticsAPI.getDashboard(), [], options);
 }
 
-export function useSalesChart(days?: number) {
-  return useFetch(() => analyticsAPI.getSalesChart(days), [days]);
+export function useSalesChart(days?: number, options?: { enabled?: boolean }) {
+  return useFetch(() => analyticsAPI.getSalesChart(days), [days], options);
 }
 
-export function useTopProducts(limit?: number, period?: 'week' | 'month' | 'year') {
-  return useFetch(() => analyticsAPI.getTopProducts(limit, period), [limit, period]);
+export function useTopProducts(limit?: number, period?: 'week' | 'month' | 'year', options?: { enabled?: boolean }) {
+  return useFetch(() => analyticsAPI.getTopProducts(limit, period), [limit, period], options);
 }
 
 // Customers hooks
-export function useCustomers(params?: { search?: string; page?: number; limit?: number }) {
+export function useCustomers(params?: { search?: string; page?: number; limit?: number }, options?: { enabled?: boolean }) {
   return useFetch(
     () => customersAPI.getAll(params).then((res) => res.customers),
-    [params?.search, params?.page, params?.limit]
+    [params?.search, params?.page, params?.limit],
+    options
   );
 }
 
@@ -141,10 +148,11 @@ export function useCustomer(id: string | undefined) {
 }
 
 // Instagram hooks
-export function useInstagramConversations(params?: { status?: string; search?: string }) {
+export function useInstagramConversations(params?: { status?: string; search?: string }, options?: { enabled?: boolean }) {
   return useFetch(
     () => instagramAPI.getConversations(params),
-    [params?.status, params?.search]
+    [params?.status, params?.search],
+    options
   );
 }
 

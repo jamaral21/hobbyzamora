@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { AdminSidebar } from './AdminSidebar';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAdminAuth } from '../../contexts/AdminAuthContext';
 import { Button } from '../design-system/Button';
 import { Input } from '../design-system/Input';
 
 function AdminLogin() {
-  const { login } = useAuth();
+  const { login } = useAdminAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -47,7 +47,7 @@ function AdminLogin() {
 }
 
 export function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAdminAuth();
 
   if (isLoading) {
     return (

@@ -171,7 +171,10 @@ export class ApiError extends Error {
 
 // Base fetch function with auth
 async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const token = localStorage.getItem('token');
+  // Use admin token for admin API calls, fallback to customer token
+  const adminToken = localStorage.getItem('adminToken');
+  const customerToken = localStorage.getItem('token');
+  const token = adminToken || customerToken;
   
   const response = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
@@ -274,10 +277,54 @@ export const productsAPI = {
   getCategories: () => fetchAPI<string[]>('/products/meta/categories'),
 
   importCSV: (products: Record<string, string>[]) =>
-    fetchAPI<{ created: number; skipped: number; errors: string[] }>('/products/import', {
+    fetchAPI<{ created: number; updated: number; skipped: number; errors: string[] }>('/products/import', {
       method: 'POST',
       body: JSON.stringify({ products }),
     }),
+
+  uploadImages: async (file: File, onProgress?: (pct: number) => void) => {
+    const token = localStorage.getItem('adminToken') || localStorage.getItem('token');
+    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB per chunk
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+
+    // 1. Init session
+    const initRes = await fetchAPI<{ uploadId: string }>('/products/upload-images/init', {
+      method: 'POST',
+      body: JSON.stringify({ totalChunks, filename: file.name }),
+    });
+    const { uploadId } = initRes;
+
+    // 2. Send chunks sequentially
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, file.size);
+      const blob = file.slice(start, end);
+
+      const formData = new FormData();
+      formData.append('chunk', blob);
+
+      const chunkRes = await fetch(`${API_BASE}/products/upload-images/chunk`, {
+        method: 'POST',
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` }),
+          'X-Upload-Id': uploadId,
+          'X-Chunk-Index': String(i),
+        },
+        body: formData,
+      });
+      if (!chunkRes.ok) {
+        const err = await chunkRes.json().catch(() => ({ error: 'Chunk failed' }));
+        throw new ApiError(chunkRes.status, err.error || 'Error al subir chunk');
+      }
+      onProgress?.(Math.round(((i + 1) / totalChunks) * 100));
+    }
+
+    // 3. Complete — process the ZIP
+    return fetchAPI<{ extracted: number; skipped: number; productsUpdated: number; files: string[] }>(
+      '/products/upload-images/complete',
+      { method: 'POST', body: JSON.stringify({ uploadId }) },
+    );
+  },
 };
 
 // Orders API

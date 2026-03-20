@@ -7,10 +7,12 @@ import { ChatInterface } from '../../components/instagram/ChatInterface';
 import { ProductQuickInsert } from '../../components/instagram/ProductQuickInsert';
 import { useInstagramConversations, useProducts, useMutation } from '../../hooks/useData';
 import { instagramAPI } from '../../lib/api';
+import { useAdminAuth } from '../../contexts/AdminAuthContext';
 
 export default function InstagramAgentPage() {
-  const { data: conversations, isLoading: conversationsLoading, refetch } = useInstagramConversations();
-  const { data: products, isLoading: productsLoading } = useProducts();
+  const { isAuthenticated } = useAdminAuth();
+  const { data: conversations, isLoading: conversationsLoading, refetch } = useInstagramConversations(undefined, { enabled: isAuthenticated });
+  const { data: products, isLoading: productsLoading } = useProducts(undefined, { enabled: isAuthenticated });
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   

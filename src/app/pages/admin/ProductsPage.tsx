@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router';
-import { Plus, Search, Filter, MoreVertical, Edit, Trash2, Eye, Loader2, Upload, Download, CheckCircle, AlertCircle } from 'lucide-react';
+import { Plus, Search, Filter, MoreVertical, Edit, Trash2, Eye, Loader2, Upload, Download, CheckCircle, AlertCircle, ImagePlus } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { Button } from '../../components/design-system/Button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/design-system/Table';
@@ -10,18 +10,24 @@ import { Modal } from '../../components/design-system/Modal';
 import { ProductEditor } from '../../components/admin/ProductEditor';
 import { useProducts, useMutation } from '../../hooks/useData';
 import { productsAPI } from '../../lib/api';
+import { useAdminAuth } from '../../contexts/AdminAuthContext';
 
 export default function ProductsPage() {
+  const { isAuthenticated } = useAdminAuth();
   const location = useLocation();
   const isPresalesView = location.pathname.includes('/presales');
   const [searchQuery, setSearchQuery] = useState('');
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
-  const [importResult, setImportResult] = useState<{ created: number; skipped: number; errors: string[] } | null>(null);
+  const [importResult, setImportResult] = useState<{ created: number; updated: number; skipped: number; errors: string[] } | null>(null);
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [imageUploadResult, setImageUploadResult] = useState<{ extracted: number; skipped: number; productsUpdated: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const zipInputRef = useRef<HTMLInputElement>(null);
   
-  const { data: products, isLoading, refetch } = useProducts();
+  const { data: products, isLoading, refetch } = useProducts(undefined, { enabled: isAuthenticated });
   const deleteProduct = useMutation(productsAPI.delete);
   const createProduct = useMutation(productsAPI.create);
   const updateProduct = useMutation(productsAPI.update);
@@ -91,14 +97,14 @@ export default function ProductsPage() {
       const text = await file.text();
       const rows = parseCSV(text);
       if (rows.length === 0) {
-        setImportResult({ created: 0, skipped: 0, errors: ['El archivo CSV está vacío o no tiene datos.'] });
+        setImportResult({ created: 0, updated: 0, skipped: 0, errors: ['El archivo CSV está vacío o no tiene datos.'] });
         return;
       }
       const result = await productsAPI.importCSV(rows);
       setImportResult(result);
       refetch();
     } catch (err: any) {
-      setImportResult({ created: 0, skipped: 0, errors: [err?.message || 'Error al importar'] });
+      setImportResult({ created: 0, updated: 0, skipped: 0, errors: [err?.message || 'Error al importar'] });
     } finally {
       setIsImporting(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -116,6 +122,26 @@ export default function ProductsPage() {
     a.download = 'plantilla-productos.csv';
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleUploadImages = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingImages(true);
+    setUploadProgress(0);
+    setImageUploadResult(null);
+    try {
+      const result = await productsAPI.uploadImages(file, (pct) => setUploadProgress(pct));
+      console.log('ZIP upload result:', result);
+      setImageUploadResult(result);
+      refetch();
+    } catch (err: any) {
+      setImageUploadResult({ extracted: 0, skipped: 0, productsUpdated: 0 });
+    } finally {
+      setIsUploadingImages(false);
+      setUploadProgress(0);
+      if (zipInputRef.current) zipInputRef.current.value = '';
+    }
   };
 
   if (isLoading) {
@@ -146,6 +172,13 @@ export default function ProductsPage() {
               className="hidden"
               onChange={handleImportCSV}
             />
+            <input
+              ref={zipInputRef}
+              type="file"
+              accept=".zip"
+              className="hidden"
+              onChange={handleUploadImages}
+            />
             <Button variant="outline" onClick={downloadTemplate}>
               <Download className="w-4 h-4" />
               Plantilla CSV
@@ -153,6 +186,10 @@ export default function ProductsPage() {
             <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isImporting}>
               {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
               {isImporting ? 'Importando...' : 'Importar CSV'}
+            </Button>
+            <Button variant="outline" onClick={() => zipInputRef.current?.click()} disabled={isUploadingImages}>
+              {isUploadingImages ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}
+              {isUploadingImages ? `Subiendo... ${uploadProgress}%` : 'Subir Imágenes ZIP'}
             </Button>
             <Button onClick={() => { setEditingProduct(null); setIsEditorOpen(true); }}>
               <Plus className="w-4 h-4" />
@@ -164,7 +201,7 @@ export default function ProductsPage() {
         {/* Import Result Banner */}
         {importResult && (
           <div className={`mb-4 p-4 rounded-lg border ${
-            importResult.errors.length > 0 && importResult.created === 0
+            importResult.errors.length > 0 && importResult.created === 0 && importResult.updated === 0
               ? 'bg-destructive/10 border-destructive/20'
               : importResult.errors.length > 0
               ? 'bg-[#ffab00]/10 border-[#ffab00]/20'
@@ -172,14 +209,14 @@ export default function ProductsPage() {
           }`}>
             <div className="flex items-start justify-between">
               <div className="flex items-start gap-3">
-                {importResult.created > 0 ? (
+                {(importResult.created > 0 || importResult.updated > 0) ? (
                   <CheckCircle className="w-5 h-5 text-[#00e676] mt-0.5" />
                 ) : (
                   <AlertCircle className="w-5 h-5 text-destructive mt-0.5" />
                 )}
                 <div>
                   <p className="text-sm font-medium text-foreground">
-                    {importResult.created} producto(s) importado(s){importResult.skipped > 0 ? `, ${importResult.skipped} omitido(s)` : ''}
+                    {importResult.created} creado(s), {importResult.updated} actualizado(s){importResult.skipped > 0 ? `, ${importResult.skipped} omitido(s)` : ''}
                   </p>
                   {importResult.errors.length > 0 && (
                     <ul className="mt-1 text-sm text-muted-foreground list-disc list-inside">
@@ -192,6 +229,36 @@ export default function ProductsPage() {
                 </div>
               </div>
               <button onClick={() => setImportResult(null)} className="text-muted-foreground hover:text-foreground text-lg leading-none">&times;</button>
+            </div>
+          </div>
+        )}
+
+        {/* Image Upload Result Banner */}
+        {imageUploadResult && (
+          <div className={`mb-4 p-4 rounded-lg border ${
+            imageUploadResult.extracted === 0
+              ? 'bg-destructive/10 border-destructive/20'
+              : 'bg-[#00e676]/10 border-[#00e676]/20'
+          }`}>
+            <div className="flex items-start justify-between">
+              <div className="flex items-start gap-3">
+                {imageUploadResult.extracted > 0 ? (
+                  <CheckCircle className="w-5 h-5 text-[#00e676] mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-destructive mt-0.5" />
+                )}
+                <div>
+                  <p className="text-sm font-medium text-foreground">
+                    {imageUploadResult.extracted} imagen(es) extraída(s), {imageUploadResult.productsUpdated} producto(s) actualizado(s)
+                  </p>
+                  {imageUploadResult.skipped > 0 && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {imageUploadResult.skipped} archivo(s) omitido(s) (formato no soportado)
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button onClick={() => setImageUploadResult(null)} className="text-muted-foreground hover:text-foreground text-lg leading-none">&times;</button>
             </div>
           </div>
         )}

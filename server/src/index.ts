@@ -1,7 +1,16 @@
 import express from 'express';
 import cors from 'cors';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+
+// Load environment variables BEFORE importing routes
+dotenv.config();
+
 import { PrismaClient } from '@prisma/client';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Routes
 import authRoutes from './routes/auth.js';
@@ -15,9 +24,6 @@ import instagramRoutes from './routes/instagram.js';
 import posRoutes from './routes/pos.js';
 import paymentRoutes from './routes/payments.js';
 
-// Load environment variables
-dotenv.config();
-
 // Initialize Prisma
 export const prisma = new PrismaClient();
 
@@ -30,7 +36,11 @@ app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true,
 }));
-app.use(express.json());
+app.use(express.json({ limit: '100mb' }));
+
+// Serve uploaded files
+const uploadsDir = path.resolve(__dirname, '../../uploads');
+app.use('/uploads', express.static(uploadsDir));
 
 // Health check
 app.get('/api/health', (req, res) => {

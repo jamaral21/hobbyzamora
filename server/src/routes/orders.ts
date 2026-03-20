@@ -141,6 +141,10 @@ router.get('/:id', optionalAuth, async (req: AuthRequest, res) => {
         price: parseFloat(i.price.toString()),
         cost: parseFloat(i.cost.toString()),
       })),
+      payments: order.payments.map(p => ({
+        ...p,
+        amount: parseFloat(p.amount.toString()),
+      })),
     });
   } catch (error) {
     console.error('Get order error:', error);

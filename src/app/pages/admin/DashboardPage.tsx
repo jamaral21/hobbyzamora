@@ -6,18 +6,20 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../components/desig
 import { Badge } from '../../components/design-system/Badge';
 import { Button } from '../../components/design-system/Button';
 import { useDashboardStats, useSalesChart, useTopProducts, useOrders } from '../../hooks/useData';
+import { useAdminAuth } from '../../contexts/AdminAuthContext';
 import { Link } from 'react-router';
 
 export default function DashboardPage() {
-  const { data: stats, isLoading: statsLoading } = useDashboardStats();
-  const { data: chartData, isLoading: chartLoading } = useSalesChart(10);
-  const { data: topProducts, isLoading: productsLoading } = useTopProducts(5, 'month');
-  const { data: orders, isLoading: ordersLoading } = useOrders({ limit: 5 });
+  const { isAuthenticated } = useAdminAuth();
+  const { data: stats, isLoading: statsLoading } = useDashboardStats({ enabled: isAuthenticated });
+  const { data: chartData, isLoading: chartLoading } = useSalesChart(10, { enabled: isAuthenticated });
+  const { data: topProducts, isLoading: productsLoading } = useTopProducts(5, 'month', { enabled: isAuthenticated });
+  const { data: orders, isLoading: ordersLoading } = useOrders({ limit: 5 }, { enabled: isAuthenticated });
 
   const recentOrders = orders || [];
 
   // Loading state
-  if (statsLoading && chartLoading && productsLoading && ordersLoading) {
+  if (statsLoading || chartLoading || productsLoading || ordersLoading) {
     return (
       <AdminLayout>
         <div className="flex items-center justify-center h-64">

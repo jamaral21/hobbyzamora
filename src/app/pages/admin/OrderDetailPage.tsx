@@ -6,6 +6,7 @@ import { Button } from '../../components/design-system/Button';
 import { Badge } from '../../components/design-system/Badge';
 import { Card } from '../../components/design-system/Card';
 import { useOrder, useUpdateOrderStatus } from '../../hooks/useData';
+import { useAdminAuth } from '../../contexts/AdminAuthContext';
 
 const STATUS_OPTIONS = ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'] as const;
 
@@ -19,6 +20,7 @@ const STATUS_BADGE_VARIANT: Record<string, 'default' | 'success' | 'warning' | '
 };
 
 export default function OrderDetailPage() {
+  const { isAuthenticated } = useAdminAuth();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: order, isLoading, error, refetch } = useOrder(id);
