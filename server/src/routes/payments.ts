@@ -12,17 +12,17 @@ const GETNET_TRANKEY = process.env.GETNET_TRANKEY || '';
 
 // Generate PlacetoPay auth object
 function generatePlacetoPayAuth() {
-  const nonce = crypto.randomBytes(16);
+  const rawNonce = crypto.randomBytes(16).toString('hex');
   const seed = new Date().toISOString();
   const digest = crypto
     .createHash('sha256')
-    .update(nonce.toString('base64') + seed + GETNET_TRANKEY)
+    .update(rawNonce + seed + GETNET_TRANKEY)
     .digest('base64');
 
   return {
     login: GETNET_LOGIN,
     tranKey: digest,
-    nonce: nonce.toString('base64'),
+    nonce: Buffer.from(rawNonce).toString('base64'),
     seed,
   };
 }
@@ -71,7 +71,7 @@ router.post('/checkout', optionalAuth, async (req: AuthRequest, res) => {
     }
 
     // Getnet Chile (PlacetoPay) Web Checkout
-    const total = parseFloat(order.total.toString());
+    const total = Math.round(parseFloat(order.total.toString()));
     const expiration = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(); // 2 hours
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
