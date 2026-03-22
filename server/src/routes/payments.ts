@@ -75,6 +75,7 @@ router.post('/checkout', optionalAuth, async (req: AuthRequest, res) => {
     const expiration = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(); // 2 hours
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const apiUrl = process.env.API_URL || 'http://localhost:3001';
 
     const sessionData = {
       auth: generatePlacetoPayAuth(),
@@ -82,13 +83,14 @@ router.post('/checkout', optionalAuth, async (req: AuthRequest, res) => {
         reference: order.orderNumber,
         description: `Orden ${order.orderNumber} - HobbyZamora`,
         amount: {
-          currency: 'MXN',
+          currency: 'CLP',
           total,
         },
         allowPartial: false,
       },
       expiration,
       returnUrl: `${frontendUrl}/store/order-confirmation?orderId=${order.id}`,
+      notificationUrl: `${apiUrl}/api/payments/getnet/callback`,
       ipAddress: (req.ip === '::1' ? '127.0.0.1' : req.ip) || '127.0.0.1',
       userAgent: req.headers['user-agent'] || 'HobbyZamora/1.0',
       buyer: {
@@ -101,7 +103,7 @@ router.post('/checkout', optionalAuth, async (req: AuthRequest, res) => {
           city: order.shippingCity || '',
           state: order.shippingState || '',
           postalCode: order.shippingZip || '',
-          country: order.shippingCountry || 'MX',
+          country: order.shippingCountry || 'CL',
         } : undefined,
       },
     };

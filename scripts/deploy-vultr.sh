@@ -45,6 +45,7 @@ require_cmd() {
 
 create_dirs() {
   mkdir -p "${RELEASES_DIR}" "${SHARED_DIR}" "${BACKUPS_DIR}"
+  mkdir -p "${SHARED_DIR}/uploads/products"
 }
 
 acquire_lock() {
@@ -194,6 +195,10 @@ main() {
     cd "${release_dir}"
     npm prune --omit=dev
   )
+
+  log "Linking shared uploads directory"
+  rm -rf "${release_dir}/uploads"
+  ln -sfn "${SHARED_DIR}/uploads" "${release_dir}/uploads"
 
   log "Switching current symlink"
   ln -sfn "${release_dir}" "${CURRENT_LINK}"
