@@ -1,18 +1,76 @@
+import { useRef } from 'react';
 import { Link } from 'react-router';
-import { ArrowRight, Sparkles, Clock, Shield, Loader2, Lock, Zap, Gamepad2 } from 'lucide-react';
+import {
+  ArrowRight,
+  Sparkles,
+  Loader2,
+  Lock,
+  ChevronLeft,
+  ChevronRight,
+  Truck,
+  CreditCard,
+  Package,
+} from 'lucide-react';
 import { StoreLayout } from '../../components/layout/StoreLayout';
 import { ProductCard } from '../../components/store/ProductCard';
 import { Button } from '../../components/design-system/Button';
 import { Card } from '../../components/design-system/Card';
+import { HeroSlider, type HeroSlide } from '../../components/design-system/HeroSlider';
 import { useProducts } from '../../hooks/useData';
 import { useAuth } from '../../contexts/AuthContext';
+import { mockProducts } from '../../data/mockData';
+
+const heroSlides: HeroSlide[] = [
+  {
+    id: 'slide-1',
+    image: 'https://images.unsplash.com/photo-1613771404784-3a5686aa2be3?w=1920&h=600&fit=crop',
+    title: 'POKÉMON TCG',
+    subtitle: 'Las últimas expansiones y cartas exclusivas disponibles ahora',
+    ctaText: 'Ver Colección',
+    ctaHref: '/store/products?category=pokemon-tcg',
+  },
+  {
+    id: 'slide-2',
+    image: 'https://images.unsplash.com/photo-1566577134770-3d85bb3a9cc4?w=1920&h=600&fit=crop',
+    title: 'BEYBLADE X',
+    subtitle: 'La nueva generación de Beyblade ya está aquí',
+    ctaText: 'Explorar',
+    ctaHref: '/store/products?category=beyblade-x',
+  },
+  {
+    id: 'slide-3',
+    image: 'https://images.unsplash.com/photo-1642790106117-e829e14a795f?w=1920&h=600&fit=crop',
+    title: 'PREVENTAS EXCLUSIVAS',
+    subtitle: 'Reserva los productos más esperados antes que nadie',
+    ctaText: 'Ver Preventas',
+    ctaHref: '/store/presales',
+  },
+  {
+    id: 'slide-4',
+    image: 'https://images.unsplash.com/photo-1558618666-fcd25c85f82e?w=1920&h=600&fit=crop',
+    title: 'FIGURAS & COLECCIONABLES',
+    subtitle: 'Figuarts, Nintendo y más — 100% originales',
+    ctaText: 'Ver Todo',
+    ctaHref: '/store/products',
+  },
+];
 
 export default function HomePage() {
   const { data: products, isLoading } = useProducts();
   const { isAuthenticated } = useAuth();
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  const featuredProducts = (products || []).slice(0, 4);
-  const presaleProducts = (products || []).filter((p: any) => p.isPresale);
+  const allProducts = products && products.length > 0 ? products : mockProducts;
+  const featuredProducts = allProducts.slice(0, 8);
+  const presaleProducts = allProducts.filter((p: any) => p.isPresale);
+  const newProducts = allProducts.slice(0, 6);
+
+  const scroll = (direction: 'left' | 'right') => {
+    if (scrollRef.current) {
+      const amount = direction === 'left' ? -320 : 320;
+      scrollRef.current.scrollBy({ left: amount, behavior: 'smooth' });
+    }
+  };
 
   if (isLoading) {
     return (
@@ -35,137 +93,76 @@ export default function HomePage() {
         </Link>
       </div>
 
-      {/* Hero Section */}
-      <section className="relative overflow-hidden bg-background">
-        {/* Noise texture overlay */}
-        <div
-          className="absolute inset-0 opacity-[0.03]"
-          style={{
-            backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E")`,
-          }}
-        />
-        {/* Grid pattern */}
-        <div
-          className="absolute inset-0 opacity-[0.04]"
-          style={{
-            backgroundImage: 'linear-gradient(rgba(255,214,10,0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(255,214,10,0.3) 1px, transparent 1px)',
-            backgroundSize: '40px 40px',
-          }}
-        />
-        {/* Glow orbs */}
-        <div className="absolute top-20 -left-32 w-96 h-96 bg-primary/8 rounded-full blur-[120px]" />
-        <div className="absolute bottom-10 right-0 w-80 h-80 bg-accent/6 rounded-full blur-[100px]" />
+      {/* ═══════════════════════════════════════════
+          HERO BANNER — Full-width visual
+      ═══════════════════════════════════════════ */}
+      <HeroSlider slides={heroSlides} />
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
-          <div className="flex items-center gap-8 lg:gap-16">
-            {/* Text */}
-            <div className="flex-1 min-w-0">
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-sm mb-5">
-                <Gamepad2 className="w-4 h-4" />
-                <span className="font-[family-name:var(--font-display)] text-[0.6rem] tracking-wider">JUEGOS, FIGURAS & COLECCIONABLES</span>
-              </div>
-
-              <h1 className="text-primary mb-4 leading-tight">
-                HOBBY ZAMORA
-              </h1>
-              <p className="text-lg mb-8 text-muted-foreground max-w-xl leading-relaxed">
-                Sobres sellados, cartas sueltas, productos exclusivos y preventas de Pokémon TCG y Beyblade X
-              </p>
-              <div className="flex flex-wrap gap-4">
-                <Link to="/store/products">
-                  <Button size="lg" pixel>
-                    <Zap className="w-5 h-5" />
-                    Ver Productos
-                    <ArrowRight className="w-5 h-5" />
-                  </Button>
-                </Link>
-                <Link to="/store/presales">
-                  <Button size="lg" variant="outline" pixel>
-                    Preventas
-                  </Button>
-                </Link>
-              </div>
+      {/* ═══════════════════════════════════════════
+          PRODUCTOS DESTACADOS — Carrusel horizontal
+      ═══════════════════════════════════════════ */}
+      <section className="py-14">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h2 className="text-primary mb-2">PRODUCTOS DESTACADOS</h2>
+              <p className="text-muted-foreground">Lo más popular de nuestra comunidad</p>
             </div>
-
-            {/* Logo */}
-            <div className="hidden md:flex items-center justify-center flex-shrink-0">
-              <img
-                src="/logo.png"
-                alt="HobbyZamora"
-                className="w-64 lg:w-80 h-auto drop-shadow-[0_0_30px_rgba(255,214,10,0.15)]"
-              />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => scroll('left')}
+                className="p-2 rounded-lg border border-border hover:border-primary hover:text-primary text-muted-foreground transition-colors"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => scroll('right')}
+                className="p-2 rounded-lg border border-border hover:border-primary hover:text-primary text-muted-foreground transition-colors"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+              <Link to="/store/products" className="ml-2">
+                <Button variant="outline" size="sm">
+                  Ver Todo
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </Link>
             </div>
           </div>
         </div>
-      </section>
-
-      {/* Features */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card hover className="text-center group">
-            <div className="w-14 h-14 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4 group-hover:shadow-[0_0_16px_rgba(255,214,10,0.2)] transition-shadow">
-              <Sparkles className="w-7 h-7 text-primary" />
-            </div>
-            <h3 className="text-foreground mb-2">100% Originales</h3>
-            <p className="text-sm text-muted-foreground">
-              Productos Pokémon TCG sellados y verificados
-            </p>
-          </Card>
-          <Card hover className="text-center group">
-            <div className="w-14 h-14 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center mx-auto mb-4 group-hover:shadow-[0_0_16px_rgba(0,212,255,0.2)] transition-shadow">
-              <Clock className="w-7 h-7 text-accent" />
-            </div>
-            <h3 className="text-foreground mb-2">Envío Rápido</h3>
-            <p className="text-sm text-muted-foreground">
-              Entrega rápida y segura para tu colección
-            </p>
-          </Card>
-          <Card hover className="text-center group">
-            <div className="w-14 h-14 rounded-xl bg-[#00e676]/10 border border-[#00e676]/20 flex items-center justify-center mx-auto mb-4 group-hover:shadow-[0_0_16px_rgba(0,230,118,0.2)] transition-shadow">
-              <Shield className="w-7 h-7 text-[#00e676]" />
-            </div>
-            <h3 className="text-foreground mb-2">Pago Seguro</h3>
-            <p className="text-sm text-muted-foreground">
-              Procesamiento de pago seguro y confiable
-            </p>
-          </Card>
-        </div>
-      </section>
-
-      {/* Featured Products */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h2 className="text-primary mb-2">PRODUCTOS DESTACADOS</h2>
-            <p className="text-muted-foreground">Lo más popular de nuestra comunidad</p>
-          </div>
-          <Link to="/store/products">
-            <Button variant="outline" size="sm">
-              Ver Todo
-              <ArrowRight className="w-4 h-4" />
-            </Button>
-          </Link>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div
+          ref={scrollRef}
+          className="flex gap-5 overflow-x-auto scrollbar-hide pb-2 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
+          style={{ scrollbarWidth: 'none' }}
+        >
           {featuredProducts.map((product) => (
-            <ProductCard key={product.id} product={product} />
+            <div key={product.id} className="flex-shrink-0 w-[280px]">
+              <ProductCard product={product} />
+            </div>
           ))}
         </div>
       </section>
 
-      {/* Presales */}
+      {/* ═══════════════════════════════════════════
+          PREVENTAS — Acceso exclusivo
+      ═══════════════════════════════════════════ */}
       {presaleProducts.length > 0 && (
         <section className="relative py-16 overflow-hidden">
-          {/* Background glow */}
           <div className="absolute inset-0 bg-gradient-to-b from-transparent via-primary/[0.03] to-transparent" />
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-primary/5 rounded-full blur-[120px]" />
 
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="text-center mb-10">
-              <h2 className="text-primary mb-2">PREVENTAS</h2>
-              <p className="text-muted-foreground">
-                Acceso exclusivo a productos próximos
-              </p>
+            <div className="flex items-center justify-between mb-10">
+              <div>
+                <h2 className="text-primary mb-2">PREVENTAS</h2>
+                <p className="text-muted-foreground">Acceso exclusivo a productos próximos</p>
+              </div>
+              <Link to="/store/presales">
+                <Button variant="outline" size="sm">
+                  Ver Todas
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </Link>
             </div>
             {isAuthenticated ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -189,8 +186,79 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* CTA Section */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+      {/* ═══════════════════════════════════════════
+          NOVEDADES — Grid de productos recientes
+      ═══════════════════════════════════════════ */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h2 className="text-primary mb-2">NOVEDADES</h2>
+            <p className="text-muted-foreground">Recién agregados a la tienda</p>
+          </div>
+          <Link to="/store/products">
+            <Button variant="outline" size="sm">
+              Ver Todo
+              <ArrowRight className="w-4 h-4" />
+            </Button>
+          </Link>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {newProducts.map((product) => (
+            <ProductCard key={product.id} product={product} />
+          ))}
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════
+          TRUST BADGES — Envío, Pago, Originales, Soporte
+      ═══════════════════════════════════════════ */}
+      <section className="border-t border-border bg-card/50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="flex items-center gap-4 group">
+              <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 group-hover:shadow-[0_0_16px_rgba(255,214,10,0.2)] transition-shadow">
+                <Truck className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm text-foreground font-medium">Envío a todo Chile</p>
+                <p className="text-xs text-muted-foreground">Despacho rápido y seguro</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4 group">
+              <div className="w-12 h-12 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0 group-hover:shadow-[0_0_16px_rgba(0,212,255,0.2)] transition-shadow">
+                <CreditCard className="w-6 h-6 text-accent" />
+              </div>
+              <div>
+                <p className="text-sm text-foreground font-medium">Pagos seguros</p>
+                <p className="text-xs text-muted-foreground">Tarjeta, transferencia y más</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4 group">
+              <div className="w-12 h-12 rounded-xl bg-[#00e676]/10 border border-[#00e676]/20 flex items-center justify-center shrink-0 group-hover:shadow-[0_0_16px_rgba(0,230,118,0.2)] transition-shadow">
+                <Package className="w-6 h-6 text-[#00e676]" />
+              </div>
+              <div>
+                <p className="text-sm text-foreground font-medium">100% Originales</p>
+                <p className="text-xs text-muted-foreground">Productos verificados y sellados</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4 group">
+              <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 group-hover:shadow-[0_0_16px_rgba(255,214,10,0.2)] transition-shadow">
+                <Sparkles className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm text-foreground font-medium">¿Preguntas?</p>
+                <p className="text-xs text-muted-foreground">Contáctanos por Instagram o email</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════
+          CTA — Únete a la comunidad
+      ═══════════════════════════════════════════ */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <Card className="relative overflow-hidden bg-gradient-to-br from-secondary via-card to-secondary border-primary/15 text-center py-14 px-8">
           <div className="absolute top-0 left-1/4 w-64 h-64 bg-primary/5 rounded-full blur-[80px]" />
           <div className="absolute bottom-0 right-1/4 w-48 h-48 bg-accent/5 rounded-full blur-[60px]" />
@@ -199,9 +267,11 @@ export default function HomePage() {
             <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
               Ofertas exclusivas, acceso anticipado a nuevos productos e inspiración para tu colección
             </p>
-            <Button size="lg" pixel>
-              Registrarse
-            </Button>
+            <Link to="/store/account">
+              <Button size="lg" pixel>
+                Registrarse
+              </Button>
+            </Link>
           </div>
         </Card>
       </section>
