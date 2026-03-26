@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { authAPI } from '../../lib/api';
 import { Card, CardHeader, CardTitle, CardContent } from '../design-system/Card';
 import { Input } from '../design-system/Input';
 import { Button } from '../design-system/Button';
-import { Loader2, LogIn, UserPlus } from 'lucide-react';
+import { Loader2, LogIn, UserPlus, ArrowLeft, Mail } from 'lucide-react';
 
 declare global {
   interface Window {
@@ -25,9 +26,10 @@ interface RequireAuthProps {
 
 export function RequireAuth({ children, message = 'Inicia sesión para continuar' }: RequireAuthProps) {
   const { isAuthenticated, isLoading, login, register, googleLogin } = useAuth();
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>('login');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [forgotSuccess, setForgotSuccess] = useState(false);
   const [form, setForm] = useState({
     email: '',
     password: '',
@@ -99,7 +101,10 @@ export function RequireAuth({ children, message = 'Inicia sesión para continuar
     setError('');
     setIsSubmitting(true);
     try {
-      if (mode === 'login') {
+      if (mode === 'forgot') {
+        await authAPI.forgotPassword(form.email);
+        setForgotSuccess(true);
+      } else if (mode === 'login') {
         await login(form.email, form.password);
       } else {
         if (!form.name.trim()) {
@@ -129,9 +134,29 @@ export function RequireAuth({ children, message = 'Inicia sesión para continuar
 
       <Card>
         <CardHeader>
-          <CardTitle>{mode === 'login' ? 'Iniciar Sesión' : 'Crear Cuenta'}</CardTitle>
+          <CardTitle>
+            {mode === 'login' ? 'Iniciar Sesión' : mode === 'register' ? 'Crear Cuenta' : 'Recuperar Contraseña'}
+          </CardTitle>
         </CardHeader>
         <CardContent>
+          {/* Forgot password success */}
+          {mode === 'forgot' && forgotSuccess ? (
+            <div className="text-center space-y-4 py-4">
+              <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+                <Mail className="w-7 h-7 text-primary" />
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Si existe una cuenta con ese email, recibirás un enlace para restablecer tu contraseña.
+              </p>
+              <button
+                type="button"
+                className="text-sm text-primary hover:text-primary/80 transition-colors"
+                onClick={() => { setMode('login'); setForgotSuccess(false); setError(''); }}
+              >
+                Volver al inicio de sesión
+              </button>
+            </div>
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === 'register' && (
               <>
@@ -159,14 +184,29 @@ export function RequireAuth({ children, message = 'Inicia sesión para continuar
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
-            <Input
-              label="Contraseña"
-              type="password"
-              placeholder="••••••••"
-              required
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-            />
+            {mode !== 'forgot' && (
+              <div>
+                <Input
+                  label="Contraseña"
+                  type="password"
+                  placeholder="••••••••"
+                  required
+                  value={form.password}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                />
+                {mode === 'login' && (
+                  <div className="text-right mt-1">
+                    <button
+                      type="button"
+                      className="text-xs text-muted-foreground hover:text-primary transition-colors"
+                      onClick={() => { setMode('forgot'); setError(''); }}
+                    >
+                      ¿Olvidaste tu contraseña?
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {error && (
               <p className="text-sm text-destructive">{error}</p>
@@ -176,49 +216,69 @@ export function RequireAuth({ children, message = 'Inicia sesión para continuar
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  {mode === 'login' ? 'Ingresando...' : 'Creando cuenta...'}
+                  {mode === 'forgot' ? 'Enviando...' : mode === 'login' ? 'Ingresando...' : 'Creando cuenta...'}
                 </>
               ) : mode === 'login' ? (
                 <>
                   <LogIn className="w-4 h-4 mr-2" />
                   Iniciar Sesión
                 </>
-              ) : (
+              ) : mode === 'register' ? (
                 <>
                   <UserPlus className="w-4 h-4 mr-2" />
                   Crear Cuenta
                 </>
+              ) : (
+                <>
+                  <Mail className="w-4 h-4 mr-2" />
+                  Enviar enlace
+                </>
               )}
             </Button>
+
+            {mode === 'forgot' && (
+              <button
+                type="button"
+                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-primary transition-colors mx-auto"
+                onClick={() => { setMode('login'); setError(''); }}
+              >
+                <ArrowLeft className="w-3 h-3" /> Volver al inicio de sesión
+              </button>
+            )}
           </form>
+          )}
 
-          {/* Divider */}
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border" />
+          {/* Divider + Google — solo en login/register */}
+          {mode !== 'forgot' && (
+            <>
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="bg-card px-3 text-muted-foreground">o</span>
+                </div>
+              </div>
+              <div ref={googleButtonRef} className="flex justify-center" />
+            </>
+          )}
+
+          {mode !== 'forgot' && (
+            <div className="mt-4 text-center">
+              <button
+                type="button"
+                className="text-sm text-primary hover:text-primary/80 transition-colors"
+                onClick={() => {
+                  setMode(mode === 'login' ? 'register' : 'login');
+                  setError('');
+                }}
+              >
+                {mode === 'login'
+                  ? '¿No tienes cuenta? Regístrate'
+                  : '¿Ya tienes cuenta? Inicia sesión'}
+              </button>
             </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="bg-card px-3 text-muted-foreground">o</span>
-            </div>
-          </div>
-
-          {/* Google Sign-In */}
-          <div ref={googleButtonRef} className="flex justify-center" />
-
-          <div className="mt-4 text-center">
-            <button
-              type="button"
-              className="text-sm text-primary hover:text-primary/80 transition-colors"
-              onClick={() => {
-                setMode(mode === 'login' ? 'register' : 'login');
-                setError('');
-              }}
-            >
-              {mode === 'login'
-                ? '¿No tienes cuenta? Regístrate'
-                : '¿Ya tienes cuenta? Inicia sesión'}
-            </button>
-          </div>
+          )}
         </CardContent>
       </Card>
     </div>

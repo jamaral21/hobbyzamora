@@ -233,6 +233,12 @@ export const authAPI = {
     localStorage.setItem('token', data.token);
     return data;
   },
+
+  forgotPassword: (email: string) =>
+    fetchAPI<{ message: string }>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    }),
 };
 
 // Products API
