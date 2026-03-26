@@ -1,6 +1,15 @@
 import { Package } from 'lucide-react';
-import { Product } from '../../data/mockData';
 import { Badge } from '../design-system/Badge';
+
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  sku: string;
+  images: string[];
+  stock: number;
+  isPresale?: boolean;
+}
 
 export interface POSProductGridProps {
   products: Product[];

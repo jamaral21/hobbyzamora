@@ -1,15 +1,13 @@
-import { useState, useMemo } from 'react';
-import { Search, Barcode, Loader2, UserPlus, X } from 'lucide-react';
-import { Link } from 'react-router';
+import { useState } from 'react';
+import { Search, Barcode, Loader2, UserPlus, X, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent } from '../../components/design-system/Card';
 import { Button } from '../../components/design-system/Button';
 import { POSCart } from '../../components/pos/POSCart';
 import { POSProductGrid } from '../../components/pos/POSProductGrid';
 import { PaymentSelector, PaymentMethod } from '../../components/pos/PaymentSelector';
 import { Modal } from '../../components/design-system/Modal';
-import { useMutation } from '../../hooks/useData';
-import { posAPI } from '../../lib/api';
-import { mockProducts, mockCustomers, Customer } from '../../data/mockData';
+import { usePOSProducts, useCustomers, useMutation } from '../../hooks/useData';
+import { posAPI, Customer } from '../../lib/api';
 
 interface Product {
   id: string;
@@ -31,26 +29,15 @@ export default function POSPage() {
   const [presaleAttemptProduct, setPresaleAttemptProduct] = useState<Product | null>(null);
   const [customerTab, setCustomerTab] = useState<'search' | 'create'>('search');
   const [newCustomerForm, setNewCustomerForm] = useState({ name: '', email: '', phone: '' });
+  const [saleResult, setSaleResult] = useState<{ orderNumber: string; change: number; method: PaymentMethod } | null>(null);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
-  const { data: products, isLoading } = { data: mockProducts, isLoading: false };
+  const { data: products, isLoading } = usePOSProducts(searchQuery || undefined);
+  const { data: customers, isLoading: customersLoading } = useCustomers(
+    { search: customerSearch || undefined },
+    { enabled: isCustomerModalOpen }
+  );
   const createSale = useMutation(posAPI.createSale);
-
-  const filteredProducts = useMemo(() => {
-    return (products || []).filter((p: Product) =>
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.sku.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [products, searchQuery]);
-
-  const filteredCustomers = useMemo(() => {
-    if (!customerSearch) return mockCustomers;
-    const q = customerSearch.toLowerCase();
-    return mockCustomers.filter(c =>
-      c.name.toLowerCase().includes(q) ||
-      c.email.toLowerCase().includes(q) ||
-      c.phone.includes(customerSearch)
-    );
-  }, [customerSearch]);
 
   const handleAddToCart = (product: Product) => {
     // Presale validation: require customer
@@ -129,27 +116,34 @@ export default function POSPage() {
     handleSelectCustomer(newCustomer);
   };
 
-  const handlePayment = async (method: PaymentMethod) => {
+  const handlePayment = async (method: PaymentMethod, amountPaid?: number) => {
     const methodMap: Record<PaymentMethod, 'CASH' | 'CARD' | 'TRANSFER'> = {
       card: 'CARD', cash: 'CASH', digital: 'TRANSFER',
     };
+    setPaymentError(null);
     try {
-      await createSale.mutate({
-        items: cartItems.map(item => ({ productId: item.id, quantity: item.quantity })),
+      const result = await createSale.mutate({
+        items: cartItems.map(item => ({ productId: item.id, quantity: item.quantity, price: item.price })),
         paymentMethod: methodMap[method],
+        amountPaid,
         ...(selectedCustomer && {
           customerName: selectedCustomer.name,
           customerEmail: selectedCustomer.email,
           customerPhone: selectedCustomer.phone,
         }),
       });
+      setSaleResult({ orderNumber: result.orderNumber, change: result.change ?? 0, method });
       setCartItems([]);
-      setIsPaymentModalOpen(false);
-      alert('Pago exitoso!');
-    } catch (error) {
-      console.error('Payment failed:', error);
-      alert('Error en el pago. Intenta de nuevo.');
+      setSelectedCustomer(null);
+    } catch (error: any) {
+      setPaymentError(error?.message || 'Error en el pago. Intenta de nuevo.');
     }
+  };
+
+  const handleClosePaymentModal = () => {
+    setIsPaymentModalOpen(false);
+    setSaleResult(null);
+    setPaymentError(null);
   };
 
   const total = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -230,7 +224,7 @@ export default function POSPage() {
                 </div>
               ) : (
                 <POSProductGrid
-                  products={filteredProducts}
+                  products={products || []}
                   onSelect={handleAddToCart}
                 />
               )}
@@ -253,15 +247,39 @@ export default function POSPage() {
       {/* Payment Modal */}
       <Modal
         isOpen={isPaymentModalOpen}
-        onClose={() => setIsPaymentModalOpen(false)}
-        title="Método de Pago"
+        onClose={handleClosePaymentModal}
+        title={saleResult ? 'Venta Completada' : 'Método de Pago'}
         size="md"
       >
-        <PaymentSelector
-          total={total}
-          onSelectPayment={handlePayment}
-          onCancel={() => setIsPaymentModalOpen(false)}
-        />
+        {saleResult ? (
+          <div className="text-center py-4 space-y-4">
+            <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto" />
+            <div>
+              <h3 className="text-xl text-foreground mb-1">¡Pago exitoso!</h3>
+              <p className="text-sm text-muted-foreground">Orden #{saleResult.orderNumber}</p>
+            </div>
+            {saleResult.method === 'cash' && saleResult.change > 0 && (
+              <div className="bg-green-500/10 border border-green-500/20 rounded-xl p-4">
+                <p className="text-sm text-muted-foreground">Vuelto al cliente</p>
+                <p className="text-4xl text-green-500">${saleResult.change.toLocaleString('es-CL')}</p>
+              </div>
+            )}
+            <Button fullWidth onClick={handleClosePaymentModal}>Nueva Venta</Button>
+          </div>
+        ) : (
+          <>
+            {paymentError && (
+              <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-sm">
+                {paymentError}
+              </div>
+            )}
+            <PaymentSelector
+              total={total}
+              onSelectPayment={handlePayment}
+              onCancel={handleClosePaymentModal}
+            />
+          </>
+        )}
       </Modal>
 
       {/* Customer Selection Modal */}
@@ -317,7 +335,9 @@ export default function POSPage() {
                 />
               </div>
               <div className="space-y-1 max-h-64 overflow-auto">
-                {filteredCustomers.length === 0 ? (
+                {customersLoading ? (
+                  <div className="flex justify-center py-8"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+                ) : (customers || []).length === 0 ? (
                   <div className="text-center py-8">
                     <p className="text-sm text-muted-foreground">No se encontraron clientes</p>
                     <button
@@ -328,7 +348,7 @@ export default function POSPage() {
                     </button>
                   </div>
                 ) : (
-                  filteredCustomers.map((customer) => (
+                  (customers || []).map((customer) => (
                     <button
                       key={customer.id}
                       onClick={() => handleSelectCustomer(customer)}
