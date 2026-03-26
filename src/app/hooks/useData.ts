@@ -167,6 +167,10 @@ export function useInstagramStats() {
   return useFetch(() => instagramAPI.getStats(), []);
 }
 
+export function useInstagramHealth() {
+  return useFetch(() => instagramAPI.getHealth(), []);
+}
+
 // POS hooks
 export function usePOSProducts(search?: string, category?: string) {
   return useFetch(

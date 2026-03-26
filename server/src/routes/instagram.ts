@@ -6,6 +6,49 @@ import { askProductAI } from '../lib/productAI.js';
 
 const router = Router();
 
+// Health check — verifica conexión real con Meta Graph API
+router.get('/health', authenticate, requireRole('ADMIN', 'STAFF'), async (_req, res) => {
+  const token = process.env.INSTAGRAM_ACCESS_TOKEN;
+  const appId = process.env.INSTAGRAM_APP_ID;
+
+  if (!token) {
+    return res.json({ connected: false, error: 'INSTAGRAM_ACCESS_TOKEN no configurado' });
+  }
+
+  try {
+    const response = await fetch(
+      `https://graph.facebook.com/v19.0/me?fields=id,name&access_token=${token}`
+    );
+    const data = await response.json() as any;
+
+    if (data.error) {
+      return res.json({
+        connected: false,
+        error: data.error.message,
+        code: data.error.code,
+      });
+    }
+
+    // También verificar token debug info
+    const debugResponse = await fetch(
+      `https://graph.facebook.com/v19.0/debug_token?input_token=${token}&access_token=${appId}|${process.env.INSTAGRAM_APP_SECRET}`
+    );
+    const debugData = await debugResponse.json() as any;
+    const tokenInfo = debugData.data;
+
+    return res.json({
+      connected: true,
+      pageId: data.id,
+      pageName: data.name,
+      tokenValid: tokenInfo?.is_valid ?? true,
+      tokenExpires: tokenInfo?.expires_at ? new Date(tokenInfo.expires_at * 1000).toISOString() : 'never',
+      scopes: tokenInfo?.scopes ?? [],
+    });
+  } catch (error: any) {
+    return res.json({ connected: false, error: error.message });
+  }
+});
+
 // Get all conversations
 router.get('/conversations', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) => {
   try {

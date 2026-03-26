@@ -1,50 +1,91 @@
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { Card } from '../../components/design-system/Card';
-import { useInstagramStats, useInstagramConversations } from '../../hooks/useData';
-import { Loader2 } from 'lucide-react';
+import { useInstagramStats, useInstagramConversations, useInstagramHealth } from '../../hooks/useData';
+import { Loader2, CheckCircle2, XCircle, RefreshCw } from 'lucide-react';
+import { Button } from '../../components/design-system/Button';
 
 export default function InstagramHealthPage() {
-  const { data: stats, isLoading: statsLoading, error: statsError } = useInstagramStats();
-  const { data: conversations, isLoading: convLoading, error: convError } = useInstagramConversations();
+  const { data: health, isLoading: healthLoading, refetch: refetchHealth } = useInstagramHealth();
+  const { data: stats, isLoading: statsLoading } = useInstagramStats();
+  const { data: conversations, isLoading: convLoading } = useInstagramConversations();
 
   return (
     <AdminLayout>
-      <div className="max-w-4xl mx-auto py-8 space-y-8">
+      <div className="max-w-4xl mx-auto py-8 space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-foreground">Instagram — Estado de conexión</h1>
+          <Button variant="outline" size="sm" onClick={refetchHealth}>
+            <RefreshCw className="w-4 h-4 mr-2" /> Actualizar
+          </Button>
+        </div>
+
+        {/* Conexión con Meta */}
         <Card>
-          <h2 className="text-xl font-bold mb-2">Estado de conexión a Instagram</h2>
-          {statsLoading ? (
-            <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="animate-spin" />Cargando...</div>
-          ) : statsError ? (
-            <div className="text-red-500">No conectado a Instagram</div>
+          <h2 className="font-semibold text-lg mb-4">Conexión con Meta Graph API</h2>
+          {healthLoading ? (
+            <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="animate-spin w-4 h-4" /> Verificando...</div>
+          ) : health?.connected ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-green-500 font-semibold">
+                <CheckCircle2 className="w-5 h-5" /> Conectado correctamente a Meta
+              </div>
+              <ul className="text-sm space-y-1 text-muted-foreground">
+                <li><b>Página/Cuenta:</b> {health.pageName} <span className="text-xs">({health.pageId})</span></li>
+                <li><b>Token válido:</b> {health.tokenValid ? '✅ Sí' : '❌ No'}</li>
+                <li><b>Expira:</b> {health.tokenExpires === 'never' ? 'Nunca (token permanente)' : health.tokenExpires}</li>
+                {health.scopes && health.scopes.length > 0 && (
+                  <li><b>Permisos:</b> {health.scopes.join(', ')}</li>
+                )}
+              </ul>
+            </div>
           ) : (
-            <ul className="grid grid-cols-2 gap-4">
-              <li><b>Conversaciones activas:</b> {stats?.activeConversations}</li>
-              <li><b>Conversaciones pendientes:</b> {stats?.pendingConversations}</li>
-              <li><b>Conversaciones hoy:</b> {stats?.todayConversations}</li>
-              <li><b>Mensajes hoy:</b> {stats?.todayMessages}</li>
-              <li><b>Tasa de conversión:</b> {stats?.conversionRate}%</li>
-              <li><b>Tiempo resp. promedio:</b> {stats?.avgResponseTime}</li>
+            <div className="flex items-center gap-2 text-red-500 font-semibold">
+              <XCircle className="w-5 h-5" />
+              No conectado: {health?.error ?? 'Error desconocido'}
+              {health?.code && <span className="text-xs text-muted-foreground ml-2">(código {health.code})</span>}
+            </div>
+          )}
+        </Card>
+
+        {/* Stats */}
+        <Card>
+          <h2 className="font-semibold text-lg mb-4">Estadísticas</h2>
+          {statsLoading ? (
+            <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="animate-spin w-4 h-4" /> Cargando...</div>
+          ) : (
+            <ul className="grid grid-cols-2 gap-4 text-sm">
+              <li><b>Conversaciones activas:</b> {stats?.activeConversations ?? 0}</li>
+              <li><b>Conversaciones pendientes:</b> {stats?.pendingConversations ?? 0}</li>
+              <li><b>Conversaciones hoy:</b> {stats?.todayConversations ?? 0}</li>
+              <li><b>Mensajes hoy:</b> {stats?.todayMessages ?? 0}</li>
+              <li><b>Tasa de conversión:</b> {stats?.conversionRate ?? 0}%</li>
+              <li><b>Resp. promedio:</b> {stats?.avgResponseTime ?? '-'}</li>
             </ul>
           )}
         </Card>
 
+        {/* Chats */}
         <Card>
-          <h2 className="text-xl font-bold mb-2">Chats iniciados</h2>
+          <h2 className="font-semibold text-lg mb-4">Chats iniciados</h2>
           {convLoading ? (
-            <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="animate-spin" />Cargando...</div>
-          ) : convError ? (
-            <div className="text-red-500">Error al cargar chats</div>
+            <div className="flex items-center gap-2 text-muted-foreground"><Loader2 className="animate-spin w-4 h-4" /> Cargando...</div>
           ) : conversations && conversations.length > 0 ? (
-            <ul className="divide-y divide-border">
+            <ul className="divide-y divide-border text-sm">
               {conversations.map((conv: any) => (
-                <li key={conv.id} className="py-2">
-                  <b>{conv.customerName || conv.instagramUserId}</b> <span className="text-xs text-muted-foreground">({conv.status})</span>
-                  <div className="text-xs text-muted-foreground">Último mensaje: {new Date(conv.lastMessageAt).toLocaleString()}</div>
+                <li key={conv.id} className="py-2 flex items-center justify-between">
+                  <div>
+                    <span className="font-medium">{conv.customerName || conv.instagramUserId}</span>
+                    <span className="text-xs text-muted-foreground ml-2">({conv.instagramUserId})</span>
+                  </div>
+                  <div className="text-right text-xs text-muted-foreground">
+                    <div>{conv.status}</div>
+                    <div>{new Date(conv.lastMessageAt).toLocaleString()}</div>
+                  </div>
                 </li>
               ))}
             </ul>
           ) : (
-            <div className="text-muted-foreground">No hay chats iniciados.</div>
+            <p className="text-muted-foreground text-sm">No hay chats iniciados aún.</p>
           )}
         </Card>
       </div>

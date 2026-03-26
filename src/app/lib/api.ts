@@ -591,6 +591,18 @@ export const instagramAPI = {
       conversionRate: number;
       avgResponseTime: string;
     }>('/instagram/stats'),
+
+  getHealth: () =>
+    fetchAPI<{
+      connected: boolean;
+      pageId?: string;
+      pageName?: string;
+      tokenValid?: boolean;
+      tokenExpires?: string;
+      scopes?: string[];
+      error?: string;
+      code?: number;
+    }>('/instagram/health'),
 };
 
 // Payments API
