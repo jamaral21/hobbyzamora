@@ -152,6 +152,19 @@ router.patch('/conversations/:id/status', authenticate, requireRole('ADMIN', 'ST
   }
 });
 
+// Webhook verification (GET) — Meta envía esto al configurar el webhook
+router.get('/webhook', (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
+
+  if (mode === 'subscribe' && token === process.env.INSTAGRAM_VERIFY_TOKEN) {
+    console.log('Webhook verified by Meta');
+    return res.status(200).send(challenge);
+  }
+  return res.status(403).json({ error: 'Invalid verify token' });
+});
+
 // Webhook for receiving Instagram messages (from Meta Graph API)
 router.post('/webhook', async (req, res) => {
   try {
@@ -171,14 +184,6 @@ router.post('/webhook', async (req, res) => {
     }
 
     const { entry } = req.body;
-
-    // Verify webhook (for initial setup)
-    if (req.query['hub.mode'] === 'subscribe') {
-      if (req.query['hub.verify_token'] === process.env.INSTAGRAM_VERIFY_TOKEN) {
-        return res.send(req.query['hub.challenge']);
-      }
-      return res.status(403).json({ error: 'Invalid verify token' });
-    }
 
     // Process incoming messages
     for (const e of entry || []) {

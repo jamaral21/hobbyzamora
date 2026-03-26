@@ -21,6 +21,8 @@ import OrderDetailPage from './pages/admin/OrderDetailPage';
 import CustomersPage from './pages/admin/CustomersPage';
 import InstagramAgentPage from './pages/admin/InstagramAgentPage';
 
+import InstagramHealthPage from './pages/admin/InstagramHealthPage';
+
 // POS Pages
 import POSPage from './pages/pos/POSPage';
 
@@ -97,6 +99,11 @@ export const router = createBrowserRouter([
   {
     path: '/admin/instagram',
     Component: InstagramAgentPage,
+  },
+
+  {
+    path: '/admin/instagram-chat/health',
+    Component: InstagramHealthPage,
   },
 
   // POS Routes
