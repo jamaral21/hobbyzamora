@@ -84,15 +84,6 @@ export default function HomePage() {
 
   return (
     <StoreLayout>
-      {/* Developer Navigation Badge */}
-      <div className="fixed bottom-6 right-6 z-50">
-        <Link to="/nav">
-          <Button size="sm" variant="secondary" className="shadow-lg backdrop-blur-sm">
-            🗺️ Ver Páginas
-          </Button>
-        </Link>
-      </div>
-
       {/* ═══════════════════════════════════════════
           HERO BANNER — Full-width visual
       ═══════════════════════════════════════════ */}

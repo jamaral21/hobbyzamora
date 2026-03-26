@@ -156,15 +156,6 @@ export default function POSPage() {
 
   return (
     <div className="h-screen bg-background flex flex-col">
-      {/* Developer Navigation Badge */}
-      <div className="fixed bottom-6 left-6 z-50">
-        <Link to="/nav">
-          <Button size="sm" className="shadow-lg">
-            🗺️ Ver Páginas
-          </Button>
-        </Link>
-      </div>
-
       {/* Header */}
       <div className="bg-card border-b border-border px-6 py-4">
         <div className="flex items-center justify-between">

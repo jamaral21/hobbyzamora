@@ -31,15 +31,6 @@ export default function DashboardPage() {
 
   return (
     <AdminLayout>
-      {/* Developer Navigation Badge */}
-      <div className="fixed bottom-6 right-6 z-50">
-        <Link to="/nav">
-          <Button size="sm" className="shadow-lg">
-            🗺️ View All Pages
-          </Button>
-        </Link>
-      </div>
-
       <div className="mb-8">
         <h1 className="text-3xl text-foreground mb-2">Dashboard</h1>
         <p className="text-muted-foreground">
