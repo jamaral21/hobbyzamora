@@ -1,9 +1,15 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { OAuth2Client } from 'google-auth-library';
 import { prisma } from '../index.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
+import {
+  sendWelcomeEmail,
+  sendPasswordResetEmail,
+  sendPasswordChangedEmail,
+} from '../lib/emailService.js';
 
 const router = Router();
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -45,6 +51,9 @@ router.post('/register', async (req, res) => {
       process.env.JWT_SECRET || 'secret',
       { expiresIn: '7d' as any }
     );
+
+    // Send welcome email (non-blocking)
+    sendWelcomeEmail(user.email, user.name || user.email).catch(() => {});
 
     res.status(201).json({ user, token });
   } catch (error) {
@@ -163,6 +172,9 @@ router.post('/change-password', authenticate, async (req: AuthRequest, res) => {
       data: { password: hashedPassword },
     });
 
+    // Notify user of password change
+    sendPasswordChangedEmail(user.email, user.name || user.email).catch(() => {});
+
     res.json({ message: 'Password changed successfully' });
   } catch (error) {
     console.error('Change password error:', error);
@@ -231,6 +243,71 @@ router.post('/google', async (req, res) => {
   } catch (error) {
     console.error('Google auth error:', error);
     res.status(401).json({ error: 'Google authentication failed' });
+  }
+});
+
+// Forgot password — genera token y envia email
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email requerido' });
+
+    const user = await prisma.user.findUnique({ where: { email } });
+    // Siempre responder 200 para no revelar si el email existe
+    if (!user) return res.json({ message: 'Si el email existe, recibirás un correo.' });
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        resetToken,
+        resetTokenExpires: expires,
+      } as any,
+    });
+
+    sendPasswordResetEmail(user.email, user.name || user.email, resetToken).catch(() => {});
+
+    res.json({ message: 'Si el email existe, recibirás un correo.' });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ error: 'Error al procesar solicitud' });
+  }
+});
+
+// Reset password con token
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) return res.status(400).json({ error: 'Token y nueva contraseña requeridos' });
+
+    const user = await (prisma.user as any).findFirst({
+      where: {
+        resetToken: token,
+        resetTokenExpires: { gt: new Date() },
+      },
+    });
+
+    if (!user) return res.status(400).json({ error: 'Token inválido o expirado' });
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        password: hashedPassword,
+        resetToken: null,
+        resetTokenExpires: null,
+      } as any,
+    });
+
+    sendPasswordChangedEmail(user.email, user.name || user.email).catch(() => {});
+
+    res.json({ message: 'Contraseña restablecida exitosamente' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Error al restablecer contraseña' });
   }
 });
 

@@ -1,6 +1,11 @@
 import { Router } from 'express';
 import { prisma } from '../index.js';
 import { authenticate, requireRole, optionalAuth, AuthRequest } from '../middleware/auth.js';
+import {
+  sendOrderConfirmationEmail,
+  sendOrderStatusEmail,
+  sendNewOrderAdminEmail,
+} from '../lib/emailService.js';
 
 const router = Router();
 
@@ -270,7 +275,7 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
       });
     }
 
-    res.status(201).json({
+    const orderResponse = {
       ...order,
       subtotal: parseFloat(order.subtotal.toString()),
       tax: parseFloat(order.tax.toString()),
@@ -282,7 +287,13 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
         price: parseFloat(i.price.toString()),
         cost: parseFloat(i.cost.toString()),
       })),
-    });
+    };
+
+    // Emails (non-blocking)
+    sendOrderConfirmationEmail(orderResponse).catch(() => {});
+    sendNewOrderAdminEmail(orderResponse).catch(() => {});
+
+    res.status(201).json(orderResponse);
   } catch (error) {
     console.error('Create order error:', error);
     res.status(500).json({ error: 'Failed to create order' });
@@ -320,14 +331,26 @@ router.patch('/:id/status', authenticate, requireRole('ADMIN', 'STAFF'), async (
       include: { items: true, payments: true },
     });
 
-    res.json({
+    const updatedResponse = {
       ...updated,
       subtotal: parseFloat(updated.subtotal.toString()),
       tax: parseFloat(updated.tax.toString()),
       shipping: parseFloat(updated.shipping.toString()),
       discount: parseFloat(updated.discount.toString()),
       total: parseFloat(updated.total.toString()),
-    });
+      items: updated.items.map(i => ({
+        ...i,
+        price: parseFloat(i.price.toString()),
+        cost: parseFloat(i.cost.toString()),
+      })),
+    };
+
+    // Notificar al cliente del cambio de estado (si tiene email)
+    if (updated.customerEmail && ['CONFIRMED','PROCESSING','SHIPPED','DELIVERED','CANCELLED'].includes(status)) {
+      sendOrderStatusEmail(updatedResponse).catch(() => {});
+    }
+
+    res.json(updatedResponse);
   } catch (error) {
     console.error('Update order status error:', error);
     res.status(500).json({ error: 'Failed to update order status' });
