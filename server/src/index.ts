@@ -23,6 +23,7 @@ import analyticsRoutes from './routes/analytics.js';
 import instagramRoutes from './routes/instagram.js';
 import posRoutes from './routes/pos.js';
 import paymentRoutes from './routes/payments.js';
+import chatRoutes from './routes/chat.js';
 
 // Initialize Prisma
 export const prisma = new PrismaClient();
@@ -58,6 +59,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/instagram', instagramRoutes);
 app.use('/api/pos', posRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/chat', chatRoutes);
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

@@ -2,6 +2,7 @@ import { Outlet, Link } from 'react-router';
 import { ShoppingCart, Search, User, Menu } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { ChatWidget } from '../components/chat/ChatWidget';
 
 export function StorefrontLayout() {
   return (
@@ -59,6 +60,9 @@ export function StorefrontLayout() {
       <main className="flex-1">
         <Outlet />
       </main>
+
+      {/* Chat Widget */}
+      <ChatWidget />
 
       {/* Footer */}
       <footer className="border-t bg-gray-50 py-12">

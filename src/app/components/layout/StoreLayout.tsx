@@ -1,4 +1,5 @@
 import { StoreNavbar } from './StoreNavbar';
+import { ChatWidget } from '../chat/ChatWidget';
 
 export function StoreLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -46,6 +47,7 @@ export function StoreLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </footer>
+      <ChatWidget />
     </div>
   );
 }

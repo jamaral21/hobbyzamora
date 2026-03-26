@@ -1,6 +1,8 @@
 import { Router } from 'express';
+import { createHmac } from 'crypto';
 import { prisma } from '../index.js';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
+import { askProductAI } from '../lib/productAI.js';
 
 const router = Router();
 
@@ -153,6 +155,21 @@ router.patch('/conversations/:id/status', authenticate, requireRole('ADMIN', 'ST
 // Webhook for receiving Instagram messages (from Meta Graph API)
 router.post('/webhook', async (req, res) => {
   try {
+    // Verificar firma X-Hub-Signature-256 enviada por Meta
+    const appSecret = process.env.INSTAGRAM_APP_SECRET;
+    if (appSecret) {
+      const signature = req.headers['x-hub-signature-256'] as string | undefined;
+      if (!signature) {
+        return res.status(403).json({ error: 'Missing signature' });
+      }
+      const expected = 'sha256=' + createHmac('sha256', appSecret)
+        .update(JSON.stringify(req.body))
+        .digest('hex');
+      if (signature !== expected) {
+        return res.status(403).json({ error: 'Invalid signature' });
+      }
+    }
+
     const { entry } = req.body;
 
     // Verify webhook (for initial setup)
@@ -228,48 +245,29 @@ router.post('/webhook', async (req, res) => {
   }
 });
 
-// Simple bot response generator
+// Bot response generator usando OpenAI a través del módulo compartido
 async function generateBotResponse(message: string, conversationId: string): Promise<string> {
-  const lowerMessage = message.toLowerCase();
+  // Recuperar historial reciente de la conversación para dar contexto a la IA
+  const recentMessages = await prisma.instagramMessage.findMany({
+    where: { conversationId },
+    orderBy: { createdAt: 'asc' },
+    take: 10,
+    select: { sender: true, content: true },
+  });
 
-  // Check for product queries
-  if (lowerMessage.includes('precio') || lowerMessage.includes('price') || lowerMessage.includes('cuanto') || lowerMessage.includes('how much')) {
-    const products = await prisma.product.findMany({
-      where: { status: 'ACTIVE' },
-      take: 5,
-    });
+  const history = recentMessages
+    .filter((m) => m.sender !== 'BOT' || recentMessages.indexOf(m) > 0)
+    .map((m) => ({
+      role: (m.sender === 'CUSTOMER' ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: m.content,
+    }));
 
-    if (products.length > 0) {
-      const productList = products.map(p => 
-        `• ${p.name}: $${parseFloat(p.price.toString()).toFixed(2)}`
-      ).join('\n');
-
-      return `¡Hola! Aquí están algunos de nuestros productos:\n\n${productList}\n\n¿Te interesa alguno en particular?`;
-    }
+  try {
+    return await askProductAI(message, history);
+  } catch (error) {
+    console.error('Instagram bot AI error:', error);
+    return '¡Hola! Recibí tu mensaje. Un momento mientras reviso tu consulta sobre nuestros productos. 🎨';
   }
-
-  // Check for stock queries
-  if (lowerMessage.includes('stock') || lowerMessage.includes('disponible') || lowerMessage.includes('available')) {
-    return '¡Claro! Permíteme verificar la disponibilidad. ¿Qué producto te interesa?';
-  }
-
-  // Check for order/buy intent
-  if (lowerMessage.includes('comprar') || lowerMessage.includes('ordenar') || lowerMessage.includes('buy') || lowerMessage.includes('order')) {
-    return '¡Excelente! Para realizar tu pedido, puedes visitar nuestra tienda en línea o te puedo ayudar a crear tu pedido aquí. ¿Qué producto te gustaría ordenar?';
-  }
-
-  // Check for greeting
-  if (lowerMessage.includes('hola') || lowerMessage.includes('hi') || lowerMessage.includes('hello') || lowerMessage.includes('buenos')) {
-    return '¡Hola! Bienvenido a HobbyZamora. 🎨 ¿En qué puedo ayudarte hoy? Tenemos una gran variedad de artículos para hobbies y manualidades.';
-  }
-
-  // Check for thanks
-  if (lowerMessage.includes('gracias') || lowerMessage.includes('thanks') || lowerMessage.includes('thank you')) {
-    return '¡De nada! Estoy aquí para ayudarte. Si tienes alguna otra pregunta, no dudes en escribirme. 😊';
-  }
-
-  // Default response
-  return '¡Gracias por tu mensaje! Un momento mientras reviso tu consulta. Si prefieres hablar con alguien del equipo, solo dime "quiero hablar con un humano".';
 }
 
 // Get agent stats
