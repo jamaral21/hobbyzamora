@@ -282,8 +282,8 @@ export const productsAPI = {
 
   getCategories: () => fetchAPI<string[]>('/products/meta/categories'),
 
-  importCSV: (products: Record<string, string>[]) =>
-    fetchAPI<{ created: number; updated: number; skipped: number; errors: string[] }>('/products/import', {
+  importCSV: (products: Record<string, string>[], presale = false) =>
+    fetchAPI<{ created: number; updated: number; skipped: number; errors: string[] }>(`/products/import${presale ? '?presale=true' : ''}`, {
       method: 'POST',
       body: JSON.stringify({ products }),
     }),

@@ -307,6 +307,7 @@ router.delete('/:id', authenticate, requireRole('ADMIN'), async (req: AuthReques
 router.post('/import', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
   try {
     const { products: rows } = req.body;
+    const forcePresale = req.query.presale === 'true';
 
     if (!Array.isArray(rows) || rows.length === 0) {
       return res.status(400).json({ error: 'No products provided' });
@@ -344,6 +345,11 @@ router.post('/import', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
         continue;
       }
 
+      const isPresale = forcePresale;
+      const presaleMaxQty = row.presaleMaxQty ? parseInt(row.presaleMaxQty) : null;
+      const presaleAvailQty = row.presaleAvailQty ? parseInt(row.presaleAvailQty) : null;
+      const presaleEndDate = row.presaleEndDate ? new Date(row.presaleEndDate) : null;
+
       const productData = {
         name: row.name,
         description: row.description || null,
@@ -353,6 +359,10 @@ router.post('/import', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
         stock,
         images: JSON.stringify(row.images ? row.images.split('|').map((s: string) => s.trim()) : []),
         status: (row.status || 'ACTIVE').toUpperCase(),
+        isPresale,
+        presaleMaxQty,
+        presaleAvailQty,
+        presaleEndDate,
       };
 
       try {

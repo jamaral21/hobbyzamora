@@ -100,7 +100,7 @@ export default function ProductsPage() {
         setImportResult({ created: 0, updated: 0, skipped: 0, errors: ['El archivo CSV está vacío o no tiene datos.'] });
         return;
       }
-      const result = await productsAPI.importCSV(rows);
+      const result = await productsAPI.importCSV(rows, isPresalesView);
       setImportResult(result);
       refetch();
     } catch (err: any) {
@@ -112,14 +112,18 @@ export default function ProductsPage() {
   };
 
   const downloadTemplate = () => {
-    const header = 'sku,name,category,description,price,cost,stock,status,images';
-    const example = 'HBZ-100,"Producto Ejemplo","Categoría","Descripción del producto",29.99,15.00,50,ACTIVE,https://example.com/img1.jpg|https://example.com/img2.jpg';
+    const header = isPresalesView
+      ? 'sku,name,category,description,price,cost,presaleMaxQty,presaleAvailQty,presaleEndDate,images'
+      : 'sku,name,category,description,price,cost,stock,status,images';
+    const example = isPresalesView
+      ? 'HBZ-PRV-001,"Preventa Ejemplo","Categoría","Descripción",29.99,15.00,100,100,2026-06-30,'
+      : 'HBZ-100,"Producto Ejemplo","Categoría","Descripción del producto",29.99,15.00,50,ACTIVE,https://example.com/img1.jpg|https://example.com/img2.jpg';
     const csv = `${header}\n${example}`;
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'plantilla-productos.csv';
+    a.download = isPresalesView ? 'plantilla-preventas.csv' : 'plantilla-productos.csv';
     a.click();
     URL.revokeObjectURL(url);
   };
