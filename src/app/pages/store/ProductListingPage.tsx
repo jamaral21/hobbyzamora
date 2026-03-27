@@ -1,10 +1,19 @@
 import { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router';
 import { Search, SlidersHorizontal, Loader2 } from 'lucide-react';
 import { StoreLayout } from '../../components/layout/StoreLayout';
 import { ProductCard } from '../../components/store/ProductCard';
 import { Button } from '../../components/design-system/Button';
 import { Select } from '../../components/design-system/Input';
 import { useProducts } from '../../hooks/useData';
+
+const slugify = (text: string) =>
+  text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
 
 export default function ProductListingPage() {
   return (
@@ -16,14 +25,17 @@ export default function ProductListingPage() {
 
 export function ProductListingPageContent({ presalesOnly = false }: { presalesOnly?: boolean }) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [category, setCategory] = useState('all');
   const [sortBy, setSortBy] = useState('featured');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const categoryParam = searchParams.get('category') || 'all';
 
   const { data: products, isLoading } = useProducts();
 
   const baseProducts = useMemo(() => {
     if (!products) return [];
-    return presalesOnly ? products.filter((p: any) => p.isPresale) : products;
+    return presalesOnly
+      ? products.filter((p: any) => p.isPresale)
+      : products.filter((p: any) => !p.isPresale);
   }, [products, presalesOnly]);
 
   const categories = useMemo(() => {
@@ -31,12 +43,21 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
     return ['all', ...Array.from(new Set(baseProducts.map((p: any) => p.category)))];
   }, [baseProducts]);
 
+  const handleCategoryChange = (value: string) => {
+    if (value === 'all') {
+      searchParams.delete('category');
+    } else {
+      searchParams.set('category', slugify(value));
+    }
+    setSearchParams(searchParams, { replace: true });
+  };
+
   const filteredProducts = useMemo(() => {
     if (!baseProducts.length) return [];
     return baseProducts
       .filter((p: any) => {
         const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesCategory = category === 'all' || p.category === category;
+        const matchesCategory = categoryParam === 'all' || slugify(p.category) === categoryParam;
         return matchesSearch && matchesCategory;
       })
       .sort((a: any, b: any) => {
@@ -45,7 +66,7 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
         if (sortBy === 'name') return a.name.localeCompare(b.name);
         return 0;
       });
-  }, [baseProducts, searchQuery, category, sortBy]);
+  }, [baseProducts, searchQuery, categoryParam, sortBy]);
 
   if (isLoading) {
     return (
@@ -79,8 +100,8 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
           </div>
 
           <Select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
+            value={categoryParam === 'all' ? 'all' : (categories.find((c) => slugify(c) === categoryParam) || 'all')}
+            onChange={(e) => handleCategoryChange(e.target.value)}
             className="md:w-48"
           >
             {categories.map((cat) => (
