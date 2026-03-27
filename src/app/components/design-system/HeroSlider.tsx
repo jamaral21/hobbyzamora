@@ -106,6 +106,16 @@ function SlideImage({ src, alt, loading = 'lazy' }: { src: string; alt: string; 
 function SlideContent({ slide }: { slide: HeroSlide }) {
   const hasText = !!(slide.title || slide.subtitle);
   const hasCta = !!(slide.ctaText && slide.ctaHref);
+  const hasLink = !!slide.ctaHref;
+
+  // Image-only slide with a link — make the whole slide clickeable
+  if (!hasText && !hasCta && hasLink) {
+    return (
+      <Link to={slide.ctaHref!} className="absolute inset-0 z-[1]" aria-label={slide.title || 'Ver categoría'}>
+        <span className="sr-only">Ver categoría</span>
+      </Link>
+    );
+  }
 
   if (!hasText && !hasCta) return null;
 
