@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Barcode, Loader2, UserPlus, X, CheckCircle2 } from 'lucide-react';
+import { Search, Barcode, Loader2, UserPlus, X, CheckCircle2, ExternalLink } from 'lucide-react';
 import { Card, CardContent } from '../../components/design-system/Card';
 import { Button } from '../../components/design-system/Button';
 import { POSCart } from '../../components/pos/POSCart';
@@ -7,7 +7,7 @@ import { POSProductGrid } from '../../components/pos/POSProductGrid';
 import { PaymentSelector, PaymentMethod } from '../../components/pos/PaymentSelector';
 import { Modal } from '../../components/design-system/Modal';
 import { usePOSProducts, useCustomers, useMutation } from '../../hooks/useData';
-import { posAPI, Customer } from '../../lib/api';
+import { posAPI, paymentsAPI, Customer } from '../../lib/api';
 
 interface Product {
   id: string;
@@ -31,6 +31,12 @@ export default function POSPage() {
   const [newCustomerForm, setNewCustomerForm] = useState({ name: '', email: '', phone: '' });
   const [saleResult, setSaleResult] = useState<{ orderNumber: string; change: number; method: PaymentMethod } | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [getnetPending, setGetnetPending] = useState<{
+    orderNumber: string;
+    paymentId: string;
+    checkoutUrl: string;
+    isChecking: boolean;
+  } | null>(null);
 
   const { data: products, isLoading } = usePOSProducts(searchQuery || undefined);
   const { data: customers, isLoading: customersLoading } = useCustomers(
@@ -132,6 +138,21 @@ export default function POSPage() {
           customerPhone: selectedCustomer.phone,
         }),
       });
+
+      if (method === 'card') {
+        if (!result.checkoutUrl || !result.paymentId) {
+          throw new Error('Getnet no devolvió datos de checkout para el pago con tarjeta.');
+        }
+
+        setGetnetPending({
+          orderNumber: result.orderNumber,
+          paymentId: result.paymentId,
+          checkoutUrl: result.checkoutUrl,
+          isChecking: false,
+        });
+        return;
+      }
+
       setSaleResult({ orderNumber: result.orderNumber, change: result.change ?? 0, method });
       setCartItems([]);
       setSelectedCustomer(null);
@@ -140,10 +161,42 @@ export default function POSPage() {
     }
   };
 
+  const checkGetnetPayment = async () => {
+    if (!getnetPending) return;
+
+    setPaymentError(null);
+    setGetnetPending((prev) => (prev ? { ...prev, isChecking: true } : prev));
+
+    try {
+      const status = await paymentsAPI.querySession({ paymentId: getnetPending.paymentId });
+
+      if (status.status === 'APPROVED') {
+        setSaleResult({ orderNumber: getnetPending.orderNumber, change: 0, method: 'card' });
+        setCartItems([]);
+        setSelectedCustomer(null);
+        setGetnetPending(null);
+        return;
+      }
+
+      if (status.status === 'DECLINED' || status.status === 'CANCELLED') {
+        setPaymentError('Pago rechazado en Getnet. Puedes reintentar o cambiar método de pago.');
+        setGetnetPending(null);
+        return;
+      }
+
+      setPaymentError('El pago aún está pendiente en Getnet. Vuelve a verificar en unos segundos.');
+    } catch (error: any) {
+      setPaymentError(error?.message || 'No se pudo verificar el estado del pago en Getnet.');
+    } finally {
+      setGetnetPending((prev) => (prev ? { ...prev, isChecking: false } : prev));
+    }
+  };
+
   const handleClosePaymentModal = () => {
     setIsPaymentModalOpen(false);
     setSaleResult(null);
     setPaymentError(null);
+    setGetnetPending(null);
   };
 
   const total = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -248,7 +301,7 @@ export default function POSPage() {
       <Modal
         isOpen={isPaymentModalOpen}
         onClose={handleClosePaymentModal}
-        title={saleResult ? 'Venta Completada' : 'Método de Pago'}
+        title={saleResult ? 'Venta Completada' : getnetPending ? 'Pago con Getnet' : 'Método de Pago'}
         size="md"
       >
         {saleResult ? (
@@ -265,6 +318,44 @@ export default function POSPage() {
               </div>
             )}
             <Button fullWidth onClick={handleClosePaymentModal}>Nueva Venta</Button>
+          </div>
+        ) : getnetPending ? (
+          <div className="space-y-4">
+            {paymentError && (
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-sm">
+                {paymentError}
+              </div>
+            )}
+
+            <div className="rounded-xl border border-border p-4 bg-secondary/40">
+              <p className="text-sm text-muted-foreground">Orden</p>
+              <p className="text-base text-foreground">#{getnetPending.orderNumber}</p>
+              <p className="text-sm text-muted-foreground mt-2">
+                Abre Getnet para completar el pago y luego verifica el estado.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Button
+                fullWidth
+                onClick={() => window.open(getnetPending.checkoutUrl, '_blank', 'noopener,noreferrer')}
+                className="flex items-center justify-center gap-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Abrir Checkout Getnet
+              </Button>
+              <Button
+                variant="outline"
+                fullWidth
+                onClick={checkGetnetPayment}
+                disabled={getnetPending.isChecking}
+              >
+                {getnetPending.isChecking ? 'Verificando...' : 'Verificar Estado de Pago'}
+              </Button>
+              <Button variant="ghost" fullWidth onClick={handleClosePaymentModal}>
+                Cerrar
+              </Button>
+            </div>
           </div>
         ) : (
           <>

@@ -1,6 +1,27 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 import { prisma } from '../index.js';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
+
+// Getnet Chile (PlacetoPay) configuration
+const GETNET_ENDPOINT = process.env.GETNET_ENDPOINT || 'https://checkout.test.getnet.cl';
+const GETNET_LOGIN = process.env.GETNET_LOGIN || '';
+const GETNET_TRANKEY = process.env.GETNET_TRANKEY || '';
+
+function generatePlacetoPayAuth() {
+  const rawNonce = crypto.randomBytes(16).toString('hex');
+  const seed = new Date().toISOString();
+  const digest = crypto
+    .createHash('sha256')
+    .update(rawNonce + seed + GETNET_TRANKEY)
+    .digest('base64');
+  return {
+    login: GETNET_LOGIN,
+    tranKey: digest,
+    nonce: Buffer.from(rawNonce).toString('base64'),
+    seed,
+  };
+}
 
 const router = Router();
 
@@ -51,7 +72,9 @@ router.get('/products', authenticate, requireRole('ADMIN', 'STAFF'), async (req,
       orderBy: { name: 'asc' },
     });
 
-    res.json(products.map(p => ({
+    res.json(products.map(p => {
+      const batchStock = p.inventoryBatches.reduce((sum, b) => sum + b.remaining, 0);
+      return {
       id: p.id,
       sku: p.sku,
       name: p.name,
@@ -59,7 +82,8 @@ router.get('/products', authenticate, requireRole('ADMIN', 'STAFF'), async (req,
       price: parseFloat(p.price.toString()),
       cost: parseFloat(p.cost.toString()),
       images: p.images,
-      stock: p.inventoryBatches.reduce((sum, b) => sum + b.remaining, 0),
+      // Use batch stock if batches exist, otherwise fall back to the product's stock field
+      stock: p.inventoryBatches.length > 0 ? batchStock : p.stock,
       variants: p.variants.map(v => ({
         id: v.id,
         name: v.name,
@@ -67,7 +91,8 @@ router.get('/products', authenticate, requireRole('ADMIN', 'STAFF'), async (req,
         price: v.price ? parseFloat(v.price.toString()) : null,
         stock: v.stock,
       })),
-    })));
+      };
+    }));
   } catch (error) {
     console.error('Get POS products error:', error);
     res.status(500).json({ error: 'Failed to get products' });
@@ -173,7 +198,109 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
     const tax = 0; // Tax already included in displayed prices
     const total = subtotal;
 
-    // Create order
+    // --- Getnet card payment: create a pending order and initiate checkout session ---
+    if (paymentMethod === 'CARD' && GETNET_LOGIN) {
+      const orderNumber = generatePOSOrderNumber();
+
+      const order = await prisma.order.create({
+        data: {
+          orderNumber,
+          customerName,
+          customerEmail,
+          customerPhone,
+          subtotal,
+          tax,
+          shipping: 0,
+          discount: 0,
+          total,
+          status: 'PENDING',
+          source: 'POS',
+          notes,
+          items: { create: orderItems },
+          payments: {
+            create: {
+              method: 'GETNET',
+              status: 'PENDING',
+              amount: total,
+            },
+          },
+        },
+        include: { items: true, payments: true },
+      });
+
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      const apiUrl = `http://localhost:${process.env.PORT || 3001}`;
+      const expiration = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+
+      const sessionData = {
+        auth: generatePlacetoPayAuth(),
+        payment: {
+          reference: orderNumber,
+          description: `Venta POS ${orderNumber} - HobbyZamora`,
+          amount: { currency: 'CLP', total: Math.round(total) },
+          allowPartial: false,
+        },
+        expiration,
+        returnUrl: `${frontendUrl}/admin/pos`,
+        notificationUrl: `${apiUrl}/api/payments/getnet/callback`,
+        ipAddress: (req.ip === '::1' ? '127.0.0.1' : req.ip) || '127.0.0.1',
+        userAgent: req.headers['user-agent'] || 'HobbyZamora-POS/1.0',
+        buyer: {
+          name: customerName.split(' ')[0],
+          surname: customerName.split(' ').slice(1).join(' ') || 'N/A',
+          email: customerEmail || 'pos@hobbyzamora.cl',
+        },
+      };
+
+      const sessionResp = await fetch(`${GETNET_ENDPOINT}/api/session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sessionData),
+      });
+      const sessionJson = await sessionResp.json();
+
+      if (sessionJson.status?.status === 'ERROR' || !sessionJson.processUrl) {
+        console.error('Getnet POS session error:', JSON.stringify(sessionJson));
+        return res.status(500).json({
+          error: 'No se pudo iniciar sesión de pago con Getnet',
+          detail: sessionJson.status?.message || 'Error desconocido',
+        });
+      }
+
+      await prisma.payment.update({
+        where: { id: order.payments[0].id },
+        data: {
+          getnetPaymentId: String(sessionJson.requestId),
+          getnetCheckoutUrl: sessionJson.processUrl,
+        },
+      });
+
+      // Deduct stock immediately (reserved for this sale)
+      for (const item of orderItems) {
+        await prisma.product.update({
+          where: { id: item.productId },
+          data: { stock: { decrement: item.quantity } },
+        });
+      }
+
+      return res.status(201).json({
+        ...order,
+        orderNumber,
+        subtotal: parseFloat(order.subtotal.toString()),
+        total: parseFloat(order.total.toString()),
+        change: 0,
+        checkoutUrl: sessionJson.processUrl,
+        requestId: sessionJson.requestId,
+        paymentId: order.payments[0].id,
+        items: order.items.map(i => ({
+          ...i,
+          price: parseFloat(i.price.toString()),
+          cost: parseFloat(i.cost.toString()),
+        })),
+      });
+    }
+
+    // --- Standard payment (CASH / TRANSFER) ---
     const order = await prisma.order.create({
       data: {
         orderNumber: generatePOSOrderNumber(),
@@ -185,7 +312,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
         shipping: 0,
         discount: 0,
         total,
-        status: 'DELIVERED', // POS sales are completed immediately
+        status: 'DELIVERED',
         source: 'POS',
         notes,
         items: {

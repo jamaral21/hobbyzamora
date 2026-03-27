@@ -486,7 +486,7 @@ export const posAPI = {
     amountPaid?: number;
     notes?: string;
   }) =>
-    fetchAPI<Order & { change: number }>('/pos/sale', {
+    fetchAPI<Order & { change: number; checkoutUrl?: string; requestId?: number; paymentId?: string }>('/pos/sale', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
