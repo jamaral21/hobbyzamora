@@ -1,0 +1,13 @@
+FIX: El bloque regex de assets (*.jpg) tenia prioridad sobre location /uploads/
+La solucion es usar "^~" para que Nginx no busque mas regex cuando hace match en /uploads/
+
+PASO 1:
+sudo sed -i 's|    location /uploads/ {|    location ^~ /uploads/ {|' /etc/nginx/sites-available/hobbyzamora
+
+PASO 2:
+sudo nginx -t && sudo systemctl reload nginx
+
+PASO 3 - Confirmar:
+curl -s -o /dev/null -w "%{http_code}" https://hobbyzamora.cl/uploads/products/DSC0-8.jpg
+
+Debe responder: 200

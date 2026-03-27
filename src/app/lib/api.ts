@@ -290,7 +290,7 @@ export const productsAPI = {
 
   uploadImages: async (file: File, onProgress?: (pct: number) => void) => {
     const token = localStorage.getItem('adminToken') || localStorage.getItem('token');
-    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB per chunk
+    const CHUNK_SIZE = 1 * 1024 * 1024; // 1MB per chunk (safe for most proxy limits)
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
     // 1. Init session

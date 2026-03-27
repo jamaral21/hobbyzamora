@@ -328,6 +328,14 @@ server {
     root ${BASE_DIR}/current/dist;
     index index.html;
 
+    # Serve uploaded product images from shared directory
+    location /uploads/ {
+        alias ${BASE_DIR}/shared/uploads/;
+        expires 30d;
+        add_header Cache-Control "public";
+        access_log off;
+    }
+
     # API reverse proxy
     location /api/ {
         proxy_pass http://127.0.0.1:${APP_PORT};
@@ -340,6 +348,8 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_cache_bypass \$http_upgrade;
         proxy_read_timeout 60s;
+        client_max_body_size 20m;
+        client_body_timeout 120s;
 
         # Rate limiting zone (defined below)
         limit_req zone=api burst=20 nodelay;

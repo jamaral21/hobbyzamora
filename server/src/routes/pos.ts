@@ -1,6 +1,10 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import { prisma } from '../index.js';
+
+const parseImages = (images: string): string[] => {
+  try { return JSON.parse(images); } catch { return images ? [images] : []; }
+};
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
 
 // Getnet Chile (PlacetoPay) configuration
@@ -81,7 +85,7 @@ router.get('/products', authenticate, requireRole('ADMIN', 'STAFF'), async (req,
       category: p.category,
       price: parseFloat(p.price.toString()),
       cost: parseFloat(p.cost.toString()),
-      images: p.images,
+      images: parseImages(p.images),
       // Use batch stock if batches exist, otherwise fall back to the product's stock field
       stock: p.inventoryBatches.length > 0 ? batchStock : p.stock,
       variants: p.variants.map(v => ({
@@ -129,7 +133,7 @@ router.get('/scan/:code', authenticate, requireRole('ADMIN', 'STAFF'), async (re
       name: product.name,
       price: parseFloat(product.price.toString()),
       cost: parseFloat(product.cost.toString()),
-      images: product.images,
+      images: parseImages(product.images),
       stock: product.inventoryBatches.reduce((sum, b) => sum + b.remaining, 0),
       variants: product.variants.map(v => ({
         id: v.id,

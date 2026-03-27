@@ -404,10 +404,10 @@ router.get('/meta/categories', async (req, res) => {
 const ALLOWED_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
 const activeUploads = new Map<string, { filePath: string; totalChunks: number; received: Set<number> }>();
 
-// Small multer for chunks (10MB max per chunk)
+// Small multer for chunks (2MB max per chunk)
 const chunkUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
+  limits: { fileSize: 2 * 1024 * 1024 },
 });
 
 router.post('/upload-images/init', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
