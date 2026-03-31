@@ -4,3 +4,4 @@ server/prisma/dev.db
 server/prisma/dev.db-journal
 .env
 uploads/
+.DS_Store
