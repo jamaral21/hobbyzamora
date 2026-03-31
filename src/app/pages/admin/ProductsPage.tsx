@@ -17,6 +17,7 @@ export default function ProductsPage() {
   const location = useLocation();
   const isPresalesView = location.pathname.includes('/presales');
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ACTIVE' | 'ARCHIVED' | 'ALL'>('ACTIVE');
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -27,8 +28,12 @@ export default function ProductsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
   
-  const { data: products, isLoading, refetch } = useProducts(undefined, { enabled: isAuthenticated });
-  const deleteProduct = useMutation(productsAPI.delete);
+  const { data: products, isLoading, refetch } = useProducts(
+    {
+      status: statusFilter === 'ALL' ? 'ALL' : statusFilter,
+    },
+    { enabled: isAuthenticated }
+  );
   const createProduct = useMutation(productsAPI.create);
   const updateProduct = useMutation(productsAPI.update);
 
@@ -41,9 +46,9 @@ export default function ProductsPage() {
       );
   }, [products, searchQuery, isPresalesView]);
 
-  const handleDelete = async (id: string) => {
-    if (confirm('¿Estás seguro de que quieres eliminar este producto?')) {
-      await deleteProduct.mutateAsync(id);
+  const handleDeactivate = async (id: string) => {
+    if (confirm('¿Estás seguro de que quieres desactivar este producto?')) {
+      await updateProduct.mutate(id, { status: 'ARCHIVED' });
       refetch();
     }
   };
@@ -69,21 +74,53 @@ export default function ProductsPage() {
   };
 
   const parseCSV = (text: string): Record<string, string>[] => {
-    const lines = text.split(/\r?\n/).filter(line => line.trim());
-    if (lines.length < 2) return [];
-    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
-    return lines.slice(1).map(line => {
-      const values: string[] = [];
-      let current = '';
-      let inQuotes = false;
-      for (const char of line) {
-        if (char === '"') { inQuotes = !inQuotes; }
-        else if (char === ',' && !inQuotes) { values.push(current.trim()); current = ''; }
-        else { current += char; }
+    const normalized = text.replace(/^\uFEFF/, '');
+    const rows: string[][] = [];
+    let currentRow: string[] = [];
+    let currentCell = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < normalized.length; i++) {
+      const char = normalized[i];
+      const next = normalized[i + 1];
+
+      if (char === '"') {
+        if (inQuotes && next === '"') {
+          currentCell += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        currentRow.push(currentCell.trim());
+        currentCell = '';
+      } else if ((char === '\n' || char === '\r') && !inQuotes) {
+        if (char === '\r' && next === '\n') i++;
+        currentRow.push(currentCell.trim());
+        currentCell = '';
+
+        const hasContent = currentRow.some(cell => cell.length > 0);
+        if (hasContent) rows.push(currentRow);
+        currentRow = [];
+      } else {
+        currentCell += char;
       }
-      values.push(current.trim());
+    }
+
+    if (currentCell.length > 0 || currentRow.length > 0) {
+      currentRow.push(currentCell.trim());
+      const hasContent = currentRow.some(cell => cell.length > 0);
+      if (hasContent) rows.push(currentRow);
+    }
+
+    if (rows.length < 2) return [];
+
+    const headers = rows[0].map(h => h.trim().replace(/^"|"$/g, ''));
+    return rows.slice(1).map(values => {
       const row: Record<string, string> = {};
-      headers.forEach((h, i) => { row[h] = values[i] || ''; });
+      headers.forEach((h, i) => {
+        row[h] = (values[i] || '').trim();
+      });
       return row;
     });
   };
@@ -279,10 +316,18 @@ export default function ProductsPage() {
               className="w-full pl-10 pr-4 py-2 rounded-lg border border-border bg-input-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
-          <Button variant="outline">
-            <Filter className="w-4 h-4" />
-            Filtros
-          </Button>
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-input-background px-3 py-2">
+            <Filter className="w-4 h-4 text-muted-foreground" />
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as 'ACTIVE' | 'ARCHIVED' | 'ALL')}
+              className="bg-transparent text-foreground focus:outline-none"
+            >
+              <option value="ACTIVE">Activos</option>
+              <option value="ARCHIVED">Desactivados</option>
+              <option value="ALL">Todos</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -312,7 +357,7 @@ export default function ProductsPage() {
                   <div>
                     <p className="text-sm text-foreground">{product.name}</p>
                     {product.isPresale && (
-                      <Badge variant="purple" size="sm">Preventa</Badge>
+                      <Badge variant="presale" size="sm">Preventa</Badge>
                     )}
                   </div>
                 </div>
@@ -331,9 +376,9 @@ export default function ProductsPage() {
               <TableCell>
                 <Badge
                   variant={
-                    product.status === 'active'
+                    product.status === 'ACTIVE'
                       ? 'success'
-                      : product.status === 'draft'
+                      : product.status === 'DRAFT'
                       ? 'warning'
                       : 'default'
                   }
@@ -358,9 +403,9 @@ export default function ProductsPage() {
                     <Edit className="w-4 h-4 inline mr-2" />
                     Editar
                   </DropdownItem>
-                  <DropdownItem danger onClick={() => handleDelete(product.id)}>
+                  <DropdownItem danger onClick={() => handleDeactivate(product.id)}>
                     <Trash2 className="w-4 h-4 inline mr-2" />
-                    Eliminar
+                    Desactivar
                   </DropdownItem>
                 </Dropdown>
               </TableCell>

@@ -64,7 +64,7 @@ router.get('/', async (req, res) => {
       where.category = category as string;
     }
 
-    if (status) {
+    if (status && status !== 'ALL') {
       where.status = status as string;
     } else {
       // By default, only show active products for public
@@ -292,13 +292,51 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
 // Delete product
 router.delete('/:id', authenticate, requireRole('ADMIN'), async (req: AuthRequest, res) => {
   try {
-    await prisma.product.delete({
-      where: { id: req.params.id as string },
+    const productId = req.params.id as string;
+
+    const existing = await prisma.product.findUnique({
+      where: { id: productId },
+      select: { id: true, status: true },
     });
 
-    res.json({ message: 'Product deleted successfully' });
+    if (!existing) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    const orderItemsCount = await prisma.orderItem.count({
+      where: { productId },
+    });
+
+    if (orderItemsCount > 0) {
+      await prisma.product.update({
+        where: { id: productId },
+        data: {
+          status: 'ARCHIVED',
+          stock: 0,
+        },
+      });
+
+      return res.json({
+        message: 'Product is referenced by orders and was archived instead of deleted',
+        archived: true,
+      });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.cartItem.deleteMany({ where: { productId } });
+      await tx.product.delete({ where: { id: productId } });
+    });
+
+    res.json({ message: 'Product deleted successfully', archived: false });
   } catch (error) {
     console.error('Delete product error:', error);
+
+    if ((error as any)?.code === 'P2003') {
+      return res.status(409).json({
+        error: 'Cannot delete product because it is still referenced by related records',
+      });
+    }
+
     res.status(500).json({ error: 'Failed to delete product' });
   }
 });
