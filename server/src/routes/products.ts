@@ -2,12 +2,16 @@ import { Router } from 'express';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { fileURLToPath } from 'url';
 import multer from 'multer';
 import AdmZip from 'adm-zip';
 import { prisma } from '../index.js';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const productUploadsDir = path.resolve(__dirname, '../../../uploads/products');
 
 // Configure multer for ZIP uploads — disk storage, no size limit
 const upload = multer({
@@ -520,8 +524,7 @@ router.post('/upload-images/complete', authenticate, requireRole('ADMIN', 'STAFF
     return res.status(400).json({ error: `Faltan chunks: ${session.received.size}/${session.totalChunks}` });
   }
   try {
-    const uploadsDir = path.resolve(process.cwd(), 'uploads', 'products');
-    fs.mkdirSync(uploadsDir, { recursive: true });
+    fs.mkdirSync(productUploadsDir, { recursive: true });
 
     const zip = new AdmZip(session.filePath);
     const entries = zip.getEntries();
@@ -541,7 +544,7 @@ router.post('/upload-images/complete', authenticate, requireRole('ADMIN', 'STAFF
       }
 
       const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-      fs.writeFileSync(path.join(uploadsDir, safeName), entry.getData());
+      fs.writeFileSync(path.join(productUploadsDir, safeName), entry.getData());
       extracted.push(safeName);
     }
 
@@ -594,8 +597,7 @@ router.post('/upload-images', authenticate, requireRole('ADMIN', 'STAFF'), uploa
     }
     tmpPath = file.path;
 
-    const uploadsDir = path.resolve(process.cwd(), 'uploads', 'products');
-    fs.mkdirSync(uploadsDir, { recursive: true });
+    fs.mkdirSync(productUploadsDir, { recursive: true });
 
     const zip = new AdmZip(tmpPath);
     const entries = zip.getEntries();
@@ -625,7 +627,7 @@ router.post('/upload-images', authenticate, requireRole('ADMIN', 'STAFF'), uploa
 
       // Sanitize filename — only allow alphanumeric, dash, underscore, dot
       const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const destPath = path.join(uploadsDir, safeName);
+      const destPath = path.join(productUploadsDir, safeName);
 
       fs.writeFileSync(destPath, entry.getData());
       extracted.push(safeName);

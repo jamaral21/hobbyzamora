@@ -1,17 +1,19 @@
-import sgMail from '@sendgrid/mail';
+import axios from 'axios';
 
 let initialized = false;
 
+const BREVO_API_BASE = 'https://api.brevo.com/v3';
+const BREVO_API_KEY = process.env.BREVO_API_KEY;
+
 function init() {
-  if (!initialized && process.env.SENDGRID_API_KEY) {
-    sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+  if (!initialized && BREVO_API_KEY) {
     initialized = true;
   }
 }
 
 const FROM = {
-  email: process.env.SENDGRID_FROM_EMAIL || 'noreply@hobbyzamora.cl',
-  name: process.env.SENDGRID_FROM_NAME || 'HobbyZamora',
+  email: 'no-reply@hobbyzamora.cl',
+  name: 'HobbyZamora',
 };
 
 const BASE_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
@@ -234,14 +236,28 @@ interface OrderSummary {
 async function send(to: string, subject: string, html: string): Promise<void> {
   init();
   if (!initialized) {
-    console.warn('[email] SENDGRID_API_KEY no configurada, email omitido:', subject);
+    console.warn('[email] BREVO_API_KEY no configurada, email omitido:', subject);
     return;
   }
   try {
-    await sgMail.send({ to, from: FROM, subject, html });
+    await axios.post(
+      `${BREVO_API_BASE}/smtp/email`,
+      {
+        sender: FROM,
+        to: [{ email: to }],
+        subject,
+        htmlContent: html,
+      },
+      {
+        headers: {
+          'api-key': BREVO_API_KEY,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
     console.log(`[email] Enviado a ${to}: ${subject}`);
   } catch (err: any) {
-    console.error('[email] Error al enviar:', err?.response?.body ?? err);
+    console.error('[email] Error al enviar:', err?.response?.data ?? err?.message ?? err);
   }
 }
 
