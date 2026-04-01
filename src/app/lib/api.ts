@@ -239,6 +239,12 @@ export const authAPI = {
       method: 'POST',
       body: JSON.stringify({ email }),
     }),
+
+  resetPassword: (token: string, newPassword: string) =>
+    fetchAPI<{ message: string }>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, newPassword }),
+    }),
 };
 
 // Products API
