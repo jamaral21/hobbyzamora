@@ -11,7 +11,10 @@ import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
 const router = Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const productUploadsDir = path.resolve(__dirname, '../../../uploads/products');
+const uploadsBaseDir = process.env.UPLOADS_DIR
+  ? path.resolve(process.env.UPLOADS_DIR)
+  : path.resolve(__dirname, '../../../uploads');
+const productUploadsDir = path.join(uploadsBaseDir, 'products');
 
 // Configure multer for ZIP uploads — disk storage, no size limit
 const upload = multer({

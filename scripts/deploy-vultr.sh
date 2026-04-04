@@ -48,6 +48,27 @@ create_dirs() {
   mkdir -p "${SHARED_DIR}/uploads/products"
 }
 
+ensure_uploads_env_var() {
+  local desired_uploads_dir="${SHARED_DIR}/uploads"
+
+  if grep -q '^UPLOADS_DIR=' "${SHARED_DIR}/.env"; then
+    sed -i "s|^UPLOADS_DIR=.*|UPLOADS_DIR=\"${desired_uploads_dir}\"|" "${SHARED_DIR}/.env"
+  else
+    printf '\nUPLOADS_DIR="%s"\n' "${desired_uploads_dir}" >> "${SHARED_DIR}/.env"
+  fi
+}
+
+sync_existing_uploads_to_shared() {
+  local current_uploads="${CURRENT_LINK}/uploads/"
+  local shared_uploads="${SHARED_DIR}/uploads/"
+
+  if [ -d "${CURRENT_LINK}" ] && [ -d "${CURRENT_LINK}/uploads" ]; then
+    require_cmd rsync
+    rsync -a --ignore-existing "${current_uploads}" "${shared_uploads}"
+    log "Synced existing uploads from current to shared"
+  fi
+}
+
 acquire_lock() {
   exec 200>"${LOCK_FILE}"
   if ! flock -n 200; then
@@ -58,6 +79,18 @@ acquire_lock() {
 ensure_required_files() {
   [ -n "${REPO_URL}" ] || fail "REPO_URL is required"
   [ -f "${SHARED_DIR}/.env" ] || fail "Missing ${SHARED_DIR}/.env"
+}
+
+verify_release_uploads_link() {
+  local release_dir="$1"
+  local expected_target
+  local actual_target
+
+  expected_target="$(readlink -f "${SHARED_DIR}/uploads")"
+  actual_target="$(readlink -f "${release_dir}/uploads")"
+
+  [ -L "${release_dir}/uploads" ] || fail "${release_dir}/uploads is not a symlink"
+  [ "${actual_target}" = "${expected_target}" ] || fail "${release_dir}/uploads does not point to ${SHARED_DIR}/uploads"
 }
 
 read_env_value() {
@@ -146,6 +179,8 @@ main() {
   acquire_lock
   create_dirs
   ensure_required_files
+  ensure_uploads_env_var
+  sync_existing_uploads_to_shared
 
   local release_id
   local release_dir
@@ -199,6 +234,7 @@ main() {
   log "Linking shared uploads directory"
   rm -rf "${release_dir}/uploads"
   ln -sfn "${SHARED_DIR}/uploads" "${release_dir}/uploads"
+  verify_release_uploads_link "${release_dir}"
 
   log "Switching current symlink"
   ln -sfn "${release_dir}" "${CURRENT_LINK}"

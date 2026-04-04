@@ -40,7 +40,9 @@ app.use(cors({
 app.use(express.json({ limit: '100mb' }));
 
 // Serve uploaded files
-const uploadsDir = path.resolve(__dirname, '../../uploads');
+const uploadsDir = process.env.UPLOADS_DIR
+  ? path.resolve(process.env.UPLOADS_DIR)
+  : path.resolve(__dirname, '../../uploads');
 app.use('/uploads', express.static(uploadsDir));
 
 // Health check
