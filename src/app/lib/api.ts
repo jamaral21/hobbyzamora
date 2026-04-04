@@ -393,6 +393,9 @@ export const ordersAPI = {
     }),
 
   getMyOrders: () => fetchAPI<Order[]>('/orders/my/orders'),
+
+  deleteById: (id: string) =>
+    fetchAPI<{ message: string }>(`/orders/${id}`, { method: 'DELETE' }),
 };
 
 // Cart API

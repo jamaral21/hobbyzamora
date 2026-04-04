@@ -302,6 +302,40 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
 });
 
 // Update order status
+// Delete single order (admin only)
+router.delete('/:id', authenticate, requireRole('ADMIN'), async (req: AuthRequest, res) => {
+  try {
+    const id = req.params.id as string;
+
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: { items: true },
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    await prisma.order.delete({ where: { id } });
+
+    await prisma.auditLog.create({
+      data: {
+        action: 'DELETE_ORDER',
+        entity: 'Order',
+        entityIds: order.orderNumber,
+        performedBy: req.user?.email ?? 'unknown',
+        metadata: JSON.stringify({ total: order.total, status: order.status, deletedAt: new Date().toISOString() }),
+      },
+    });
+
+    res.json({ message: 'Order deleted' });
+  } catch (error) {
+    console.error('Delete order error:', error);
+    res.status(500).json({ error: 'Failed to delete order' });
+  }
+});
+
+// Update order status
 router.patch('/:id/status', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
   try {
     const { status } = req.body;

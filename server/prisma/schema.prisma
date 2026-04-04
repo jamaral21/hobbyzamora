@@ -283,3 +283,17 @@ model DailyStat {
 
   @@map("daily_stats")
 }
+
+// ==================== AUDIT LOG ====================
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  action     String
+  entity     String
+  entityIds  String?
+  performedBy String?
+  metadata   String?
+  createdAt  DateTime @default(now())
+
+  @@map("audit_logs")
+}

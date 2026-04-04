@@ -1,20 +1,26 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { Search, Filter, Download, Eye, Loader2 } from 'lucide-react';
+import { Search, Filter, Download, Eye, Loader2, Trash2 } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { Button } from '../../components/design-system/Button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/design-system/Table';
 import { Badge } from '../../components/design-system/Badge';
 import { useOrders } from '../../hooks/useData';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
+import { ordersAPI } from '../../lib/api';
 
 export default function OrdersPage() {
-  const { isAuthenticated } = useAdminAuth();
+  const { isAuthenticated, user } = useAdminAuth();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  
-  const { data: ordersData, isLoading } = useOrders({ status: statusFilter !== 'all' ? statusFilter.toUpperCase() : undefined }, { enabled: isAuthenticated });
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const { data: ordersData, isLoading, refetch } = useOrders(
+    { status: statusFilter !== 'all' ? statusFilter.toUpperCase() : undefined },
+    { enabled: isAuthenticated }
+  );
   
   const orders = ordersData || [];
 
@@ -38,6 +44,18 @@ export default function OrdersPage() {
     return counts;
   }, [orders]);
 
+  const handleDelete = async (id: string) => {
+    setDeletingId(id);
+    try {
+      await ordersAPI.deleteById(id);
+      setConfirmDeleteId(null);
+      refetch();
+    } catch (err) {
+      console.error('Error deleting order:', err);
+    } finally {
+      setDeletingId(null);
+    }
+  };
   if (isLoading) {
     return (
       <AdminLayout>
@@ -58,31 +76,33 @@ export default function OrdersPage() {
               Gestiona y rastrea los pedidos de clientes
             </p>
           </div>
-          <Button variant="outline" onClick={() => {
-            const headers = ['Pedido', 'Cliente', 'Email', 'Fecha', 'Artículos', 'Total', 'Estado'];
-            const rows = filteredOrders.map((o: any) => [
-              o.orderNumber,
-              o.customerName || '',
-              o.customerEmail || '',
-              new Date(o.createdAt).toLocaleDateString(),
-              o.itemCount || 0,
-              o.total.toFixed(2),
-              o.status.toLowerCase(),
-            ]);
-            const csvContent = [headers, ...rows]
-              .map(row => row.map((cell: any) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-              .join('\n');
-            const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `pedidos-${new Date().toISOString().slice(0, 10)}.csv`;
-            a.click();
-            URL.revokeObjectURL(url);
-          }}>
-            <Download className="w-4 h-4" />
-            Exportar
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => {
+              const headers = ['Pedido', 'Cliente', 'Email', 'Fecha', 'Artículos', 'Total', 'Estado'];
+              const rows = filteredOrders.map((o: any) => [
+                o.orderNumber,
+                o.customerName || '',
+                o.customerEmail || '',
+                new Date(o.createdAt).toLocaleDateString(),
+                o.itemCount || 0,
+                o.total.toFixed(2),
+                o.status.toLowerCase(),
+              ]);
+              const csvContent = [headers, ...rows]
+                .map(row => row.map((cell: any) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+                .join('\n');
+              const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `pedidos-${new Date().toISOString().slice(0, 10)}.csv`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}>
+              <Download className="w-4 h-4" />
+              Exportar
+            </Button>
+          </div>
         </div>
 
         {/* Filters */}
@@ -189,14 +209,54 @@ export default function OrdersPage() {
                 </Badge>
               </TableCell>
               <TableCell>
-                <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/orders/${order.id}`)}>
-                  <Eye className="w-4 h-4" />
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/orders/${order.id}`)}>
+                    <Eye className="w-4 h-4" />
+                  </Button>
+                  {user?.role === 'ADMIN' && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-500 hover:bg-red-50"
+                      onClick={() => setConfirmDeleteId(order.id)}
+                      disabled={deletingId === order.id}
+                    >
+                      {deletingId === order.id
+                        ? <Loader2 className="w-4 h-4 animate-spin" />
+                        : <Trash2 className="w-4 h-4" />}
+                    </Button>
+                  )}
+                </div>
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
+
+      {/* Delete confirmation modal */}
+      {confirmDeleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-background rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl">
+            <h2 className="text-lg font-semibold text-foreground mb-2">¿Eliminar esta orden?</h2>
+            <p className="text-sm text-muted-foreground mb-6">
+              Esta acción es irreversible. Quedará un registro en el log de auditoría.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <Button variant="outline" onClick={() => setConfirmDeleteId(null)} disabled={!!deletingId}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={() => handleDelete(confirmDeleteId)}
+                disabled={!!deletingId}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {deletingId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                {deletingId ? 'Eliminando...' : 'Sí, eliminar'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 }
