@@ -151,11 +151,11 @@ export default function ProductsPage() {
 
   const downloadTemplate = () => {
     const header = isPresalesView
-      ? 'sku,name,category,description,price,cost,barcode,presaleMaxQty,presaleAvailQty,presaleEndDate,images'
-      : 'sku,name,category,description,price,cost,stock,status,barcode,images';
+      ? 'sku,EAN,name,category,description,price,cost,presaleMaxQty,presaleAvailQty,presaleEndDate,images'
+      : 'sku,EAN,name,category,description,price,cost,stock,status,images';
     const example = isPresalesView
       ? 'HBZ-PRV-001,"Preventa Ejemplo","Categoría","Descripción",29.99,15.00,,100,100,2026-06-30,'
-      : 'HBZ-100,"Producto Ejemplo","Categoría","Descripción del producto",29.99,15.00,50,ACTIVE,7891234567890,https://example.com/img1.jpg|https://example.com/img2.jpg';
+      : 'HBZ-100,7891234567890,"Producto Ejemplo","Categoría","Descripción del producto",29.99,15.00,50,ACTIVE,https://example.com/img1.jpg|https://example.com/img2.jpg';
     const csv = `${header}\n${example}`;
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);

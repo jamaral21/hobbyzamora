@@ -210,6 +210,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
       cost, 
       images, 
       status,
+      ean,
       barcode,
       isPresale,
       presaleMaxQty,
@@ -218,6 +219,10 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
       variants,
       initialStock,
     } = req.body;
+
+    const parsedEan = ean !== undefined
+      ? parseInt(ean, 10)
+      : (barcode !== undefined ? parseInt(barcode, 10) : null);
 
     // Check SKU uniqueness
     const existingBySku = await prisma.product.findUnique({ where: { sku } });
@@ -236,7 +241,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
         stock: initialStock || 0,
         images: JSON.stringify(images || []),
         status: status || 'ACTIVE',
-        barcode: barcode || null,
+        ean: Number.isNaN(parsedEan as number) ? null : parsedEan,
         isPresale: isPresale || false,
         presaleMaxQty,
         presaleAvailQty,
@@ -279,12 +284,17 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
       stock,
       images, 
       status,
+      ean,
       barcode,
       isPresale,
       presaleMaxQty,
       presaleAvailQty,
       presaleEndDate,
     } = req.body;
+
+    const parsedEan = ean !== undefined
+      ? parseInt(ean, 10)
+      : (barcode !== undefined ? parseInt(barcode, 10) : undefined);
 
     const product = await prisma.product.update({
       where: { id },
@@ -297,7 +307,7 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
         stock,
         images: images !== undefined ? JSON.stringify(images) : undefined,
         status,
-        barcode: barcode !== undefined ? barcode : undefined,
+        ean: parsedEan,
         isPresale,
         presaleMaxQty,
         presaleAvailQty,
@@ -432,7 +442,12 @@ router.post('/import', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
         price,
         cost,
         stock,
-        barcode: row.barcode || null,
+        ean: (() => {
+          const rawEan = row.EAN || row.ean || row.barcode;
+          if (!rawEan) return null;
+          const parsed = parseInt(rawEan, 10);
+          return Number.isNaN(parsed) ? null : parsed;
+        })(),
         images: JSON.stringify(row.images ? row.images.split('|').map((s: string) => s.trim()) : []),
         status: ['ACTIVE', 'ARCHIVED'].includes((row.status || 'ACTIVE').toUpperCase())
           ? (row.status || 'ACTIVE').toUpperCase()

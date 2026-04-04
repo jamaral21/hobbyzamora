@@ -7,6 +7,7 @@ const API_BASE = '/api';
 export interface Product {
   id: string;
   sku: string;
+  ean?: number | null;
   name: string;
   category: string;
   price: number;

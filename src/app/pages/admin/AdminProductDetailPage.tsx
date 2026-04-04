@@ -277,10 +277,10 @@ export default function AdminProductDetailPage() {
                   <dt className="text-muted-foreground">SKU</dt>
                   <dd className="text-foreground font-[family-name:var(--font-mono)]">{product.sku}</dd>
                 </div>
-                {product.barcode && (
+                {product.ean && (
                   <div className="flex justify-between">
-                    <dt className="text-muted-foreground">Código de barras</dt>
-                    <dd className="text-foreground font-[family-name:var(--font-mono)]">{product.barcode}</dd>
+                    <dt className="text-muted-foreground">EAN</dt>
+                    <dd className="text-foreground font-[family-name:var(--font-mono)]">{product.ean}</dd>
                   </div>
                 )}
                 <div className="flex justify-between">
