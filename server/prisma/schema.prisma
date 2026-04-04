@@ -64,6 +64,8 @@ model Product {
   images      String
   status      String   @default("ACTIVE")
 
+  barcode           String?
+
   isPresale         Boolean   @default(false)
   presaleMaxQty     Int?
   presaleAvailQty   Int?

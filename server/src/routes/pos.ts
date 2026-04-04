@@ -111,6 +111,7 @@ router.get('/scan/:code', authenticate, requireRole('ADMIN', 'STAFF'), async (re
         OR: [
           { sku: req.params.code as string },
           { sku: { contains: req.params.code as string } },
+          { barcode: req.params.code as string },
         ],
         status: 'ACTIVE',
       },

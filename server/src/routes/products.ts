@@ -71,7 +71,7 @@ router.get('/', async (req, res) => {
     if (status && status !== 'ALL') {
       where.status = status as string;
     } else {
-      // By default, only show active products for public
+      // Por defecto, solo productos activos (excluye ARCHIVED y HIDDEN)
       where.status = 'ACTIVE';
     }
 
@@ -137,17 +137,15 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Get single product
+// Get single product (public — excluye HIDDEN/ARCHIVED)
 router.get('/:id', async (req, res) => {
   try {
     const product = await prisma.product.findUnique({
       where: { id: req.params.id },
-      include: {
-        variants: true,
-      },
+      include: { variants: true },
     });
 
-    if (!product) {
+    if (!product || product.status === 'HIDDEN' || product.status === 'ARCHIVED') {
       return res.status(404).json({ error: 'Product not found' });
     }
 
@@ -169,6 +167,37 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// Get single product for admin (incluye cualquier estado)
+router.get('/admin-detail/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
+  try {
+    const product = await prisma.product.findUnique({
+      where: { id: req.params.id as string },
+      include: { variants: true },
+    });
+
+    if (!product) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    const p = product as typeof product & { variants: any[] };
+    res.json({
+      ...p,
+      images: parseImages(p.images),
+      price: parseFloat(p.price.toString()),
+      cost: parseFloat(p.cost.toString()),
+      stock: p.stock,
+      variants: p.variants.map((v: any) => ({
+        ...v,
+        options: parseOptions(v.options),
+        price: v.price ? parseFloat(v.price.toString()) : null,
+      })),
+    });
+  } catch (error) {
+    console.error('Get product (admin) error:', error);
+    res.status(500).json({ error: 'Failed to get product' });
+  }
+});
+
 // Create product (admin only)
 router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
   try {
@@ -181,6 +210,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
       cost, 
       images, 
       status,
+      barcode,
       isPresale,
       presaleMaxQty,
       presaleAvailQty,
@@ -206,6 +236,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
         stock: initialStock || 0,
         images: JSON.stringify(images || []),
         status: status || 'ACTIVE',
+        barcode: barcode || null,
         isPresale: isPresale || false,
         presaleMaxQty,
         presaleAvailQty,
@@ -248,6 +279,7 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
       stock,
       images, 
       status,
+      barcode,
       isPresale,
       presaleMaxQty,
       presaleAvailQty,
@@ -265,6 +297,7 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
         stock,
         images: images !== undefined ? JSON.stringify(images) : undefined,
         status,
+        barcode: barcode !== undefined ? barcode : undefined,
         isPresale,
         presaleMaxQty,
         presaleAvailQty,
@@ -399,8 +432,11 @@ router.post('/import', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
         price,
         cost,
         stock,
+        barcode: row.barcode || null,
         images: JSON.stringify(row.images ? row.images.split('|').map((s: string) => s.trim()) : []),
-        status: (row.status || 'ACTIVE').toUpperCase(),
+        status: ['ACTIVE', 'ARCHIVED'].includes((row.status || 'ACTIVE').toUpperCase())
+          ? (row.status || 'ACTIVE').toUpperCase()
+          : 'ACTIVE', // HIDDEN no se puede importar desde CSV, solo se asigna manualmente
         isPresale,
         presaleMaxQty,
         presaleAvailQty,

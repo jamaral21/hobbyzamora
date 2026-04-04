@@ -182,11 +182,11 @@ export default function OrderConfirmationPage() {
                 </div>
                 <div className="border-t border-border pt-3 mt-1 space-y-1 text-sm">
                   <div className="flex justify-between text-muted-foreground">
-                    <span>Subtotal</span>
-                    <span className="font-[family-name:var(--font-mono)]">${order.subtotal?.toFixed(2)}</span>
+                    <span>Neto</span>
+                    <span className="font-[family-name:var(--font-mono)]">${((order.subtotal ?? 0) - (order.tax ?? 0)).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
-                    <span>IVA (16%)</span>
+                    <span>IVA débito (19%)</span>
                     <span className="font-[family-name:var(--font-mono)]">${order.tax?.toFixed(2)}</span>
                   </div>
                   {order.shipping > 0 && (

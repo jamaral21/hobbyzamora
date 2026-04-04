@@ -57,6 +57,7 @@ export function ProductEditor({ product, onSave, onCancel }: ProductEditorProps)
                   <option value="active">Activo</option>
                   <option value="draft">Borrador</option>
                   <option value="archived">Archivado</option>
+                  <option value="hidden">Oculto (solo admin)</option>
                 </Select>
               </div>
 

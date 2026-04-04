@@ -233,10 +233,11 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
     }
 
     // Calculate totals
-    const tax = subtotal * 0.16; // 16% IVA
+    // Los precios ya incluyen IVA (19%). Se extrae el IVA del subtotal.
+    const tax = Math.round(subtotal * 19 / 119 * 100) / 100; // IVA débito (incluido en precio)
     const shippingCost = shipping?.cost || 0;
     const discount = 0;
-    const total = subtotal + tax + shippingCost - discount;
+    const total = subtotal + shippingCost - discount; // IVA ya incluido, no se suma
 
     // Create order
     const order = await prisma.order.create({

@@ -143,11 +143,11 @@ export default function OrderDetailPage() {
             {/* Totals */}
             <div className="mt-4 pt-4 border-t border-border space-y-2">
               <div className="flex justify-between text-sm text-muted-foreground">
-                <span>Subtotal</span>
-                <span>${order.subtotal.toFixed(2)}</span>
+                <span>Neto</span>
+                <span>${(order.subtotal - order.tax).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm text-muted-foreground">
-                <span>IVA (16%)</span>
+                <span>IVA débito (19%)</span>
                 <span>${order.tax.toFixed(2)}</span>
               </div>
               {order.shipping > 0 && (

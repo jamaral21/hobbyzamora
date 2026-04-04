@@ -313,7 +313,8 @@ export async function sendOrderConfirmationEmail(order: OrderSummary): Promise<v
     <hr class="divider">
 
     <table class="totals">
-      <tr><td>Subtotal</td><td>${formatPrice(order.subtotal)}</td></tr>
+      <tr><td>Neto</td><td>${formatPrice(order.subtotal - order.tax)}</td></tr>
+      <tr><td>IVA débito (19%)</td><td>${formatPrice(order.tax)}</td></tr>
       ${order.shipping ? `<tr><td>Envío</td><td>${formatPrice(order.shipping)}</td></tr>` : ''}
       ${order.discount ? `<tr><td>Descuento</td><td style="color:#00e676">-${formatPrice(order.discount)}</td></tr>` : ''}
       <tr class="total-row"><td><strong>Total</strong></td><td>${formatPrice(order.total)}</td></tr>

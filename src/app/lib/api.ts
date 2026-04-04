@@ -14,7 +14,7 @@ export interface Product {
   stock: number;
   images: string[];
   description: string | null;
-  status: 'ACTIVE' | 'DRAFT' | 'ARCHIVED';
+  status: 'ACTIVE' | 'DRAFT' | 'ARCHIVED' | 'HIDDEN';
   isPresale?: boolean;
   presaleMaxQty?: number;
   presaleAvailQty?: number;
@@ -270,6 +270,7 @@ export const productsAPI = {
   },
 
   getById: (id: string) => fetchAPI<Product>(`/products/${id}`),
+  getByIdAdmin: (id: string) => fetchAPI<Product>(`/products/admin-detail/${id}`),
 
   create: (data: Partial<Product> & { initialStock?: number }) =>
     fetchAPI<Product>('/products', {
