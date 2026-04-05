@@ -13,7 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const uploadsBaseDir = process.env.UPLOADS_DIR
   ? path.resolve(process.env.UPLOADS_DIR)
-  : path.resolve(__dirname, '../../../uploads');
+  : path.resolve(process.cwd(), 'uploads');
 const productUploadsDir = path.join(uploadsBaseDir, 'products');
 const HIDDEN_PRODUCTS_ALLOWED_EMAIL = 'admin@hobbyzamora.com';
 

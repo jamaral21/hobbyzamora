@@ -42,7 +42,7 @@ app.use(express.json({ limit: '100mb' }));
 // Serve uploaded files
 const uploadsDir = process.env.UPLOADS_DIR
   ? path.resolve(process.env.UPLOADS_DIR)
-  : path.resolve(__dirname, '../../uploads');
+  : path.resolve(process.cwd(), 'uploads');
 app.use('/uploads', express.static(uploadsDir));
 
 // Health check
@@ -76,6 +76,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📦 API available at http://localhost:${PORT}/api`);
+  console.log(`🗂️ Uploads served from ${uploadsDir}`);
 });
 
 // Graceful shutdown
