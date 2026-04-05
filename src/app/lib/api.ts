@@ -339,6 +339,27 @@ export const productsAPI = {
       { method: 'POST', body: JSON.stringify({ uploadId }) },
     );
   },
+
+  uploadImage: async (file: File) => {
+    const token = localStorage.getItem('adminToken') || localStorage.getItem('token');
+    const formData = new FormData();
+    formData.append('image', file);
+
+    const response = await fetch(`${API_BASE}/products/upload-image`, {
+      method: 'POST',
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({ error: 'Request failed' }));
+      throw new ApiError(response.status, data.error || response.statusText);
+    }
+
+    return response.json() as Promise<{ url: string; filename: string }>;
+  },
 };
 
 // Orders API

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 import multer from 'multer';
 import AdmZip from 'adm-zip';
 import { prisma } from '../index.js';
-import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
+import { authenticate, optionalAuth, requireRole, AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
 const __filename = fileURLToPath(import.meta.url);
@@ -15,6 +15,7 @@ const uploadsBaseDir = process.env.UPLOADS_DIR
   ? path.resolve(process.env.UPLOADS_DIR)
   : path.resolve(__dirname, '../../../uploads');
 const productUploadsDir = path.join(uploadsBaseDir, 'products');
+const HIDDEN_PRODUCTS_ALLOWED_EMAIL = 'admin@hobbyzamora.com';
 
 // Configure multer for ZIP uploads — disk storage, no size limit
 const upload = multer({
@@ -30,6 +31,30 @@ const upload = multer({
       cb(null, true);
     } else {
       cb(new Error('Solo se permiten archivos .zip'));
+    }
+  },
+});
+
+const singleImageUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      fs.mkdirSync(productUploadsDir, { recursive: true });
+      cb(null, productUploadsDir);
+    },
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      const base = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9._-]/g, '_');
+      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${base}${ext}`);
+    },
+  }),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.has(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Solo se permiten imágenes JPG, PNG, WEBP o GIF'));
     }
   },
 });
@@ -52,7 +77,7 @@ const parseOptions = (options: string): string[] => {
 };
 
 // Get all products (public)
-router.get('/', async (req, res) => {
+router.get('/', optionalAuth, async (req: AuthRequest, res) => {
   try {
     const { 
       category, 
@@ -66,16 +91,26 @@ router.get('/', async (req, res) => {
     } = req.query;
 
     const where: any = {};
+    const canSeeHiddenProducts = req.user?.email?.toLowerCase() === HIDDEN_PRODUCTS_ALLOWED_EMAIL;
 
     if (category) {
       where.category = category as string;
     }
 
     if (status && status !== 'ALL') {
-      where.status = status as string;
+      const requestedStatus = status as string;
+
+      if (requestedStatus === 'HIDDEN' && !canSeeHiddenProducts) {
+        where.status = 'ACTIVE';
+      } else {
+        where.status = requestedStatus;
+      }
     } else {
-      // Por defecto, solo productos activos (excluye ARCHIVED y HIDDEN)
-      where.status = 'ACTIVE';
+      // Por defecto, solo productos activos.
+      // El usuario permitido puede ver además los HIDDEN en storefront.
+      where.status = canSeeHiddenProducts
+        ? { in: ['ACTIVE', 'HIDDEN'] }
+        : 'ACTIVE';
     }
 
     if (presale === 'true') {
@@ -140,25 +175,33 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Get single product (public — excluye HIDDEN/ARCHIVED)
-router.get('/:id', async (req, res) => {
+// Get single product (public — excluye HIDDEN/ARCHIVED, salvo email autorizado)
+router.get('/:id', optionalAuth, async (req: AuthRequest, res) => {
   try {
     const product = await prisma.product.findUnique({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       include: { variants: true },
     });
 
-    if (!product || product.status === 'HIDDEN' || product.status === 'ARCHIVED') {
+    const canSeeHiddenProducts = req.user?.email?.toLowerCase() === HIDDEN_PRODUCTS_ALLOWED_EMAIL;
+
+    if (
+      !product ||
+      product.status === 'ARCHIVED' ||
+      (product.status === 'HIDDEN' && !canSeeHiddenProducts)
+    ) {
       return res.status(404).json({ error: 'Product not found' });
     }
 
+    const p = product as typeof product & { variants: any[] };
+
     res.json({
-      ...product,
-      images: parseImages(product.images),
-      price: parseFloat(product.price.toString()),
-      cost: parseFloat(product.cost.toString()),
-      stock: product.stock,
-      variants: product.variants.map(v => ({
+      ...p,
+      images: parseImages(p.images),
+      price: parseFloat(p.price.toString()),
+      cost: parseFloat(p.cost.toString()),
+      stock: p.stock,
+      variants: p.variants.map((v: any) => ({
         ...v,
         options: parseOptions(v.options),
         price: v.price ? parseFloat(v.price.toString()) : null,
@@ -500,6 +543,22 @@ router.get('/meta/categories', async (req, res) => {
   } catch (error) {
     console.error('Get categories error:', error);
     res.status(500).json({ error: 'Failed to get categories' });
+  }
+});
+
+router.post('/upload-image', authenticate, requireRole('ADMIN', 'STAFF'), singleImageUpload.single('image'), async (req: AuthRequest, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No se recibió imagen' });
+    }
+
+    return res.json({
+      url: `/uploads/products/${req.file.filename}`,
+      filename: req.file.filename,
+    });
+  } catch (error) {
+    console.error('Upload image error:', error);
+    return res.status(500).json({ error: 'Error al subir imagen' });
   }
 });
 

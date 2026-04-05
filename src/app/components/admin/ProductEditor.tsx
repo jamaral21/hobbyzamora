@@ -1,18 +1,18 @@
-import { useState } from 'react';
-import { Upload, X, Plus } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Upload, X } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../design-system/Card';
 import { Input, Textarea, Select } from '../design-system/Input';
 import { Button } from '../design-system/Button';
-import { Switch } from '../design-system/Switch';
 import { Product } from '../../lib/api';
 
 export interface ProductEditorProps {
   product?: Product;
   onSave: (product: Partial<Product>) => void;
   onCancel: () => void;
+  onUploadImage?: (file: File) => Promise<string>;
 }
 
-export function ProductEditor({ product, onSave, onCancel }: ProductEditorProps) {
+export function ProductEditor({ product, onSave, onCancel, onUploadImage }: ProductEditorProps) {
   const [formData, setFormData] = useState<Partial<Product>>(
     product || {
       sku: '',
@@ -23,9 +23,11 @@ export function ProductEditor({ product, onSave, onCancel }: ProductEditorProps)
       stock: 0,
       images: [],
       description: '',
-      status: 'draft',
+      status: 'ACTIVE',
     }
   );
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,12 +56,27 @@ export function ProductEditor({ product, onSave, onCancel }: ProductEditorProps)
                   value={formData.status}
                   onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
                 >
-                  <option value="active">Activo</option>
-                  <option value="draft">Borrador</option>
-                  <option value="archived">Archivado</option>
-                  <option value="hidden">Oculto (solo admin)</option>
+                  <option value="ACTIVE">Activo</option>
+                  <option value="DRAFT">Borrador</option>
+                  <option value="ARCHIVED">Archivado</option>
+                  <option value="HIDDEN">Oculto (solo admin)</option>
                 </Select>
               </div>
+
+              <Input
+                label="EAN"
+                type="number"
+                inputMode="numeric"
+                value={formData.ean ?? ''}
+                onChange={(e) => {
+                  const value = e.target.value.trim();
+                  setFormData({
+                    ...formData,
+                    ean: value === '' ? null : Number.parseInt(value, 10),
+                  });
+                }}
+                placeholder="Ej: 7891234567890"
+              />
 
               <Input
                 label="Nombre del Producto"
@@ -159,25 +176,41 @@ export function ProductEditor({ product, onSave, onCancel }: ProductEditorProps)
                 <button
                   type="button"
                   className="w-full h-32 border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center gap-2 hover:border-primary transition-colors"
+                  onClick={() => imageInputRef.current?.click()}
+                  disabled={isUploadingImage || !onUploadImage}
                 >
                   <Upload className="w-6 h-6 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">Subir Imagen</span>
+                  <span className="text-sm text-muted-foreground">
+                    {isUploadingImage ? 'Subiendo...' : 'Subir Imagen'}
+                  </span>
                 </button>
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file || !onUploadImage) return;
+                    setIsUploadingImage(true);
+                    try {
+                      const imageUrl = await onUploadImage(file);
+                      setFormData((prev) => ({
+                        ...prev,
+                        images: [...(prev.images || []), imageUrl],
+                      }));
+                    } catch (error) {
+                      console.error('Image upload failed:', error);
+                    } finally {
+                      setIsUploadingImage(false);
+                      if (imageInputRef.current) imageInputRef.current.value = '';
+                    }
+                  }}
+                />
               </div>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Variantes</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Button type="button" variant="outline" fullWidth size="sm">
-                <Plus className="w-4 h-4" />
-                Agregar Variante
-              </Button>
-            </CardContent>
-          </Card>
         </div>
       </div>
 

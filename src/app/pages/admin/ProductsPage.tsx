@@ -444,6 +444,10 @@ export default function ProductsPage() {
           product={editingProduct as any}
           onSave={handleSave}
           onCancel={() => setIsEditorOpen(false)}
+          onUploadImage={async (file) => {
+            const result = await productsAPI.uploadImage(file);
+            return result.url;
+          }}
         />
       </Modal>
     </AdminLayout>
