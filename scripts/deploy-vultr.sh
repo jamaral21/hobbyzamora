@@ -81,6 +81,40 @@ ensure_required_files() {
   [ -f "${SHARED_DIR}/.env" ] || fail "Missing ${SHARED_DIR}/.env"
 }
 
+ensure_service_uses_shared_env() {
+  local env_files
+  env_files="$(systemctl show "${SERVICE_NAME}" -p EnvironmentFiles --value 2>/dev/null || true)"
+
+  if [ -z "${env_files}" ] || ! printf '%s' "${env_files}" | grep -q "${SHARED_DIR}/.env"; then
+    fail "Service ${SERVICE_NAME} must load ${SHARED_DIR}/.env via EnvironmentFile. Current EnvironmentFiles: ${env_files:-<none>}"
+  fi
+}
+
+ensure_current_uploads_link() {
+  local current_uploads="${CURRENT_LINK}/uploads"
+  local expected_target
+  local actual_target
+
+  expected_target="$(readlink -f "${SHARED_DIR}/uploads")"
+
+  if [ -L "${current_uploads}" ]; then
+    actual_target="$(readlink -f "${current_uploads}")"
+    [ "${actual_target}" = "${expected_target}" ] || fail "${current_uploads} does not point to ${SHARED_DIR}/uploads"
+    return
+  fi
+
+  if [ -e "${current_uploads}" ]; then
+    require_cmd rsync
+    rsync -a --ignore-existing "${current_uploads}/" "${SHARED_DIR}/uploads/"
+    rm -rf "${current_uploads}"
+  fi
+
+  ln -sfn "${SHARED_DIR}/uploads" "${current_uploads}"
+  actual_target="$(readlink -f "${current_uploads}")"
+  [ "${actual_target}" = "${expected_target}" ] || fail "Failed to link ${current_uploads} to ${SHARED_DIR}/uploads"
+  log "Ensured ${current_uploads} points to shared uploads"
+}
+
 verify_release_uploads_link() {
   local release_dir="$1"
   local expected_target
@@ -179,8 +213,10 @@ main() {
   acquire_lock
   create_dirs
   ensure_required_files
+  ensure_service_uses_shared_env
   ensure_uploads_env_var
   sync_existing_uploads_to_shared
+  ensure_current_uploads_link
 
   local release_id
   local release_dir
@@ -238,6 +274,7 @@ main() {
 
   log "Switching current symlink"
   ln -sfn "${release_dir}" "${CURRENT_LINK}"
+  ensure_current_uploads_link
 
   log "Restarting systemd service: ${SERVICE_NAME}"
   sudo systemctl restart "${SERVICE_NAME}"
