@@ -109,7 +109,7 @@ ensure_current_uploads_link() {
     rm -rf "${current_uploads}"
   fi
 
-  ln -sfn "${SHARED_DIR}/uploads" "${current_uploads}"
+  ln -sfnT "${SHARED_DIR}/uploads" "${current_uploads}"
   actual_target="$(readlink -f "${current_uploads}")"
   [ "${actual_target}" = "${expected_target}" ] || fail "Failed to link ${current_uploads} to ${SHARED_DIR}/uploads"
   log "Ensured ${current_uploads} points to shared uploads"
@@ -269,12 +269,13 @@ main() {
 
   log "Linking shared uploads directory"
   rm -rf "${release_dir}/uploads"
-  ln -sfn "${SHARED_DIR}/uploads" "${release_dir}/uploads"
+  ln -sfnT "${SHARED_DIR}/uploads" "${release_dir}/uploads"
   verify_release_uploads_link "${release_dir}"
 
   log "Switching current symlink"
   ln -sfn "${release_dir}" "${CURRENT_LINK}"
   ensure_current_uploads_link
+  verify_release_uploads_link "$(readlink -f "${CURRENT_LINK}")"
 
   log "Restarting systemd service: ${SERVICE_NAME}"
   sudo systemctl restart "${SERVICE_NAME}"
