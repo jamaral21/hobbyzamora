@@ -11,9 +11,20 @@ import { authenticate, optionalAuth, requireRole, AuthRequest } from '../middlew
 const router = Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const uploadsBaseDir = process.env.UPLOADS_DIR
-  ? path.resolve(process.env.UPLOADS_DIR)
-  : path.resolve(process.cwd(), 'uploads');
+const resolveUploadsBaseDir = () => {
+  if (process.env.UPLOADS_DIR) {
+    return path.resolve(process.env.UPLOADS_DIR);
+  }
+
+  const sharedUploads = '/var/www/hobbyzamora/shared/uploads';
+  if (fs.existsSync(sharedUploads)) {
+    return sharedUploads;
+  }
+
+  return path.resolve(process.cwd(), 'uploads');
+};
+
+const uploadsBaseDir = resolveUploadsBaseDir();
 const productUploadsDir = path.join(uploadsBaseDir, 'products');
 const HIDDEN_PRODUCTS_ALLOWED_EMAIL = 'admin@hobbyzamora.com';
 

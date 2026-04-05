@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 
@@ -40,9 +41,20 @@ app.use(cors({
 app.use(express.json({ limit: '100mb' }));
 
 // Serve uploaded files
-const uploadsDir = process.env.UPLOADS_DIR
-  ? path.resolve(process.env.UPLOADS_DIR)
-  : path.resolve(process.cwd(), 'uploads');
+const resolveUploadsDir = () => {
+  if (process.env.UPLOADS_DIR) {
+    return path.resolve(process.env.UPLOADS_DIR);
+  }
+
+  const sharedUploads = '/var/www/hobbyzamora/shared/uploads';
+  if (fs.existsSync(sharedUploads)) {
+    return sharedUploads;
+  }
+
+  return path.resolve(process.cwd(), 'uploads');
+};
+
+const uploadsDir = resolveUploadsDir();
 app.use('/uploads', express.static(uploadsDir));
 
 // Health check
