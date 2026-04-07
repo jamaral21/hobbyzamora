@@ -130,10 +130,10 @@ export default function OrderDetailPage() {
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-foreground">
-                      ${item.price.toFixed(2)} × {item.quantity}
+                      ${item.price.toLocaleString('es-CL', { maximumFractionDigits: 0 })} × {item.quantity}
                     </p>
                     <p className="text-sm font-medium text-foreground">
-                      ${(item.price * item.quantity).toFixed(2)}
+                      ${(item.price * item.quantity).toLocaleString('es-CL', { maximumFractionDigits: 0 })}
                     </p>
                   </div>
                 </div>
@@ -144,27 +144,27 @@ export default function OrderDetailPage() {
             <div className="mt-4 pt-4 border-t border-border space-y-2">
               <div className="flex justify-between text-sm text-muted-foreground">
                 <span>Neto</span>
-                <span>${(order.subtotal - order.tax).toFixed(2)}</span>
+                <span>${(order.subtotal - order.tax).toLocaleString('es-CL', { maximumFractionDigits: 0 })}</span>
               </div>
               <div className="flex justify-between text-sm text-muted-foreground">
                 <span>IVA débito (19%)</span>
-                <span>${order.tax.toFixed(2)}</span>
+                <span>${order.tax.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</span>
               </div>
               {order.shipping > 0 && (
                 <div className="flex justify-between text-sm text-muted-foreground">
                   <span>Envío</span>
-                  <span>${order.shipping.toFixed(2)}</span>
+                  <span>${order.shipping.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</span>
                 </div>
               )}
               {order.discount > 0 && (
                 <div className="flex justify-between text-sm text-[#00e676]">
                   <span>Descuento</span>
-                  <span>-${order.discount.toFixed(2)}</span>
+                  <span>-${order.discount.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</span>
                 </div>
               )}
               <div className="flex justify-between text-base font-semibold text-foreground pt-2 border-t border-border">
                 <span>Total</span>
-                <span>${order.total.toFixed(2)}</span>
+                <span>${order.total.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</span>
               </div>
             </div>
           </Card>
@@ -194,7 +194,7 @@ export default function OrderDetailPage() {
                         {payment.status.toLowerCase()}
                       </Badge>
                       <span className="text-sm font-medium text-foreground">
-                        ${payment.amount.toFixed(2)}
+                        ${payment.amount.toLocaleString('es-CL', { maximumFractionDigits: 0 })}
                       </span>
                     </div>
                   </div>

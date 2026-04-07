@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { Link } from 'react-router';
 import { ShoppingCart, AlertCircle, Flame } from 'lucide-react';
 import { Card } from '../design-system/Card';
 import { Button } from '../design-system/Button';
 import { Badge } from '../design-system/Badge';
-import { Product } from '../../data/mockData';
+import { Product } from '../../lib/api';
+import { useCartStore } from '../../lib/store';
 
 export interface ProductCardProps {
   product: Product;
@@ -11,6 +13,15 @@ export interface ProductCardProps {
 
 export function ProductCard({ product }: ProductCardProps) {
   const isLowStock = product.stock < 10;
+  const { addItem } = useCartStore();
+  const [justAdded, setJustAdded] = useState(false);
+
+  const handleAddToCart = () => {
+    if (product.stock <= 0) return;
+    addItem(product, 1);
+    setJustAdded(true);
+    window.setTimeout(() => setJustAdded(false), 1200);
+  };
 
   return (
     <Card padding="none" hover className="group overflow-hidden flex flex-col">
@@ -58,11 +69,12 @@ export function ProductCard({ product }: ProductCardProps) {
 
           <Button
             size="sm"
+            disabled={product.stock <= 0}
             className="bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground border border-primary/20 hover:shadow-[0_0_12px_rgba(255,214,10,0.3)]"
-            onClick={() => console.log('Add to cart', product.id)}
+            onClick={handleAddToCart}
           >
             <ShoppingCart className="w-4 h-4" />
-            Agregar
+            {product.stock <= 0 ? 'Agotado' : justAdded ? 'Agregado' : 'Agregar'}
           </Button>
         </div>
       </div>

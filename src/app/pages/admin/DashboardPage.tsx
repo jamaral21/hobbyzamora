@@ -42,21 +42,21 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <DashboardWidget
           title="Ventas Diarias"
-          value={`$${(stats?.dailySales || 0).toFixed(2)}`}
+          value={`$${(stats?.dailySales || 0).toLocaleString('es-CL', { maximumFractionDigits: 0 })}`}
           icon={DollarSign}
           variant="primary"
           trend={{ value: 12.5, label: 'vs ayer' }}
         />
         <DashboardWidget
           title="Ventas Semanales"
-          value={`$${(stats?.weeklySales || 0).toFixed(2)}`}
+          value={`$${(stats?.weeklySales || 0).toLocaleString('es-CL', { maximumFractionDigits: 0 })}`}
           icon={TrendingUp}
           variant="accent"
           trend={{ value: 8.3, label: 'vs semana pasada' }}
         />
         <DashboardWidget
           title="Ingresos Mensuales"
-          value={`$${(stats?.monthlySales || 0).toFixed(2)}`}
+          value={`$${(stats?.monthlySales || 0).toLocaleString('es-CL', { maximumFractionDigits: 0 })}`}
           icon={DollarSign}
           variant="success"
           trend={{ value: 15.7, label: 'vs mes pasado' }}
@@ -95,7 +95,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <span className="text-sm text-foreground">
-                    ${product.revenue.toFixed(2)}
+                    ${product.revenue.toLocaleString('es-CL', { maximumFractionDigits: 0 })}
                   </span>
                 </div>
               ))}
@@ -141,7 +141,7 @@ export default function DashboardPage() {
                   </p>
                 </div>
                 <span className="text-sm text-foreground">
-                  ${order.total.toFixed(2)}
+                  ${order.total.toLocaleString('es-CL', { maximumFractionDigits: 0 })}
                 </span>
               </div>
             ))}

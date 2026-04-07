@@ -160,6 +160,7 @@ export interface User {
   name: string;
   role: 'ADMIN' | 'STAFF' | 'CUSTOMER';
   phone?: string;
+  avatarUrl?: string | null;
 }
 
 // API Error class
@@ -225,6 +226,27 @@ export const authAPI = {
       method: 'PATCH',
       body: JSON.stringify(data),
     }),
+
+  uploadAvatar: async (file: File) => {
+    const token = localStorage.getItem('adminToken') || localStorage.getItem('token');
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    const response = await fetch(`${API_BASE}/auth/me/avatar`, {
+      method: 'POST',
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({ error: 'Request failed' }));
+      throw new ApiError(response.status, data.error || response.statusText);
+    }
+
+    return response.json() as Promise<User>;
+  },
 
   googleLogin: async (credential: string) => {
     const data = await fetchAPI<{ user: User; token: string }>('/auth/google', {
@@ -677,4 +699,34 @@ export const paymentsAPI = {
       method: 'POST',
       body: JSON.stringify({ amount, reason }),
     }),
+};
+
+// Wishlist API
+export interface WishlistItem {
+  id: string;
+  productId: string;
+  createdAt: string;
+  product: {
+    id: string;
+    name: string;
+    sku: string;
+    price: number;
+    images: string[];
+    category: string;
+    stock: number;
+    status: string;
+  };
+}
+
+export const wishlistAPI = {
+  getAll: () => fetchAPI<WishlistItem[]>('/wishlist'),
+
+  add: (productId: string) =>
+    fetchAPI<{ id: string }>(`/wishlist/${productId}`, { method: 'POST' }),
+
+  remove: (productId: string) =>
+    fetchAPI<{ message: string }>(`/wishlist/${productId}`, { method: 'DELETE' }),
+
+  check: (productId: string) =>
+    fetchAPI<{ isFavorite: boolean }>(`/wishlist/check/${productId}`),
 };

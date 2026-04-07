@@ -85,7 +85,7 @@ export default function OrdersPage() {
                 o.customerEmail || '',
                 new Date(o.createdAt).toLocaleDateString(),
                 o.itemCount || 0,
-                o.total.toFixed(2),
+                o.total.toLocaleString('es-CL', { maximumFractionDigits: 0 }),
                 o.status.toLowerCase(),
               ]);
               const csvContent = [headers, ...rows]
@@ -190,7 +190,7 @@ export default function OrdersPage() {
                 {new Date(order.createdAt).toLocaleDateString()}
               </TableCell>
               <TableCell>{order.itemCount || 0}</TableCell>
-              <TableCell>${order.total.toFixed(2)}</TableCell>
+              <TableCell>${order.total.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</TableCell>
               <TableCell>
                 <Badge
                   variant={

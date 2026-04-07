@@ -366,7 +366,7 @@ export default function ProductsPage() {
               </TableCell>
               <TableCell>{product.sku}</TableCell>
               <TableCell>{product.category}</TableCell>
-              <TableCell>${product.price.toFixed(2)}</TableCell>
+              <TableCell>${product.price.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</TableCell>
               <TableCell>
                 <div className="flex items-center gap-2">
                   <span>{product.stock}</span>

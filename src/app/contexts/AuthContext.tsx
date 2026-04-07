@@ -10,6 +10,7 @@ interface AuthContextType {
   googleLogin: (credential: string) => Promise<void>;
   logout: () => void;
   updateProfile: (data: { name?: string; phone?: string }) => Promise<void>;
+  uploadAvatar: (file: File) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -58,6 +59,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(updated);
   }, []);
 
+  const uploadAvatar = useCallback(async (file: File) => {
+    const updated = await authAPI.uploadAvatar(file);
+    setUser(updated);
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -69,6 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         googleLogin,
         logout,
         updateProfile,
+        uploadAvatar,
       }}
     >
       {children}

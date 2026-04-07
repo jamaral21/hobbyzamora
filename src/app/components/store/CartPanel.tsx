@@ -19,10 +19,8 @@ export interface CartPanelProps {
 }
 
 export function CartPanel({ items, onUpdateQuantity, onRemove }: CartPanelProps) {
-  const subtotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const shipping = subtotal > 0 ? 9.99 : 0;
-  const tax = subtotal * 0.08;
-  const total = subtotal + shipping + tax;
+  const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const taxIncluded = total * 19 / 119;
 
   return (
     <Card>
@@ -79,20 +77,16 @@ export function CartPanel({ items, onUpdateQuantity, onRemove }: CartPanelProps)
 
       <div className="space-y-2 pt-4 border-t border-border">
         <div className="flex justify-between text-sm">
-          <span className="text-muted-foreground">Subtotal</span>
-          <span className="text-foreground font-[family-name:var(--font-mono)]">${subtotal.toLocaleString('es-CL', { minimumFractionDigits: 2 })}</span>
+          <span className="text-muted-foreground">IVA incluido (19%)</span>
+          <span className="text-foreground font-[family-name:var(--font-mono)]">${taxIncluded.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</span>
         </div>
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">Envío</span>
-          <span className="text-foreground font-[family-name:var(--font-mono)]">${shipping.toLocaleString('es-CL', { minimumFractionDigits: 2 })}</span>
-        </div>
-        <div className="flex justify-between text-sm">
-          <span className="text-muted-foreground">Impuesto</span>
-          <span className="text-foreground font-[family-name:var(--font-mono)]">${tax.toLocaleString('es-CL', { minimumFractionDigits: 2 })}</span>
+          <span className="text-muted-foreground italic">Por calcular</span>
         </div>
         <div className="flex justify-between pt-2 border-t border-border">
           <span className="text-foreground font-semibold">Total</span>
-          <span className="text-xl text-primary font-bold font-[family-name:var(--font-mono)]">${total.toLocaleString('es-CL', { minimumFractionDigits: 2 })}</span>
+          <span className="text-xl text-primary font-bold font-[family-name:var(--font-mono)]">${total.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</span>
         </div>
       </div>
 

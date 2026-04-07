@@ -13,11 +13,8 @@ export interface CheckoutSummaryProps {
 }
 
 export function CheckoutSummary({ items }: CheckoutSummaryProps) {
-  const itemsTotal = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const shipping = 0;
-  const tax = itemsTotal * 19 / 119; // IVA débito (incluido en precios)
-  const neto = itemsTotal - tax;
-  const total = itemsTotal + shipping;
+  const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const taxIncluded = total * 19 / 119;
 
   return (
     <Card>
@@ -35,27 +32,23 @@ export function CheckoutSummary({ items }: CheckoutSummaryProps) {
               )}
             </div>
             <span className="text-foreground font-[family-name:var(--font-mono)]">
-              ${(item.price * item.quantity).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+              ${(item.price * item.quantity).toLocaleString('es-CL', { maximumFractionDigits: 0 })}
             </span>
           </div>
         ))}
 
         <div className="pt-3 border-t border-border space-y-2">
           <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Neto</span>
-            <span className="text-foreground font-[family-name:var(--font-mono)]">${neto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">IVA débito (19%)</span>
-            <span className="text-foreground font-[family-name:var(--font-mono)]">${tax.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+            <span className="text-muted-foreground">IVA incluido (19%)</span>
+            <span className="text-foreground font-[family-name:var(--font-mono)]">${taxIncluded.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Envío</span>
-            <span className="text-foreground font-[family-name:var(--font-mono)]">{shipping === 0 ? 'Gratis' : `$${shipping.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`}</span>
+            <span className="text-muted-foreground italic">Por calcular</span>
           </div>
           <div className="flex justify-between pt-2 border-t border-border">
             <span className="text-foreground font-semibold">Total</span>
-            <span className="text-xl text-primary font-bold font-[family-name:var(--font-mono)]">${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</span>
+            <span className="text-xl text-primary font-bold font-[family-name:var(--font-mono)]">${total.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</span>
           </div>
         </div>
       </CardContent>

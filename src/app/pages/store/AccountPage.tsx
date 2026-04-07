@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router';
 import { StoreLayout } from '../../components/layout/StoreLayout';
 import { RequireAuth } from '../../components/auth/RequireAuth';
@@ -7,8 +7,9 @@ import { Input } from '../../components/design-system/Input';
 import { Button } from '../../components/design-system/Button';
 import { Badge } from '../../components/design-system/Badge';
 import { useAuth } from '../../contexts/AuthContext';
-import { ordersAPI, Order } from '../../lib/api';
-import { User, Package, LogOut, Loader2, ChevronRight } from 'lucide-react';
+import { ordersAPI, wishlistAPI, Order, WishlistItem } from '../../lib/api';
+import { User, Package, LogOut, Loader2, ChevronRight, Heart, X, ShoppingCart, Camera } from 'lucide-react';
+import { useCartStore } from '../../lib/store';
 
 export default function AccountPage() {
   return (
@@ -21,19 +22,42 @@ export default function AccountPage() {
 }
 
 function AccountContent() {
-  const { user, logout, updateProfile } = useAuth();
+  const { user, logout, updateProfile, uploadAvatar } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
+  const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
+  const [loadingWishlist, setLoadingWishlist] = useState(true);
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [form, setForm] = useState({ name: user?.name || '', phone: user?.phone || '' });
+  const { addItem } = useCartStore();
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     ordersAPI.getMyOrders()
       .then(setOrders)
       .catch(() => {})
       .finally(() => setLoadingOrders(false));
+
+    wishlistAPI.getAll()
+      .then(setWishlist)
+      .catch(() => {})
+      .finally(() => setLoadingWishlist(false));
   }, []);
+
+  const handleRemoveWishlist = async (productId: string) => {
+    setRemovingId(productId);
+    try {
+      await wishlistAPI.remove(productId);
+      setWishlist((prev) => prev.filter((item) => item.productId !== productId));
+    } catch {
+      // silently fail
+    } finally {
+      setRemovingId(null);
+    }
+  };
 
   const handleSaveProfile = async () => {
     setIsSaving(true);
@@ -44,6 +68,21 @@ function AccountContent() {
       // mantener edición abierta en caso de error
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingAvatar(true);
+    try {
+      await uploadAvatar(file);
+    } catch {
+      // silently fail
+    } finally {
+      setIsUploadingAvatar(false);
+      e.target.value = '';
     }
   };
 
@@ -76,8 +115,27 @@ function AccountContent() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
-                <User className="w-5 h-5 text-primary" />
+              <div className="relative w-12 h-12">
+                {user?.avatarUrl ? (
+                  <img
+                    src={user.avatarUrl}
+                    alt={user.name || 'Perfil'}
+                    className="w-12 h-12 rounded-full object-cover border border-primary/20"
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
+                    <User className="w-6 h-6 text-primary" />
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => avatarInputRef.current?.click()}
+                  className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:opacity-90 transition-opacity"
+                  title="Cambiar foto de perfil"
+                  disabled={isUploadingAvatar}
+                >
+                  {isUploadingAvatar ? <Loader2 className="w-3 h-3 animate-spin" /> : <Camera className="w-3 h-3" />}
+                </button>
               </div>
               <CardTitle>Perfil</CardTitle>
             </div>
@@ -89,6 +147,14 @@ function AccountContent() {
           </div>
         </CardHeader>
         <CardContent>
+          <input
+            ref={avatarInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="hidden"
+            onChange={handleAvatarChange}
+          />
+
           {isEditing ? (
             <div className="space-y-4">
               <Input
@@ -162,7 +228,7 @@ function AccountContent() {
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="text-right">
-                      <p className="text-sm font-bold text-primary font-[family-name:var(--font-mono)]">${order.total.toFixed(2)}</p>
+                      <p className="text-sm font-bold text-primary font-[family-name:var(--font-mono)]">${order.total.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</p>
                       <Badge variant={statusColor(order.status)} className="text-xs">
                         {statusLabel[order.status] || order.status}
                       </Badge>
@@ -171,6 +237,79 @@ function AccountContent() {
                   </div>
                 </Link>
               ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Favoritos */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+              <Heart className="w-5 h-5 text-red-500" />
+            </div>
+            <CardTitle>Mis Favoritos</CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loadingWishlist ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            </div>
+          ) : wishlist.length === 0 ? (
+            <div className="text-center py-8">
+              <Heart className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+              <p className="text-muted-foreground mb-4">Aún no tienes productos favoritos</p>
+              <Link to="/store/products">
+                <Button variant="outline">Explorar Productos</Button>
+              </Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {wishlist.map((item) => {
+                const p = item.product;
+                const imageUrl = Array.isArray(p.images) ? p.images[0] : p.images;
+                return (
+                  <div
+                    key={item.id}
+                    className="flex items-center gap-3 p-3 rounded-lg border border-border hover:border-primary/25 hover:bg-secondary/30 transition-all group"
+                  >
+                    <Link to={`/store/product/${p.id}`} className="shrink-0">
+                      <div className="w-16 h-16 rounded-lg overflow-hidden bg-secondary">
+                        {imageUrl ? (
+                          <img src={imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-muted-foreground/30">
+                            <ShoppingCart className="w-5 h-5" />
+                          </div>
+                        )}
+                      </div>
+                    </Link>
+                    <div className="flex-1 min-w-0">
+                      <Link to={`/store/product/${p.id}`}>
+                        <p className="text-sm font-medium text-foreground truncate hover:text-primary transition-colors">{p.name}</p>
+                      </Link>
+                      <p className="text-xs text-muted-foreground">{p.category}</p>
+                      <p className="text-sm font-bold text-primary font-[family-name:var(--font-mono)] mt-0.5">
+                        ${Number(p.price).toLocaleString('es-CL')}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => handleRemoveWishlist(p.id)}
+                      disabled={removingId === p.id}
+                      title="Quitar de favoritos"
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors opacity-0 group-hover:opacity-100"
+                    >
+                      {removingId === p.id ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <X className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>
