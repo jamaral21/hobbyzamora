@@ -10,6 +10,61 @@ const GETNET_ENDPOINT = process.env.GETNET_ENDPOINT || 'https://checkout.test.ge
 const GETNET_LOGIN = process.env.GETNET_LOGIN || '';
 const GETNET_TRANKEY = process.env.GETNET_TRANKEY || '';
 
+type PaymentOrderResolution = {
+  paymentStatus: 'APPROVED' | 'DECLINED' | 'PENDING';
+  orderStatus: 'PROCESSING' | 'CANCELLED' | 'PENDING';
+};
+
+function resolveGetnetStatuses(rawStatus?: string): PaymentOrderResolution {
+  const status = (rawStatus || '').toUpperCase();
+
+  if (status === 'APPROVED') {
+    return { paymentStatus: 'APPROVED', orderStatus: 'PROCESSING' };
+  }
+
+  if (status === 'PENDING' || status === 'PENDING_VALIDATION') {
+    return { paymentStatus: 'PENDING', orderStatus: 'PENDING' };
+  }
+
+  // Any non-approved/non-pending terminal status should be treated as declined.
+  return { paymentStatus: 'DECLINED', orderStatus: 'CANCELLED' };
+}
+
+async function updateOrderStatusWithStock(orderId: string, nextStatus: 'PROCESSING' | 'CANCELLED' | 'PENDING') {
+  if (nextStatus === 'PENDING') return;
+
+  if (nextStatus !== 'CANCELLED') {
+    await prisma.order.update({
+      where: { id: orderId },
+      data: { status: nextStatus },
+    });
+    return;
+  }
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: true },
+  });
+
+  if (!order || order.status === 'CANCELLED') {
+    return;
+  }
+
+  await prisma.$transaction(async (tx) => {
+    for (const item of order.items) {
+      await tx.product.update({
+        where: { id: item.productId },
+        data: { stock: { increment: item.quantity } },
+      });
+    }
+
+    await tx.order.update({
+      where: { id: orderId },
+      data: { status: 'CANCELLED' },
+    });
+  });
+}
+
 // Generate PlacetoPay auth object
 function generatePlacetoPayAuth() {
   const rawNonce = crypto.randomBytes(16).toString('hex');
@@ -169,8 +224,20 @@ router.post('/getnet/query', optionalAuth, async (req: AuthRequest, res) => {
       where: { id: payment.orderId },
     });
 
-    // If already resolved, return current status
+    // If already resolved, return current status.
+    // Auto-heal old rows where payment was declined but order remained pending.
     if (payment.status !== 'PENDING') {
+      if (payment.status === 'DECLINED' && order?.status === 'PENDING') {
+        await updateOrderStatusWithStock(payment.orderId, 'CANCELLED');
+        const refreshedOrder = await prisma.order.findUnique({ where: { id: payment.orderId } });
+        return res.json({
+          id: payment.id,
+          status: payment.status,
+          orderId: payment.orderId,
+          orderStatus: refreshedOrder?.status,
+        });
+      }
+
       return res.json({
         id: payment.id,
         status: payment.status,
@@ -192,29 +259,8 @@ router.post('/getnet/query', optionalAuth, async (req: AuthRequest, res) => {
     const sessionStatus = await queryResponse.json();
     console.log('Getnet session status:', JSON.stringify(sessionStatus));
 
-    let paymentStatus: string = 'PENDING';
-    let orderStatus: string = 'PENDING';
-
     const placetoPayStatus = sessionStatus.status?.status;
-    switch (placetoPayStatus) {
-      case 'APPROVED':
-        paymentStatus = 'APPROVED';
-        orderStatus = 'PROCESSING';
-        break;
-      case 'REJECTED':
-      case 'FAILED':
-        paymentStatus = 'DECLINED';
-        orderStatus = 'CANCELLED';
-        break;
-      case 'PENDING':
-      case 'PENDING_VALIDATION':
-        paymentStatus = 'PENDING';
-        orderStatus = 'PENDING';
-        break;
-      default:
-        paymentStatus = 'PENDING';
-        orderStatus = 'PENDING';
-    }
+    const { paymentStatus, orderStatus } = resolveGetnetStatuses(placetoPayStatus);
 
     // Extract card info from Getnet response if available
     const txn = sessionStatus.payment?.[0] ?? null;
@@ -232,13 +278,8 @@ router.post('/getnet/query', optionalAuth, async (req: AuthRequest, res) => {
       },
     });
 
-    // Update order status
-    if (orderStatus !== 'PENDING') {
-      await prisma.order.update({
-        where: { id: payment.orderId },
-        data: { status: orderStatus },
-      });
-    }
+    // Update order status and return stock when payment gets cancelled/declined
+    await updateOrderStatusWithStock(payment.orderId, orderStatus);
 
     res.json({
       id: payment.id,
@@ -285,21 +326,8 @@ router.post('/getnet/callback', async (req, res) => {
 
     const sessionStatus = await queryResponse.json();
 
-    let paymentStatus: string = 'PENDING';
-    let orderStatus: string = 'PENDING';
-
     const placetoPayStatus = sessionStatus.status?.status || status?.status;
-    switch (placetoPayStatus) {
-      case 'APPROVED':
-        paymentStatus = 'APPROVED';
-        orderStatus = 'PROCESSING';
-        break;
-      case 'REJECTED':
-      case 'FAILED':
-        paymentStatus = 'DECLINED';
-        orderStatus = 'CANCELLED';
-        break;
-    }
+    const { paymentStatus, orderStatus } = resolveGetnetStatuses(placetoPayStatus);
 
     const txn = sessionStatus.payment?.[0] ?? null;
 
@@ -313,12 +341,7 @@ router.post('/getnet/callback', async (req, res) => {
       },
     });
 
-    if (orderStatus !== 'PENDING') {
-      await prisma.order.update({
-        where: { id: payment.orderId },
-        data: { status: orderStatus },
-      });
-    }
+    await updateOrderStatusWithStock(payment.orderId, orderStatus);
 
     res.json({ received: true });
   } catch (error) {
