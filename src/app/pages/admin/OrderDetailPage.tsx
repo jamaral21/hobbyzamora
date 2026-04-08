@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
+import { Link } from 'react-router';
 import { ArrowLeft, Package, CreditCard, Truck, Loader2, AlertCircle } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { Button } from '../../components/design-system/Button';
@@ -127,6 +128,12 @@ export default function OrderDetailPage() {
                       SKU: {item.sku}
                       {item.variantName && ` · ${item.variantName}`}
                     </p>
+                    <Link
+                      to={`/admin/store/product/${item.productId}`}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      Ver producto
+                    </Link>
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-foreground">

@@ -1,28 +1,30 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { Search, Filter, Download, Eye, Loader2, Trash2 } from 'lucide-react';
+import { Search, Filter, Download, Eye, Loader2 } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { Button } from '../../components/design-system/Button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/design-system/Table';
 import { Badge } from '../../components/design-system/Badge';
 import { useOrders } from '../../hooks/useData';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
-import { ordersAPI } from '../../lib/api';
 
 export default function OrdersPage() {
-  const { isAuthenticated, user } = useAdminAuth();
+  const { isAuthenticated } = useAdminAuth();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const { data: ordersData, isLoading, refetch } = useOrders(
+  const { data: ordersData, isLoading } = useOrders(
     { status: statusFilter !== 'all' ? statusFilter.toUpperCase() : undefined },
     { enabled: isAuthenticated }
   );
   
   const orders = ordersData || [];
+
+  const getItemsCount = (order: any) =>
+    Array.isArray(order.items)
+      ? order.items.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0)
+      : 0;
 
   const filteredOrders = useMemo(() => {
     return orders.filter((order: any) => {
@@ -44,18 +46,6 @@ export default function OrdersPage() {
     return counts;
   }, [orders]);
 
-  const handleDelete = async (id: string) => {
-    setDeletingId(id);
-    try {
-      await ordersAPI.deleteById(id);
-      setConfirmDeleteId(null);
-      refetch();
-    } catch (err) {
-      console.error('Error deleting order:', err);
-    } finally {
-      setDeletingId(null);
-    }
-  };
   if (isLoading) {
     return (
       <AdminLayout>
@@ -84,7 +74,7 @@ export default function OrdersPage() {
                 o.customerName || '',
                 o.customerEmail || '',
                 new Date(o.createdAt).toLocaleDateString(),
-                o.itemCount || 0,
+                getItemsCount(o),
                 o.total.toLocaleString('es-CL', { maximumFractionDigits: 0 }),
                 o.status.toLowerCase(),
               ]);
@@ -189,7 +179,7 @@ export default function OrdersPage() {
               <TableCell>
                 {new Date(order.createdAt).toLocaleDateString()}
               </TableCell>
-              <TableCell>{order.itemCount || 0}</TableCell>
+              <TableCell>{getItemsCount(order)}</TableCell>
               <TableCell>${order.total.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</TableCell>
               <TableCell>
                 <Badge
@@ -213,50 +203,12 @@ export default function OrdersPage() {
                   <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/orders/${order.id}`)}>
                     <Eye className="w-4 h-4" />
                   </Button>
-                  {user?.role === 'ADMIN' && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-red-500 hover:bg-red-50"
-                      onClick={() => setConfirmDeleteId(order.id)}
-                      disabled={deletingId === order.id}
-                    >
-                      {deletingId === order.id
-                        ? <Loader2 className="w-4 h-4 animate-spin" />
-                        : <Trash2 className="w-4 h-4" />}
-                    </Button>
-                  )}
                 </div>
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
-
-      {/* Delete confirmation modal */}
-      {confirmDeleteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-background rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl">
-            <h2 className="text-lg font-semibold text-foreground mb-2">¿Eliminar esta orden?</h2>
-            <p className="text-sm text-muted-foreground mb-6">
-              Esta acción es irreversible. Quedará un registro en el log de auditoría.
-            </p>
-            <div className="flex gap-3 justify-end">
-              <Button variant="outline" onClick={() => setConfirmDeleteId(null)} disabled={!!deletingId}>
-                Cancelar
-              </Button>
-              <Button
-                onClick={() => handleDelete(confirmDeleteId)}
-                disabled={!!deletingId}
-                className="bg-red-600 hover:bg-red-700 text-white"
-              >
-                {deletingId ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-                {deletingId ? 'Eliminando...' : 'Sí, eliminar'}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </AdminLayout>
   );
 }
