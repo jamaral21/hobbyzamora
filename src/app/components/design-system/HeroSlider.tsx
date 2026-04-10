@@ -323,7 +323,7 @@ export function HeroSlider({
   if (clampedSlides.length === 0) {
     return (
       <div
-        className={`relative w-full overflow-hidden h-[280px] sm:h-[340px] lg:h-[420px] ${className ?? ''}`}
+        className={`relative w-full overflow-hidden aspect-[1920/420] ${className ?? ''}`}
         role="region"
         aria-label="Banner promocional"
       >
@@ -337,7 +337,7 @@ export function HeroSlider({
 
   return (
     <div
-      className={`relative w-full overflow-hidden h-[280px] sm:h-[340px] lg:h-[420px] focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${className ?? ''}`}
+      className={`relative w-full overflow-hidden aspect-[1920/420] focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${className ?? ''}`}
       role="region"
       aria-label="Carrusel de banners"
       aria-roledescription="carousel"

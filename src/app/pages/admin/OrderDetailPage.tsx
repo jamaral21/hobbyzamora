@@ -107,17 +107,26 @@ export default function OrderDetailPage() {
               {order.items.map((item) => (
                 <div key={item.id} className="flex items-center gap-4 py-3">
                   <div className="w-12 h-12 bg-secondary rounded-lg overflow-hidden flex-shrink-0">
-                    {item.product?.images?.[0] ? (
-                      <img
-                        src={item.product.images[0]}
-                        alt={item.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-                        <Package className="w-5 h-5" />
-                      </div>
-                    )}
+                    {(() => {
+                      let imgUrl: string | undefined;
+                      const raw = item.product?.images;
+                      if (raw) {
+                        const imgs = typeof raw === 'string' ? (() => { try { return JSON.parse(raw); } catch { return []; } })() : raw;
+                        imgUrl = Array.isArray(imgs) ? imgs[0] : undefined;
+                      }
+                      return imgUrl ? (
+                        <img
+                          src={imgUrl.startsWith('/') ? imgUrl : imgUrl}
+                          alt={item.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                          <Package className="w-5 h-5" />
+                        </div>
+                      );
+                    })()}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-foreground truncate">
