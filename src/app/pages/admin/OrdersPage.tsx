@@ -13,10 +13,18 @@ export default function OrdersPage() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  
-  const { data: ordersData, isLoading } = useOrders({ status: statusFilter !== 'all' ? statusFilter.toUpperCase() : undefined }, { enabled: isAuthenticated });
+
+  const { data: ordersData, isLoading } = useOrders(
+    { status: statusFilter !== 'all' ? statusFilter.toUpperCase() : undefined },
+    { enabled: isAuthenticated }
+  );
   
   const orders = ordersData || [];
+
+  const getItemsCount = (order: any) =>
+    Array.isArray(order.items)
+      ? order.items.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0)
+      : 0;
 
   const filteredOrders = useMemo(() => {
     return orders.filter((order: any) => {
@@ -58,31 +66,33 @@ export default function OrdersPage() {
               Gestiona y rastrea los pedidos de clientes
             </p>
           </div>
-          <Button variant="outline" onClick={() => {
-            const headers = ['Pedido', 'Cliente', 'Email', 'Fecha', 'Artículos', 'Total', 'Estado'];
-            const rows = filteredOrders.map((o: any) => [
-              o.orderNumber,
-              o.customerName || '',
-              o.customerEmail || '',
-              new Date(o.createdAt).toLocaleDateString(),
-              o.itemCount || 0,
-              o.total.toFixed(2),
-              o.status.toLowerCase(),
-            ]);
-            const csvContent = [headers, ...rows]
-              .map(row => row.map((cell: any) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-              .join('\n');
-            const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `pedidos-${new Date().toISOString().slice(0, 10)}.csv`;
-            a.click();
-            URL.revokeObjectURL(url);
-          }}>
-            <Download className="w-4 h-4" />
-            Exportar
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => {
+              const headers = ['Pedido', 'Cliente', 'Email', 'Fecha', 'Artículos', 'Total', 'Estado'];
+              const rows = filteredOrders.map((o: any) => [
+                o.orderNumber,
+                o.customerName || '',
+                o.customerEmail || '',
+                new Date(o.createdAt).toLocaleDateString(),
+                getItemsCount(o),
+                o.total.toLocaleString('es-CL', { maximumFractionDigits: 0 }),
+                o.status.toLowerCase(),
+              ]);
+              const csvContent = [headers, ...rows]
+                .map(row => row.map((cell: any) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+                .join('\n');
+              const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `pedidos-${new Date().toISOString().slice(0, 10)}.csv`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}>
+              <Download className="w-4 h-4" />
+              Exportar
+            </Button>
+          </div>
         </div>
 
         {/* Filters */}
@@ -169,8 +179,8 @@ export default function OrdersPage() {
               <TableCell>
                 {new Date(order.createdAt).toLocaleDateString()}
               </TableCell>
-              <TableCell>{order.itemCount || 0}</TableCell>
-              <TableCell>${order.total.toFixed(2)}</TableCell>
+              <TableCell>{getItemsCount(order)}</TableCell>
+              <TableCell>${order.total.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</TableCell>
               <TableCell>
                 <Badge
                   variant={
@@ -189,9 +199,11 @@ export default function OrdersPage() {
                 </Badge>
               </TableCell>
               <TableCell>
-                <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/orders/${order.id}`)}>
-                  <Eye className="w-4 h-4" />
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/orders/${order.id}`)}>
+                    <Eye className="w-4 h-4" />
+                  </Button>
+                </div>
               </TableCell>
             </TableRow>
           ))}

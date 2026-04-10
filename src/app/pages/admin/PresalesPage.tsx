@@ -160,7 +160,7 @@ export function PresalesPage() {
                     </div>
                   </TableCell>
                   <TableCell className="font-semibold">
-                    ${product.price.toFixed(2)}
+                    ${product.price.toLocaleString('es-CL', { maximumFractionDigits: 0 })}
                   </TableCell>
                   <TableCell>
                     <div>

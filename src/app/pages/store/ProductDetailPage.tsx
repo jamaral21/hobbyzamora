@@ -6,8 +6,10 @@ import { Button } from '../../components/design-system/Button';
 import { Badge } from '../../components/design-system/Badge';
 import { Card } from '../../components/design-system/Card';
 import { VariantSelector } from '../../components/store/VariantSelector';
-import { productsAPI } from '../../lib/api';
+import { productsAPI, wishlistAPI } from '../../lib/api';
 import { useCartStore } from '../../lib/store';
+import { useAuth } from '../../contexts/AuthContext';
+import { AuthModal } from '../../components/auth/AuthModal';
 
 export default function ProductDetailPage() {
   const { id } = useParams();
@@ -15,7 +17,12 @@ export default function ProductDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
+  const [shareStatus, setShareStatus] = useState<'idle' | 'shared' | 'copied' | 'error'>('idle');
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const { addItem } = useCartStore();
+  const { isAuthenticated } = useAuth();
 
   useEffect(() => {
     async function loadProduct() {
@@ -31,6 +38,69 @@ export default function ProductDetailPage() {
     }
     loadProduct();
   }, [id]);
+
+  useEffect(() => {
+    if (!id || !isAuthenticated) return;
+    wishlistAPI.check(id)
+      .then(({ isFavorite }) => setIsFavorite(isFavorite))
+      .catch(() => {});
+  }, [id, isAuthenticated]);
+
+  const handleToggleFavorite = async () => {
+    if (!isAuthenticated) {
+      setShowAuthModal(true);
+      return;
+    }
+    if (!id || wishlistLoading) return;
+    setWishlistLoading(true);
+    try {
+      if (isFavorite) {
+        await wishlistAPI.remove(id);
+        setIsFavorite(false);
+      } else {
+        await wishlistAPI.add(id);
+        setIsFavorite(true);
+      }
+    } catch (error) {
+      console.error('Wishlist toggle error:', error);
+    } finally {
+      setWishlistLoading(false);
+    }
+  };
+
+  const handleShareProduct = async () => {
+    if (!id || !product) return;
+
+    const shareUrl = `${window.location.origin}/store/product/${id}`;
+    const shareData = {
+      title: `${product.name} | HobbyZamora`,
+      text: `Mira este producto: ${product.name}`,
+      url: shareUrl,
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+        setShareStatus('shared');
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        setShareStatus('copied');
+      }
+    } catch (error: any) {
+      if (error?.name === 'AbortError') {
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        setShareStatus('copied');
+      } catch {
+        setShareStatus('error');
+      }
+    }
+
+    window.setTimeout(() => setShareStatus('idle'), 2200);
+  };
 
   if (isLoading) {
     return (
@@ -109,14 +179,39 @@ export default function ProductDetailPage() {
                 <p className="text-muted-foreground">{product.category}</p>
               </div>
               <div className="flex gap-2">
-                <button className="p-2 rounded-lg border border-border hover:bg-secondary transition-colors">
-                  <Heart className="w-5 h-5 text-muted-foreground" />
+                <button
+                  onClick={handleToggleFavorite}
+                  disabled={wishlistLoading}
+                  title={isFavorite ? 'Quitar de favoritos' : 'Agregar a favoritos'}
+                  className={`p-2 rounded-lg border transition-colors ${
+                    isFavorite
+                      ? 'border-red-400/50 bg-red-500/10 hover:bg-red-500/20'
+                      : 'border-border hover:bg-secondary'
+                  }`}
+                >
+                  <Heart
+                    className={`w-5 h-5 transition-colors ${
+                      isFavorite ? 'fill-red-500 text-red-500' : 'text-muted-foreground'
+                    } ${wishlistLoading ? 'opacity-50' : ''}`}
+                  />
                 </button>
-                <button className="p-2 rounded-lg border border-border hover:bg-secondary transition-colors">
+                <button
+                  onClick={handleShareProduct}
+                  title="Compartir producto"
+                  className="p-2 rounded-lg border border-border hover:bg-secondary transition-colors"
+                >
                   <Share2 className="w-5 h-5 text-muted-foreground" />
                 </button>
               </div>
             </div>
+
+            {shareStatus !== 'idle' && (
+              <p className={`text-xs mb-4 ${shareStatus === 'error' ? 'text-destructive' : 'text-primary'}`}>
+                {shareStatus === 'shared' && 'Producto compartido'}
+                {shareStatus === 'copied' && 'Enlace copiado al portapapeles'}
+                {shareStatus === 'error' && 'No se pudo compartir el producto'}
+              </p>
+            )}
 
             <div className="mb-6">
               <span className="text-4xl text-primary font-bold font-[family-name:var(--font-mono)]">
@@ -233,6 +328,11 @@ export default function ProductDetailPage() {
           </div>
         </div>
       </div>
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        message="Inicia sesión para guardar favoritos"
+      />
     </StoreLayout>
   );
 }

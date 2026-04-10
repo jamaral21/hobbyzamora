@@ -2,7 +2,10 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import path from 'path';
+import fs from 'fs';
 import { OAuth2Client } from 'google-auth-library';
+import multer from 'multer';
 import { prisma } from '../index.js';
 import { authenticate, AuthRequest } from '../middleware/auth.js';
 import {
@@ -13,6 +16,42 @@ import {
 
 const router = Router();
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+
+const resolveUploadsBaseDir = () => {
+  if (process.env.UPLOADS_DIR) {
+    return path.resolve(process.env.UPLOADS_DIR);
+  }
+
+  const sharedUploads = '/var/www/hobbyzamora/shared/uploads';
+  if (fs.existsSync(sharedUploads)) {
+    return sharedUploads;
+  }
+
+  return path.resolve(process.cwd(), 'uploads');
+};
+
+const profileUploadsDir = path.join(resolveUploadsBaseDir(), 'profiles');
+
+const avatarUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      fs.mkdirSync(profileUploadsDir, { recursive: true });
+      cb(null, profileUploadsDir);
+    },
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      const base = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9._-]/g, '_');
+      cb(null, `avatar-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${base}${ext}`);
+    },
+  }),
+  limits: { fileSize: 4 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.has(ext)) cb(null, true);
+    else cb(new Error('Solo se permiten imágenes JPG, PNG o WEBP'));
+  },
+});
 
 // Register
 router.post('/register', async (req, res) => {
@@ -41,6 +80,8 @@ router.post('/register', async (req, res) => {
         id: true,
         email: true,
         name: true,
+        phone: true,
+        avatarUrl: true,
         role: true,
       },
     });
@@ -91,6 +132,8 @@ router.post('/login', async (req, res) => {
         id: user.id,
         email: user.email,
         name: user.name,
+        phone: user.phone,
+        avatarUrl: user.avatarUrl,
         role: user.role,
       },
       token,
@@ -111,6 +154,7 @@ router.get('/me', authenticate, async (req: AuthRequest, res) => {
         email: true,
         name: true,
         phone: true,
+        avatarUrl: true,
         role: true,
         createdAt: true,
       },
@@ -136,6 +180,7 @@ router.patch('/me', authenticate, async (req: AuthRequest, res) => {
         email: true,
         name: true,
         phone: true,
+        avatarUrl: true,
         role: true,
       },
     });
@@ -179,6 +224,35 @@ router.post('/change-password', authenticate, async (req: AuthRequest, res) => {
   } catch (error) {
     console.error('Change password error:', error);
     res.status(500).json({ error: 'Failed to change password' });
+  }
+});
+
+// Upload/change profile avatar
+router.post('/me/avatar', authenticate, avatarUpload.single('avatar'), async (req: AuthRequest, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No se recibió imagen' });
+    }
+
+    const avatarUrl = `/uploads/profiles/${req.file.filename}`;
+
+    const user = await prisma.user.update({
+      where: { id: req.user!.id },
+      data: { avatarUrl },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        avatarUrl: true,
+        role: true,
+      },
+    });
+
+    res.json(user);
+  } catch (error) {
+    console.error('Upload avatar error:', error);
+    res.status(500).json({ error: 'No se pudo actualizar la foto de perfil' });
   }
 });
 
@@ -236,6 +310,8 @@ router.post('/google', async (req, res) => {
         id: user.id,
         email: user.email,
         name: user.name,
+        phone: user.phone,
+        avatarUrl: user.avatarUrl,
         role: user.role,
       },
       token,

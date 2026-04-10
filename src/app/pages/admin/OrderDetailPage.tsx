@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
+import { Link } from 'react-router';
 import { ArrowLeft, Package, CreditCard, Truck, Loader2, AlertCircle } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { Button } from '../../components/design-system/Button';
@@ -136,13 +137,19 @@ export default function OrderDetailPage() {
                       SKU: {item.sku}
                       {item.variantName && ` · ${item.variantName}`}
                     </p>
+                    <Link
+                      to={`/admin/store/product/${item.productId}`}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      Ver producto
+                    </Link>
                   </div>
                   <div className="text-right">
                     <p className="text-sm text-foreground">
-                      ${item.price.toFixed(2)} × {item.quantity}
+                      ${item.price.toLocaleString('es-CL', { maximumFractionDigits: 0 })} × {item.quantity}
                     </p>
                     <p className="text-sm font-medium text-foreground">
-                      ${(item.price * item.quantity).toFixed(2)}
+                      ${(item.price * item.quantity).toLocaleString('es-CL', { maximumFractionDigits: 0 })}
                     </p>
                   </div>
                 </div>
@@ -152,28 +159,28 @@ export default function OrderDetailPage() {
             {/* Totals */}
             <div className="mt-4 pt-4 border-t border-border space-y-2">
               <div className="flex justify-between text-sm text-muted-foreground">
-                <span>Subtotal</span>
-                <span>${order.subtotal.toFixed(2)}</span>
+                <span>Neto</span>
+                <span>${(order.subtotal - order.tax).toLocaleString('es-CL', { maximumFractionDigits: 0 })}</span>
               </div>
               <div className="flex justify-between text-sm text-muted-foreground">
-                <span>IVA (16%)</span>
-                <span>${order.tax.toFixed(2)}</span>
+                <span>IVA débito (19%)</span>
+                <span>${order.tax.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</span>
               </div>
               {order.shipping > 0 && (
                 <div className="flex justify-between text-sm text-muted-foreground">
                   <span>Envío</span>
-                  <span>${order.shipping.toFixed(2)}</span>
+                  <span>${order.shipping.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</span>
                 </div>
               )}
               {order.discount > 0 && (
                 <div className="flex justify-between text-sm text-[#00e676]">
                   <span>Descuento</span>
-                  <span>-${order.discount.toFixed(2)}</span>
+                  <span>-${order.discount.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</span>
                 </div>
               )}
               <div className="flex justify-between text-base font-semibold text-foreground pt-2 border-t border-border">
                 <span>Total</span>
-                <span>${order.total.toFixed(2)}</span>
+                <span>${order.total.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</span>
               </div>
             </div>
           </Card>
@@ -203,7 +210,7 @@ export default function OrderDetailPage() {
                         {payment.status.toLowerCase()}
                       </Badge>
                       <span className="text-sm font-medium text-foreground">
-                        ${payment.amount.toFixed(2)}
+                        ${payment.amount.toLocaleString('es-CL', { maximumFractionDigits: 0 })}
                       </span>
                     </div>
                   </div>

@@ -436,7 +436,7 @@ function CheckoutForm() {
                             <p className="text-xs text-muted-foreground">Cant: {item.quantity}</p>
                           </div>
                           <span className="text-sm text-foreground font-[family-name:var(--font-mono)]">
-                            ${(item.price * item.quantity).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                            ${(item.price * item.quantity).toLocaleString('es-CL', { maximumFractionDigits: 0 })}
                           </span>
                         </div>
                       ))}

@@ -2,12 +2,31 @@ import { Router } from 'express';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import { fileURLToPath } from 'url';
 import multer from 'multer';
 import AdmZip from 'adm-zip';
 import { prisma } from '../index.js';
-import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
+import { authenticate, optionalAuth, requireRole, AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const resolveUploadsBaseDir = () => {
+  if (process.env.UPLOADS_DIR) {
+    return path.resolve(process.env.UPLOADS_DIR);
+  }
+
+  const sharedUploads = '/var/www/hobbyzamora/shared/uploads';
+  if (fs.existsSync(sharedUploads)) {
+    return sharedUploads;
+  }
+
+  return path.resolve(process.cwd(), 'uploads');
+};
+
+const uploadsBaseDir = resolveUploadsBaseDir();
+const productUploadsDir = path.join(uploadsBaseDir, 'products');
+const HIDDEN_PRODUCTS_ALLOWED_EMAIL = 'admin@hobbyzamora.com';
 
 // Configure multer for ZIP uploads — disk storage, no size limit
 const upload = multer({
@@ -23,6 +42,30 @@ const upload = multer({
       cb(null, true);
     } else {
       cb(new Error('Solo se permiten archivos .zip'));
+    }
+  },
+});
+
+const singleImageUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      fs.mkdirSync(productUploadsDir, { recursive: true });
+      cb(null, productUploadsDir);
+    },
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname).toLowerCase();
+      const base = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9._-]/g, '_');
+      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${base}${ext}`);
+    },
+  }),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowed.has(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Solo se permiten imágenes JPG, PNG, WEBP o GIF'));
     }
   },
 });
@@ -45,7 +88,7 @@ const parseOptions = (options: string): string[] => {
 };
 
 // Get all products (public)
-router.get('/', async (req, res) => {
+router.get('/', optionalAuth, async (req: AuthRequest, res) => {
   try {
     const { 
       category, 
@@ -59,16 +102,26 @@ router.get('/', async (req, res) => {
     } = req.query;
 
     const where: any = {};
+    const canSeeHiddenProducts = req.user?.email?.toLowerCase() === HIDDEN_PRODUCTS_ALLOWED_EMAIL;
 
     if (category) {
       where.category = category as string;
     }
 
-    if (status) {
-      where.status = status as string;
+    if (status && status !== 'ALL') {
+      const requestedStatus = status as string;
+
+      if (requestedStatus === 'HIDDEN' && !canSeeHiddenProducts) {
+        where.status = 'ACTIVE';
+      } else {
+        where.status = requestedStatus;
+      }
     } else {
-      // By default, only show active products for public
-      where.status = 'ACTIVE';
+      // Por defecto, solo productos activos.
+      // El usuario permitido puede ver además los HIDDEN en storefront.
+      where.status = canSeeHiddenProducts
+        ? { in: ['ACTIVE', 'HIDDEN'] }
+        : 'ACTIVE';
     }
 
     if (presale === 'true') {
@@ -133,27 +186,33 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Get single product
-router.get('/:id', async (req, res) => {
+// Get single product (public — excluye HIDDEN/ARCHIVED, salvo email autorizado)
+router.get('/:id', optionalAuth, async (req: AuthRequest, res) => {
   try {
     const product = await prisma.product.findUnique({
-      where: { id: req.params.id },
-      include: {
-        variants: true,
-      },
+      where: { id: req.params.id as string },
+      include: { variants: true },
     });
 
-    if (!product) {
+    const canSeeHiddenProducts = req.user?.email?.toLowerCase() === HIDDEN_PRODUCTS_ALLOWED_EMAIL;
+
+    if (
+      !product ||
+      product.status === 'ARCHIVED' ||
+      (product.status === 'HIDDEN' && !canSeeHiddenProducts)
+    ) {
       return res.status(404).json({ error: 'Product not found' });
     }
 
+    const p = product as typeof product & { variants: any[] };
+
     res.json({
-      ...product,
-      images: parseImages(product.images),
-      price: parseFloat(product.price.toString()),
-      cost: parseFloat(product.cost.toString()),
-      stock: product.stock,
-      variants: product.variants.map(v => ({
+      ...p,
+      images: parseImages(p.images),
+      price: parseFloat(p.price.toString()),
+      cost: parseFloat(p.cost.toString()),
+      stock: p.stock,
+      variants: p.variants.map((v: any) => ({
         ...v,
         options: parseOptions(v.options),
         price: v.price ? parseFloat(v.price.toString()) : null,
@@ -161,6 +220,37 @@ router.get('/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Get product error:', error);
+    res.status(500).json({ error: 'Failed to get product' });
+  }
+});
+
+// Get single product for admin (incluye cualquier estado)
+router.get('/admin-detail/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
+  try {
+    const product = await prisma.product.findUnique({
+      where: { id: req.params.id as string },
+      include: { variants: true },
+    });
+
+    if (!product) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    const p = product as typeof product & { variants: any[] };
+    res.json({
+      ...p,
+      images: parseImages(p.images),
+      price: parseFloat(p.price.toString()),
+      cost: parseFloat(p.cost.toString()),
+      stock: p.stock,
+      variants: p.variants.map((v: any) => ({
+        ...v,
+        options: parseOptions(v.options),
+        price: v.price ? parseFloat(v.price.toString()) : null,
+      })),
+    });
+  } catch (error) {
+    console.error('Get product (admin) error:', error);
     res.status(500).json({ error: 'Failed to get product' });
   }
 });
@@ -177,6 +267,8 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
       cost, 
       images, 
       status,
+      ean,
+      barcode,
       isPresale,
       presaleMaxQty,
       presaleAvailQty,
@@ -184,6 +276,10 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
       variants,
       initialStock,
     } = req.body;
+
+    const parsedEan = ean !== undefined
+      ? parseInt(ean, 10)
+      : (barcode !== undefined ? parseInt(barcode, 10) : null);
 
     // Check SKU uniqueness
     const existingBySku = await prisma.product.findUnique({ where: { sku } });
@@ -202,6 +298,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
         stock: initialStock || 0,
         images: JSON.stringify(images || []),
         status: status || 'ACTIVE',
+        ean: Number.isNaN(parsedEan as number) ? null : parsedEan,
         isPresale: isPresale || false,
         presaleMaxQty,
         presaleAvailQty,
@@ -244,11 +341,17 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
       stock,
       images, 
       status,
+      ean,
+      barcode,
       isPresale,
       presaleMaxQty,
       presaleAvailQty,
       presaleEndDate,
     } = req.body;
+
+    const parsedEan = ean !== undefined
+      ? parseInt(ean, 10)
+      : (barcode !== undefined ? parseInt(barcode, 10) : undefined);
 
     const product = await prisma.product.update({
       where: { id },
@@ -261,6 +364,7 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
         stock,
         images: images !== undefined ? JSON.stringify(images) : undefined,
         status,
+        ean: parsedEan,
         isPresale,
         presaleMaxQty,
         presaleAvailQty,
@@ -292,13 +396,51 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
 // Delete product
 router.delete('/:id', authenticate, requireRole('ADMIN'), async (req: AuthRequest, res) => {
   try {
-    await prisma.product.delete({
-      where: { id: req.params.id as string },
+    const productId = req.params.id as string;
+
+    const existing = await prisma.product.findUnique({
+      where: { id: productId },
+      select: { id: true, status: true },
     });
 
-    res.json({ message: 'Product deleted successfully' });
+    if (!existing) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    const orderItemsCount = await prisma.orderItem.count({
+      where: { productId },
+    });
+
+    if (orderItemsCount > 0) {
+      await prisma.product.update({
+        where: { id: productId },
+        data: {
+          status: 'ARCHIVED',
+          stock: 0,
+        },
+      });
+
+      return res.json({
+        message: 'Product is referenced by orders and was archived instead of deleted',
+        archived: true,
+      });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.cartItem.deleteMany({ where: { productId } });
+      await tx.product.delete({ where: { id: productId } });
+    });
+
+    res.json({ message: 'Product deleted successfully', archived: false });
   } catch (error) {
     console.error('Delete product error:', error);
+
+    if ((error as any)?.code === 'P2003') {
+      return res.status(409).json({
+        error: 'Cannot delete product because it is still referenced by related records',
+      });
+    }
+
     res.status(500).json({ error: 'Failed to delete product' });
   }
 });
@@ -357,8 +499,16 @@ router.post('/import', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
         price,
         cost,
         stock,
+        ean: (() => {
+          const rawEan = row.EAN || row.ean || row.barcode;
+          if (!rawEan) return null;
+          const parsed = parseInt(rawEan, 10);
+          return Number.isNaN(parsed) ? null : parsed;
+        })(),
         images: JSON.stringify(row.images ? row.images.split('|').map((s: string) => s.trim()) : []),
-        status: (row.status || 'ACTIVE').toUpperCase(),
+        status: ['ACTIVE', 'ARCHIVED'].includes((row.status || 'ACTIVE').toUpperCase())
+          ? (row.status || 'ACTIVE').toUpperCase()
+          : 'ACTIVE', // HIDDEN no se puede importar desde CSV, solo se asigna manualmente
         isPresale,
         presaleMaxQty,
         presaleAvailQty,
@@ -404,6 +554,22 @@ router.get('/meta/categories', async (req, res) => {
   } catch (error) {
     console.error('Get categories error:', error);
     res.status(500).json({ error: 'Failed to get categories' });
+  }
+});
+
+router.post('/upload-image', authenticate, requireRole('ADMIN', 'STAFF'), singleImageUpload.single('image'), async (req: AuthRequest, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No se recibió imagen' });
+    }
+
+    return res.json({
+      url: `/uploads/products/${req.file.filename}`,
+      filename: req.file.filename,
+    });
+  } catch (error) {
+    console.error('Upload image error:', error);
+    return res.status(500).json({ error: 'Error al subir imagen' });
   }
 });
 
@@ -482,8 +648,7 @@ router.post('/upload-images/complete', authenticate, requireRole('ADMIN', 'STAFF
     return res.status(400).json({ error: `Faltan chunks: ${session.received.size}/${session.totalChunks}` });
   }
   try {
-    const uploadsDir = path.resolve(process.cwd(), 'uploads', 'products');
-    fs.mkdirSync(uploadsDir, { recursive: true });
+    fs.mkdirSync(productUploadsDir, { recursive: true });
 
     const zip = new AdmZip(session.filePath);
     const entries = zip.getEntries();
@@ -503,7 +668,7 @@ router.post('/upload-images/complete', authenticate, requireRole('ADMIN', 'STAFF
       }
 
       const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-      fs.writeFileSync(path.join(uploadsDir, safeName), entry.getData());
+      fs.writeFileSync(path.join(productUploadsDir, safeName), entry.getData());
       extracted.push(safeName);
     }
 
@@ -556,8 +721,7 @@ router.post('/upload-images', authenticate, requireRole('ADMIN', 'STAFF'), uploa
     }
     tmpPath = file.path;
 
-    const uploadsDir = path.resolve(process.cwd(), 'uploads', 'products');
-    fs.mkdirSync(uploadsDir, { recursive: true });
+    fs.mkdirSync(productUploadsDir, { recursive: true });
 
     const zip = new AdmZip(tmpPath);
     const entries = zip.getEntries();
@@ -587,7 +751,7 @@ router.post('/upload-images', authenticate, requireRole('ADMIN', 'STAFF'), uploa
 
       // Sanitize filename — only allow alphanumeric, dash, underscore, dot
       const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const destPath = path.join(uploadsDir, safeName);
+      const destPath = path.join(productUploadsDir, safeName);
 
       fs.writeFileSync(destPath, entry.getData());
       extracted.push(safeName);

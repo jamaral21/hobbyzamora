@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 
@@ -24,6 +25,7 @@ import instagramRoutes from './routes/instagram.js';
 import posRoutes from './routes/pos.js';
 import paymentRoutes from './routes/payments.js';
 import chatRoutes from './routes/chat.js';
+import wishlistRoutes from './routes/wishlist.js';
 
 // Initialize Prisma
 export const prisma = new PrismaClient();
@@ -40,7 +42,20 @@ app.use(cors({
 app.use(express.json({ limit: '100mb' }));
 
 // Serve uploaded files
-const uploadsDir = path.resolve(__dirname, '../../uploads');
+const resolveUploadsDir = () => {
+  if (process.env.UPLOADS_DIR) {
+    return path.resolve(process.env.UPLOADS_DIR);
+  }
+
+  const sharedUploads = '/var/www/hobbyzamora/shared/uploads';
+  if (fs.existsSync(sharedUploads)) {
+    return sharedUploads;
+  }
+
+  return path.resolve(process.cwd(), 'uploads');
+};
+
+const uploadsDir = resolveUploadsDir();
 app.use('/uploads', express.static(uploadsDir));
 
 // Health check
@@ -60,6 +75,7 @@ app.use('/api/instagram', instagramRoutes);
 app.use('/api/pos', posRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/wishlist', wishlistRoutes);
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -74,6 +90,7 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📦 API available at http://localhost:${PORT}/api`);
+  console.log(`🗂️ Uploads served from ${uploadsDir}`);
 });
 
 // Graceful shutdown

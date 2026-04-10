@@ -38,7 +38,7 @@ export default function InstagramAgentPage() {
   const handleSendMessage = async (content: string) => {
     if (!selectedConversationId) return;
     try {
-      await sendMessage.mutateAsync({ conversationId: selectedConversationId, content });
+      await sendMessage.mutate({ conversationId: selectedConversationId, content });
       const updated = await instagramAPI.getMessages(selectedConversationId);
       setMessages(updated);
     } catch (error) {
@@ -49,7 +49,7 @@ export default function InstagramAgentPage() {
   const handleTakeOver = async () => {
     if (!selectedConversationId) return;
     try {
-      await takeOver.mutateAsync(selectedConversationId);
+      await takeOver.mutate(selectedConversationId);
       refetch();
     } catch (error) {
       console.error('Failed to take over:', error);

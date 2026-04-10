@@ -7,6 +7,7 @@ const API_BASE = '/api';
 export interface Product {
   id: string;
   sku: string;
+  ean?: number | null;
   name: string;
   category: string;
   price: number;
@@ -14,7 +15,7 @@ export interface Product {
   stock: number;
   images: string[];
   description: string | null;
-  status: 'ACTIVE' | 'DRAFT' | 'ARCHIVED';
+  status: 'ACTIVE' | 'DRAFT' | 'ARCHIVED' | 'HIDDEN';
   isPresale?: boolean;
   presaleMaxQty?: number;
   presaleAvailQty?: number;
@@ -165,6 +166,7 @@ export interface User {
   name: string;
   role: 'ADMIN' | 'STAFF' | 'CUSTOMER';
   phone?: string;
+  avatarUrl?: string | null;
 }
 
 // API Error class
@@ -231,6 +233,27 @@ export const authAPI = {
       body: JSON.stringify(data),
     }),
 
+  uploadAvatar: async (file: File) => {
+    const token = localStorage.getItem('adminToken') || localStorage.getItem('token');
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    const response = await fetch(`${API_BASE}/auth/me/avatar`, {
+      method: 'POST',
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({ error: 'Request failed' }));
+      throw new ApiError(response.status, data.error || response.statusText);
+    }
+
+    return response.json() as Promise<User>;
+  },
+
   googleLogin: async (credential: string) => {
     const data = await fetchAPI<{ user: User; token: string }>('/auth/google', {
       method: 'POST',
@@ -244,6 +267,12 @@ export const authAPI = {
     fetchAPI<{ message: string }>('/auth/forgot-password', {
       method: 'POST',
       body: JSON.stringify({ email }),
+    }),
+
+  resetPassword: (token: string, newPassword: string) =>
+    fetchAPI<{ message: string }>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ token, newPassword }),
     }),
 };
 
@@ -270,6 +299,7 @@ export const productsAPI = {
   },
 
   getById: (id: string) => fetchAPI<Product>(`/products/${id}`),
+  getByIdAdmin: (id: string) => fetchAPI<Product>(`/products/admin-detail/${id}`),
 
   create: (data: Partial<Product> & { initialStock?: number }) =>
     fetchAPI<Product>('/products', {
@@ -337,6 +367,27 @@ export const productsAPI = {
       { method: 'POST', body: JSON.stringify({ uploadId }) },
     );
   },
+
+  uploadImage: async (file: File) => {
+    const token = localStorage.getItem('adminToken') || localStorage.getItem('token');
+    const formData = new FormData();
+    formData.append('image', file);
+
+    const response = await fetch(`${API_BASE}/products/upload-image`, {
+      method: 'POST',
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({ error: 'Request failed' }));
+      throw new ApiError(response.status, data.error || response.statusText);
+    }
+
+    return response.json() as Promise<{ url: string; filename: string }>;
+  },
 };
 
 // Orders API
@@ -392,6 +443,9 @@ export const ordersAPI = {
     }),
 
   getMyOrders: () => fetchAPI<Order[]>('/orders/my/orders'),
+
+  deleteById: (id: string) =>
+    fetchAPI<{ message: string }>(`/orders/${id}`, { method: 'DELETE' }),
 };
 
 // Cart API
@@ -657,4 +711,34 @@ export const paymentsAPI = {
       method: 'POST',
       body: JSON.stringify({ amount, reason }),
     }),
+};
+
+// Wishlist API
+export interface WishlistItem {
+  id: string;
+  productId: string;
+  createdAt: string;
+  product: {
+    id: string;
+    name: string;
+    sku: string;
+    price: number;
+    images: string[];
+    category: string;
+    stock: number;
+    status: string;
+  };
+}
+
+export const wishlistAPI = {
+  getAll: () => fetchAPI<WishlistItem[]>('/wishlist'),
+
+  add: (productId: string) =>
+    fetchAPI<{ id: string }>(`/wishlist/${productId}`, { method: 'POST' }),
+
+  remove: (productId: string) =>
+    fetchAPI<{ message: string }>(`/wishlist/${productId}`, { method: 'DELETE' }),
+
+  check: (productId: string) =>
+    fetchAPI<{ isFavorite: boolean }>(`/wishlist/check/${productId}`),
 };

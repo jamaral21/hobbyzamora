@@ -12,10 +12,12 @@ import CheckoutPage from './pages/store/CheckoutPage';
 import OrderConfirmationPage from './pages/store/OrderConfirmationPage';
 import AccountPage from './pages/store/AccountPage';
 import PresalesPage from './pages/store/PresalesPage';
+import ResetPasswordPage from './pages/store/ResetPasswordPage';
 
 // Admin Pages
 import DashboardPage from './pages/admin/DashboardPage';
 import ProductsPage from './pages/admin/ProductsPage';
+import AdminProductDetailPage from './pages/admin/AdminProductDetailPage';
 import OrdersPage from './pages/admin/OrdersPage';
 import OrderDetailPage from './pages/admin/OrderDetailPage';
 import CustomersPage from './pages/admin/CustomersPage';
@@ -70,6 +72,10 @@ export const router = createBrowserRouter([
     path: '/store/account',
     Component: AccountPage,
   },
+  {
+    path: '/reset-password',
+    Component: ResetPasswordPage,
+  },
 
   // Admin Routes
   {
@@ -91,6 +97,10 @@ export const router = createBrowserRouter([
   {
     path: '/admin/presales',
     Component: ProductsPage, // Reuse products page with presale filter
+  },
+  {
+    path: '/admin/store/product/:id',
+    Component: AdminProductDetailPage,
   },
   {
     path: '/admin/customers',

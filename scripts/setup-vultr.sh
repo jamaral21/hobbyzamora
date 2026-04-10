@@ -238,6 +238,7 @@ ok "Node.js $(node -v) — npm $(npm -v)"
 # ══════════════════════════════════════════════════════════════════════════════
 log "Creando directorios de la app"
 mkdir -p "${BASE_DIR}"/{releases,shared,backups}
+mkdir -p "${BASE_DIR}/shared/uploads/products"
 chown -R "${DEPLOY_USER}:${DEPLOY_USER}" "${BASE_DIR}"
 ok "Directorios listos en ${BASE_DIR}"
 
@@ -254,6 +255,7 @@ PORT=${APP_PORT}
 DATABASE_URL="file:./prod.db"
 JWT_SECRET="$(openssl rand -base64 48)"
 FRONTEND_URL="http://${DOMAIN}"
+UPLOADS_DIR="${BASE_DIR}/shared/uploads"
 # GOOGLE_CLIENT_ID=
 # GOOGLE_CLIENT_SECRET=
 ENVEOF
@@ -329,7 +331,7 @@ server {
     index index.html;
 
     # Serve uploaded product images from shared directory
-    location /uploads/ {
+    location ^~ /uploads/ {
         alias ${BASE_DIR}/shared/uploads/;
         expires 30d;
         add_header Cache-Control "public";

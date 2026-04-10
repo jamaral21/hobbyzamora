@@ -19,6 +19,7 @@ model User {
   name      String
   role      String   @default("CUSTOMER")
   phone     String?
+  avatarUrl String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -28,6 +29,7 @@ model User {
   orders    Order[]
   cart      Cart?
   addresses Address[]
+  wishlist  Wishlist[]
 
   @@map("users")
 }
@@ -64,6 +66,8 @@ model Product {
   images      String
   status      String   @default("ACTIVE")
 
+  ean               Int?     @map("barcode")
+
   isPresale         Boolean   @default(false)
   presaleMaxQty     Int?
   presaleAvailQty   Int?
@@ -76,6 +80,7 @@ model Product {
   inventoryBatches InventoryBatch[]
   orderItems       OrderItem[]
   cartItems        CartItem[]
+  wishlists        Wishlist[]
 
   @@map("products")
 }
@@ -280,4 +285,33 @@ model DailyStat {
   avgOrderValue Decimal  @default(0)
 
   @@map("daily_stats")
+}
+
+// ==================== AUDIT LOG ====================
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  action     String
+  entity     String
+  entityIds  String?
+  performedBy String?
+  metadata   String?
+  createdAt  DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+// ==================== WISHLIST ====================
+
+model Wishlist {
+  id        String   @id @default(uuid())
+  userId    String
+  productId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("wishlists")
 }

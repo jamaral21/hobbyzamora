@@ -42,7 +42,7 @@ function generatePOSOrderNumber(): string {
 // Get products for POS (optimized for quick search)
 router.get('/products', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) => {
   try {
-    const { search, category, barcode } = req.query;
+    const { search, category, ean, barcode } = req.query;
 
     const where: any = {
       status: 'ACTIVE',
@@ -59,8 +59,13 @@ router.get('/products', authenticate, requireRole('ADMIN', 'STAFF'), async (req,
       where.category = category as string;
     }
 
-    if (barcode) {
-      where.sku = barcode as string;
+    const rawCode = (ean as string) || (barcode as string);
+    if (rawCode) {
+      const parsedEan = parseInt(rawCode, 10);
+      where.OR = [
+        { sku: rawCode },
+        ...(Number.isNaN(parsedEan) ? [] : [{ ean: parsedEan }]),
+      ];
     }
 
     const products = await prisma.product.findMany({
@@ -103,14 +108,16 @@ router.get('/products', authenticate, requireRole('ADMIN', 'STAFF'), async (req,
   }
 });
 
-// Get product by barcode/SKU
+// Get product by EAN/SKU
 router.get('/scan/:code', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) => {
   try {
+    const parsedEan = parseInt(req.params.code as string, 10);
     const product = await prisma.product.findFirst({
       where: {
         OR: [
           { sku: req.params.code as string },
           { sku: { contains: req.params.code as string } },
+          ...(Number.isNaN(parsedEan) ? [] : [{ ean: parsedEan }]),
         ],
         status: 'ACTIVE',
       },
