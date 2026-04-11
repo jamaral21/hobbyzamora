@@ -4,6 +4,14 @@ import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
 
+function parseDateParam(value: unknown): Date | null {
+  if (typeof value !== 'string') return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 // Get dashboard stats
 router.get('/dashboard', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) => {
   try {
@@ -14,8 +22,40 @@ router.get('/dashboard', authenticate, requireRole('ADMIN', 'STAFF'), async (req
     const monthAgo = new Date(today);
     monthAgo.setMonth(monthAgo.getMonth() - 1);
 
+    const { startDate, endDate } = req.query;
+    const parsedStartDate = parseDateParam(startDate);
+    const parsedEndDate = parseDateParam(endDate);
+
+    if ((startDate && !parsedStartDate) || (endDate && !parsedEndDate)) {
+      return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+    }
+
+    const hasCustomRange = Boolean(parsedStartDate || parsedEndDate);
+
+    const defaultRangeEnd = new Date(today);
+    defaultRangeEnd.setDate(defaultRangeEnd.getDate() + 1);
+    const defaultRangeStart = new Date(defaultRangeEnd);
+    defaultRangeStart.setDate(defaultRangeStart.getDate() - 30);
+
+    const rangeStart = parsedStartDate ?? defaultRangeStart;
+    const rangeEndExclusive = parsedEndDate
+      ? new Date(parsedEndDate.getTime() + 24 * 60 * 60 * 1000)
+      : defaultRangeEnd;
+
+    if (rangeStart >= rangeEndExclusive) {
+      return res.status(400).json({ error: 'startDate must be before or equal to endDate' });
+    }
+
+    const rangeWhere = {
+      createdAt: {
+        gte: rangeStart,
+        lt: rangeEndExclusive,
+      },
+      status: { notIn: ['CANCELLED', 'REFUNDED'] as string[] },
+    };
+
     // Get orders for different periods
-    const [todayOrders, weekOrders, monthOrders] = await Promise.all([
+    const [todayOrders, weekOrders, monthOrders, rangeOrders, rangeOrderItems] = await Promise.all([
       prisma.order.findMany({
         where: {
           createdAt: { gte: today },
@@ -36,6 +76,19 @@ router.get('/dashboard', authenticate, requireRole('ADMIN', 'STAFF'), async (req
           status: { notIn: ['CANCELLED', 'REFUNDED'] },
         },
         select: { total: true, subtotal: true },
+      }),
+      prisma.order.findMany({
+        where: rangeWhere,
+        select: { total: true },
+      }),
+      prisma.orderItem.findMany({
+        where: {
+          order: rangeWhere,
+        },
+        select: {
+          cost: true,
+          quantity: true,
+        },
       }),
     ]);
 
@@ -64,6 +117,15 @@ router.get('/dashboard', authenticate, requireRole('ADMIN', 'STAFF'), async (req
     const dailySales = todayOrders.reduce((sum, o) => sum + parseFloat(o.total.toString()), 0);
     const weeklySales = weekOrders.reduce((sum, o) => sum + parseFloat(o.total.toString()), 0);
     const monthlySales = monthOrders.reduce((sum, o) => sum + parseFloat(o.total.toString()), 0);
+
+    const totalSales = rangeOrders.reduce((sum, o) => sum + parseFloat(o.total.toString()), 0);
+    const totalCost = rangeOrderItems.reduce(
+      (sum, item) => sum + parseFloat(item.cost.toString()) * item.quantity,
+      0
+    );
+    const totalMargin = totalSales - totalCost;
+    const marginPercent = totalSales > 0 ? (totalMargin / totalSales) * 100 : 0;
+    const orderCount = rangeOrders.length;
     
     const inventoryValue = inventory.reduce((sum, b) => 
       sum + b.remaining * parseFloat(b.unitCost.toString()), 0
@@ -81,6 +143,18 @@ router.get('/dashboard', authenticate, requireRole('ADMIN', 'STAFF'), async (req
       profit: Math.round(profit * 100) / 100,
       inventoryValue: Math.round(inventoryValue * 100) / 100,
       lowStockItems: lowStockCount,
+      totalSales: Math.round(totalSales * 100) / 100,
+      totalCost: Math.round(totalCost * 100) / 100,
+      totalMargin: Math.round(totalMargin * 100) / 100,
+      marginPercent: Math.round(marginPercent * 100) / 100,
+      orderCount,
+      range: {
+        startDate: rangeStart.toISOString().slice(0, 10),
+        endDate: new Date(rangeEndExclusive.getTime() - 24 * 60 * 60 * 1000)
+          .toISOString()
+          .slice(0, 10),
+        hasCustomRange,
+      },
     });
   } catch (error) {
     console.error('Get dashboard stats error:', error);

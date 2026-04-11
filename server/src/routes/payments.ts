@@ -2,6 +2,7 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import { prisma } from '../index.js';
 import { authenticate, optionalAuth, requireRole, AuthRequest } from '../middleware/auth.js';
+import { sendOrderStatusEmail } from '../lib/emailService.js';
 
 const router = Router();
 
@@ -34,10 +35,20 @@ async function updateOrderStatusWithStock(orderId: string, nextStatus: 'PROCESSI
   if (nextStatus === 'PENDING') return;
 
   if (nextStatus !== 'CANCELLED') {
+    const previousOrder = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { status: true },
+    });
+
     await prisma.order.update({
       where: { id: orderId },
       data: { status: nextStatus },
     });
+
+    if (nextStatus === 'PROCESSING' && previousOrder?.status !== 'PROCESSING') {
+      await notifyOrderProcessing(orderId);
+    }
+
     return;
   }
 
@@ -64,7 +75,6 @@ async function updateOrderStatusWithStock(orderId: string, nextStatus: 'PROCESSI
     });
   });
 }
-
 // Generate PlacetoPay auth object
 function generatePlacetoPayAuth() {
   const rawNonce = crypto.randomBytes(16).toString('hex');
@@ -82,10 +92,41 @@ function generatePlacetoPayAuth() {
   };
 }
 
+function isCardMethod(method: string): boolean {
+  return method === 'CARD' || method === 'GETNET';
+}
+
+async function notifyOrderProcessing(orderId: string): Promise<void> {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { items: true },
+  });
+
+  if (!order || !order.customerEmail) {
+    return;
+  }
+
+  sendOrderStatusEmail({
+    ...order,
+    subtotal: parseFloat(order.subtotal.toString()),
+    tax: parseFloat(order.tax.toString()),
+    shipping: parseFloat(order.shipping.toString()),
+    discount: parseFloat(order.discount.toString()),
+    total: parseFloat(order.total.toString()),
+    items: order.items.map((i) => ({
+      ...i,
+      price: parseFloat(i.price.toString()),
+      cost: parseFloat(i.cost.toString()),
+    })),
+  }).catch(() => {});
+}
+
 // Unified checkout endpoint - routes to dev auto-approve or Getnet Chile
 router.post('/checkout', optionalAuth, async (req: AuthRequest, res) => {
   try {
     const { orderId, paymentMethod } = req.body;
+    const normalizedPaymentMethod =
+      typeof paymentMethod === 'string' ? paymentMethod.toUpperCase() : 'CREDIT';
 
     const order = await prisma.order.findUnique({
       where: { id: orderId },
@@ -96,8 +137,39 @@ router.post('/checkout', optionalAuth, async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
+    if (normalizedPaymentMethod === 'CASH' || normalizedPaymentMethod === 'TRANSFER') {
+      const existingPayment = await prisma.payment.findFirst({
+        where: {
+          orderId: order.id,
+          method: normalizedPaymentMethod,
+          status: 'PENDING',
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      const payment = existingPayment || await prisma.payment.create({
+        data: {
+          orderId: order.id,
+          method: normalizedPaymentMethod,
+          status: 'PENDING',
+          amount: parseFloat(order.total.toString()),
+        },
+      });
+
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { status: 'PENDING' },
+      });
+
+      return res.json({
+        paymentId: payment.id,
+        status: 'PENDING',
+        mode: 'manual',
+      });
+    }
+
     // Determine card method label for Getnet
-    const cardMethodLabel = paymentMethod === 'debit' ? 'DEBIT' : 'CREDIT';
+    const cardMethodLabel = normalizedPaymentMethod === 'DEBIT' ? 'DEBIT' : 'CREDIT';
 
     // Auto-approve only when NO Getnet credentials are configured
     if (!GETNET_LOGIN) {
@@ -117,6 +189,8 @@ router.post('/checkout', optionalAuth, async (req: AuthRequest, res) => {
         where: { id: order.id },
         data: { status: 'PROCESSING' },
       });
+
+      await notifyOrderProcessing(order.id);
 
       return res.json({
         paymentId: payment.id,
@@ -224,8 +298,18 @@ router.post('/getnet/query', optionalAuth, async (req: AuthRequest, res) => {
       where: { id: payment.orderId },
     });
 
+    if (!isCardMethod((payment.method || '').toUpperCase()) || !payment.getnetPaymentId) {
+      return res.json({
+        id: payment.id,
+        status: payment.status,
+        orderId: payment.orderId,
+        orderStatus: order?.status,
+      });
+    }
+
     // If already resolved, return current status.
     // Auto-heal old rows where payment was declined but order remained pending.
+
     if (payment.status !== 'PENDING') {
       if (payment.status === 'DECLINED' && order?.status === 'PENDING') {
         await updateOrderStatusWithStock(payment.orderId, 'CANCELLED');
@@ -386,6 +470,8 @@ router.get('/:paymentId/status', authenticate, async (req: AuthRequest, res) => 
 router.post('/manual', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
   try {
     const { orderId, method, amount, cardLast4, cardBrand } = req.body;
+    const normalizedMethod = typeof method === 'string' ? method.toUpperCase() : '';
+    const approvedImmediately = isCardMethod(normalizedMethod);
 
     const order = await prisma.order.findUnique({
       where: { id: orderId },
@@ -398,20 +484,24 @@ router.post('/manual', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
     const payment = await prisma.payment.create({
       data: {
         orderId,
-        method,
-        status: 'APPROVED',
+        method: normalizedMethod || method,
+        status: approvedImmediately ? 'APPROVED' : 'PENDING',
         amount,
         cardLast4,
         cardBrand,
-        paidAt: new Date(),
+        paidAt: approvedImmediately ? new Date() : null,
       },
     });
 
-    // Update order status
+    // Card-like methods keep instant processing. Manual methods remain pending.
     await prisma.order.update({
       where: { id: orderId },
-      data: { status: 'PROCESSING' },
+      data: { status: approvedImmediately ? 'PROCESSING' : 'PENDING' },
     });
+
+    if (approvedImmediately) {
+      await notifyOrderProcessing(orderId);
+    }
 
     res.status(201).json({
       ...payment,
@@ -420,6 +510,61 @@ router.post('/manual', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
   } catch (error) {
     console.error('Process manual payment error:', error);
     res.status(500).json({ error: 'Failed to process payment' });
+  }
+});
+
+// Confirm manual payment (admin/staff)
+router.patch('/:id/confirm', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
+  try {
+    const paymentId = req.params.id as string;
+
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        order: {
+          select: { id: true, status: true },
+        },
+      },
+    });
+
+    if (!payment) {
+      return res.status(404).json({ error: 'Payment not found' });
+    }
+
+    if (isCardMethod((payment.method || '').toUpperCase())) {
+      return res.status(400).json({ error: 'Card payments do not require manual confirmation' });
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      const updatedPayment = await tx.payment.update({
+        where: { id: paymentId },
+        data: {
+          status: 'APPROVED',
+          paidAt: payment.paidAt || new Date(),
+        },
+      });
+
+      const updatedOrder = await tx.order.update({
+        where: { id: payment.orderId },
+        data: { status: 'PROCESSING' },
+        select: { id: true, status: true },
+      });
+
+      return { updatedPayment, updatedOrder };
+    });
+
+    res.json({
+      ...result.updatedPayment,
+      amount: parseFloat(result.updatedPayment.amount.toString()),
+      order: result.updatedOrder,
+    });
+
+    if (result.updatedOrder.status === 'PROCESSING') {
+      await notifyOrderProcessing(payment.orderId);
+    }
+  } catch (error) {
+    console.error('Confirm payment error:', error);
+    res.status(500).json({ error: 'Failed to confirm payment' });
   }
 });
 

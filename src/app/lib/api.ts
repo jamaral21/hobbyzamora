@@ -429,7 +429,7 @@ export const ordersAPI = {
       zipCode: string;
       country: string;
     };
-    paymentMethod?: 'credit' | 'debit';
+    paymentMethod?: 'credit' | 'debit' | 'cash' | 'transfer';
   }) =>
     fetchAPI<Order>('/orders', {
       method: 'POST',
@@ -679,7 +679,7 @@ export const instagramAPI = {
 
 // Payments API
 export const paymentsAPI = {
-  checkout: (orderId: string, paymentMethod?: 'credit' | 'debit') =>
+  checkout: (orderId: string, paymentMethod?: 'credit' | 'debit' | 'cash' | 'transfer') =>
     fetchAPI<{ paymentId: string; checkoutUrl?: string; requestId?: number; status: string; mode: string }>('/payments/checkout', {
       method: 'POST',
       body: JSON.stringify({ orderId, paymentMethod }),
@@ -704,6 +704,11 @@ export const paymentsAPI = {
     fetchAPI<Payment>('/payments/manual', {
       method: 'POST',
       body: JSON.stringify(data),
+    }),
+
+  confirmManual: (paymentId: string) =>
+    fetchAPI<Payment & { order: { id: string; status: string } }>(`/payments/${paymentId}/confirm`, {
+      method: 'PATCH',
     }),
 
   refund: (paymentId: string, amount?: number, reason?: string) =>

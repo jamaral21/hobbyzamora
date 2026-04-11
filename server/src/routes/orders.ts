@@ -18,6 +18,27 @@ function generateOrderNumber(): string {
   return `ORD-${year}${month}-${random}`;
 }
 
+function parseImages(images: unknown): string[] {
+  if (Array.isArray(images)) {
+    return images.filter((img): img is string => typeof img === 'string');
+  }
+
+  if (typeof images !== 'string' || !images.trim()) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(images);
+    if (Array.isArray(parsed)) {
+      return parsed.filter((img): img is string => typeof img === 'string');
+    }
+  } catch {
+    // Fallback for legacy rows where images might be stored as plain text.
+  }
+
+  return [images];
+}
+
 // Get all orders (admin)
 router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) => {
   try {
@@ -87,6 +108,12 @@ router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) =>
           ...i,
           price: parseFloat(i.price.toString()),
           cost: parseFloat(i.cost.toString()),
+          product: i.product
+            ? {
+                ...i.product,
+                images: parseImages(i.product.images),
+              }
+            : i.product,
         })),
         payments: o.payments.map(p => ({
           ...p,
@@ -145,6 +172,12 @@ router.get('/:id', optionalAuth, async (req: AuthRequest, res) => {
         ...i,
         price: parseFloat(i.price.toString()),
         cost: parseFloat(i.cost.toString()),
+        product: i.product
+          ? {
+              ...i.product,
+              images: parseImages(i.product.images),
+            }
+          : i.product,
       })),
       payments: order.payments.map(p => ({
         ...p,
@@ -267,6 +300,20 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
         items: true,
       },
     });
+
+    const normalizedPaymentMethod =
+      typeof paymentMethod === 'string' ? paymentMethod.toUpperCase() : '';
+
+    if (normalizedPaymentMethod === 'TRANSFER' || normalizedPaymentMethod === 'CASH') {
+      await prisma.payment.create({
+        data: {
+          orderId: order.id,
+          method: normalizedPaymentMethod,
+          status: 'PENDING',
+          amount: total,
+        },
+      });
+    }
 
     // Deduct stock directly from product
     for (const item of orderItems) {
