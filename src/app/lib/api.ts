@@ -115,6 +115,12 @@ export interface DashboardStats {
   profit: number;
   inventoryValue: number;
   lowStockItems: number;
+  // New fields for date-filtered KPIs
+  totalSales?: number;
+  totalCost?: number;
+  totalMargin?: number;
+  marginPercent?: number;
+  orderCount?: number;
 }
 
 export interface InstagramConversation {
@@ -423,7 +429,7 @@ export const ordersAPI = {
       zipCode: string;
       country: string;
     };
-    paymentMethod?: 'credit' | 'debit';
+    paymentMethod?: 'credit' | 'debit' | 'cash' | 'transfer';
   }) =>
     fetchAPI<Order>('/orders', {
       method: 'POST',
@@ -561,7 +567,13 @@ export const posAPI = {
 
 // Analytics API
 export const analyticsAPI = {
-  getDashboard: () => fetchAPI<DashboardStats>('/analytics/dashboard'),
+  getDashboard: (startDate?: string, endDate?: string) => {
+    const params = new URLSearchParams();
+    if (startDate) params.set('startDate', startDate);
+    if (endDate) params.set('endDate', endDate);
+    const query = params.toString();
+    return fetchAPI<DashboardStats>(`/analytics/dashboard${query ? `?${query}` : ''}`);
+  },
 
   getSalesChart: (days?: number) => {
     const query = days ? `?days=${days}` : '';
@@ -667,7 +679,7 @@ export const instagramAPI = {
 
 // Payments API
 export const paymentsAPI = {
-  checkout: (orderId: string, paymentMethod?: 'credit' | 'debit') =>
+  checkout: (orderId: string, paymentMethod?: 'credit' | 'debit' | 'cash' | 'transfer') =>
     fetchAPI<{ paymentId: string; checkoutUrl?: string; requestId?: number; status: string; mode: string }>('/payments/checkout', {
       method: 'POST',
       body: JSON.stringify({ orderId, paymentMethod }),
@@ -692,6 +704,11 @@ export const paymentsAPI = {
     fetchAPI<Payment>('/payments/manual', {
       method: 'POST',
       body: JSON.stringify(data),
+    }),
+
+  confirmManual: (paymentId: string) =>
+    fetchAPI<Payment & { order: { id: string; status: string } }>(`/payments/${paymentId}/confirm`, {
+      method: 'PATCH',
     }),
 
   refund: (paymentId: string, amount?: number, reason?: string) =>

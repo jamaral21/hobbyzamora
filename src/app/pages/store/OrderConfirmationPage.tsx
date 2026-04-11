@@ -17,7 +17,9 @@ export default function OrderConfirmationPage() {
   const { clearCart } = useCartStore();
 
   const pollPaymentStatus = useCallback(async (orderData: any) => {
-    const pendingPayment = orderData.payments?.find((p: any) => p.status === 'PENDING');
+    const pendingPayment = orderData.payments?.find(
+      (p: any) => p.status === 'PENDING' && p.method === 'GETNET'
+    );
     if (!pendingPayment) return orderData;
 
     try {
@@ -51,7 +53,7 @@ export default function OrderConfirmationPage() {
         if (orderData.status === 'PROCESSING' || orderData.status === 'DELIVERED') {
           clearCart();
           setPaymentStatus('APPROVED');
-        } else if (orderData.status === 'PENDING' && orderData.payments?.length) {
+        } else if (orderData.status === 'PENDING' && orderData.payments?.some((p: any) => p.status === 'PENDING' && p.method === 'GETNET')) {
           orderData = await pollPaymentStatus(orderData);
 
           // If still pending after first check, poll every 5 seconds for up to 60 seconds
@@ -115,6 +117,11 @@ export default function OrderConfirmationPage() {
   const isApproved = order?.status === 'PROCESSING' || order?.status === 'DELIVERED' || order?.status === 'SHIPPED';
   const isDeclined = order?.status === 'CANCELLED' || paymentStatus === 'DECLINED';
   const isPending = !isApproved && !isDeclined;
+  const pendingPayment = order?.payments?.find((p: any) => p.status === 'PENDING');
+  const isManualPending =
+    isPending &&
+    pendingPayment &&
+    (pendingPayment.method === 'CASH' || pendingPayment.method === 'TRANSFER');
 
   return (
     <StoreLayout>
@@ -131,12 +138,13 @@ export default function OrderConfirmationPage() {
             </div>
 
             <h1 className="text-primary mb-2">
-              {isApproved ? 'PEDIDO CONFIRMADO' : isDeclined ? 'PAGO RECHAZADO' : 'PAGO EN PROCESO'}
+              {isApproved ? 'PEDIDO CONFIRMADO' : isDeclined ? 'PAGO RECHAZADO' : isManualPending ? 'ORDEN RECIBIDA' : 'PAGO EN PROCESO'}
             </h1>
             <p className="text-muted-foreground mb-8">
               {isApproved && (email ? `Gracias por tu compra. Enviamos una confirmación a ${email}` : 'Gracias por tu compra.')}
               {isDeclined && 'Tu pago fue rechazado. Por favor intenta de nuevo con otro método de pago.'}
-              {isPending && 'Estamos verificando tu pago. Esta página se actualizará automáticamente.'}
+              {isManualPending && 'El pedido esta en revision y una vez procesado se le notificara.'}
+              {isPending && !isManualPending && 'Estamos verificando tu pago. Esta página se actualizará automáticamente.'}
             </p>
 
             <div className="bg-secondary rounded-lg p-6 mb-8">

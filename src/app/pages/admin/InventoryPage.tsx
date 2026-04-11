@@ -11,7 +11,7 @@ import { inventoryAPI } from '../../lib/api';
 
 export default function InventoryPage() {
   const { data: inventoryData, isLoading: inventoryLoading, refetch } = useInventory();
-  const { data: stats, isLoading: statsLoading } = useDashboardStats();
+  const { data: stats, isLoading: statsLoading } = useDashboardStats(undefined, undefined);
   const { data: products } = useProducts();
   const [isAddBatchOpen, setIsAddBatchOpen] = useState(false);
   const [batchForm, setBatchForm] = useState({ productId: '', quantity: '', unitCost: '' });

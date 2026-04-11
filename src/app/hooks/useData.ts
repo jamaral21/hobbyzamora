@@ -119,8 +119,8 @@ export function useInventory(params?: { productId?: string; lowStock?: boolean }
 }
 
 // Analytics hooks
-export function useDashboardStats(options?: { enabled?: boolean }) {
-  return useFetch(() => analyticsAPI.getDashboard(), [], options);
+export function useDashboardStats(startDate?: string, endDate?: string, options?: { enabled?: boolean }) {
+  return useFetch(() => analyticsAPI.getDashboard(startDate, endDate), [startDate, endDate], options);
 }
 
 export function useSalesChart(days?: number, options?: { enabled?: boolean }) {
