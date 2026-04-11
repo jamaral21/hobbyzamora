@@ -7,25 +7,48 @@ interface Message {
   content: string;
 }
 
+function splitUrlAndSuffix(token: string): { url: string; suffix: string } {
+  // Evita que signos de puntuación de cierre queden dentro del href.
+  const trailingPunctuation = /[\].,!?;:)}]+$/;
+  const match = token.match(trailingPunctuation);
+
+  if (!match) {
+    return { url: token, suffix: '' };
+  }
+
+  const suffix = match[0];
+  return {
+    url: token.slice(0, -suffix.length),
+    suffix,
+  };
+}
+
 function linkifyProducts(text: string) {
   // Detecta URLs en el texto y las convierte en <a> clicables
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const urlRegex = /(https?:\/\/[^\s<>"']+)/g;
   const parts = text.split(urlRegex);
   return parts.map((part, i) => {
-    if (urlRegex.test(part)) {
-      urlRegex.lastIndex = 0;
+    if (/^https?:\/\//.test(part)) {
+      const { url, suffix } = splitUrlAndSuffix(part);
+
+      if (!url) {
+        return <span key={i}>{part}</span>;
+      }
+
       return (
-        <a
-          key={i}
-          href={part}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 font-medium underline underline-offset-2"
-          style={{ color: 'var(--primary)' }}
-        >
-          <ShoppingBag size={12} />
-          Ver producto
-        </a>
+        <span key={i}>
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 font-medium underline underline-offset-2"
+            style={{ color: 'var(--primary)' }}
+          >
+            <ShoppingBag size={12} />
+            Ver producto
+          </a>
+          {suffix}
+        </span>
       );
     }
     return <span key={i}>{part}</span>;

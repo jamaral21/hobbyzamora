@@ -311,7 +311,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
       });
     }
 
-    // --- Standard payment (CASH / TRANSFER) ---
+    // --- Standard payment (CASH / TRANSFER / TERMINAL) ---
     const order = await prisma.order.create({
       data: {
         orderNumber: generatePOSOrderNumber(),

@@ -22,7 +22,7 @@ export function POSCart({ items, onUpdateQuantity, onRemove, onCheckout, onClear
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
-    <Card className="h-full flex flex-col">
+    <Card className="h-full min-h-0 flex flex-col overflow-hidden">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <h2 className="text-lg text-foreground">Venta Actual</h2>
@@ -42,7 +42,7 @@ export function POSCart({ items, onUpdateQuantity, onRemove, onCheckout, onClear
         )}
       </div>
 
-      <div className="flex-1 overflow-auto space-y-2 mb-4">
+      <div className="flex-1 min-h-0 overflow-auto space-y-2 mb-4">
         {items.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground">
             <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-secondary flex items-center justify-center">
@@ -112,7 +112,7 @@ export function POSCart({ items, onUpdateQuantity, onRemove, onCheckout, onClear
           onClick={onCheckout}
           disabled={items.length === 0}
         >
-          Cobrar
+          Continuar con orden
         </Button>
       </div>
     </Card>

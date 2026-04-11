@@ -3,7 +3,7 @@ import { CreditCard, Banknote, Smartphone, ArrowLeft, CheckCircle2 } from 'lucid
 import { Card } from '../design-system/Card';
 import { Button } from '../design-system/Button';
 
-export type PaymentMethod = 'card' | 'cash' | 'digital';
+export type PaymentMethod = 'card' | 'cash' | 'digital' | 'terminal';
 
 export interface PaymentSelectorProps {
   total: number;
@@ -14,6 +14,7 @@ export interface PaymentSelectorProps {
 export function PaymentSelector({ total, onSelectPayment, onCancel }: PaymentSelectorProps) {
   const [step, setStep] = useState<'method' | 'cash'>('method');
   const [amountPaid, setAmountPaid] = useState('');
+  const [selectedMethod, setSelectedMethod] = useState<Exclude<PaymentMethod, 'cash'> | null>(null);
 
   const fmt = (n: number) => n.toLocaleString('es-CL', { minimumFractionDigits: 0 });
 
@@ -24,6 +25,7 @@ export function PaymentSelector({ total, onSelectPayment, onCancel }: PaymentSel
   const paymentMethods = [
     { id: 'cash' as PaymentMethod, label: 'Efectivo', icon: Banknote, hint: 'Pago en billetes/monedas' },
     { id: 'card' as PaymentMethod, label: 'Tarjeta', icon: CreditCard, hint: 'Débito o crédito' },
+    { id: 'terminal' as PaymentMethod, label: 'Terminal', icon: CreditCard, hint: 'Cobro con POS físico' },
     { id: 'digital' as PaymentMethod, label: 'Transferencia / Digital', icon: Smartphone, hint: 'Transferencia bancaria' },
   ];
 
@@ -111,6 +113,7 @@ export function PaymentSelector({ total, onSelectPayment, onCancel }: PaymentSel
         <div className="grid grid-cols-1 gap-3">
           {paymentMethods.map((method) => {
             const Icon = method.icon;
+            const isSelected = selectedMethod === method.id;
             return (
               <button
                 key={method.id}
@@ -118,10 +121,14 @@ export function PaymentSelector({ total, onSelectPayment, onCancel }: PaymentSel
                   if (method.id === 'cash') {
                     setStep('cash');
                   } else {
-                    onSelectPayment(method.id);
+                    setSelectedMethod(method.id as Exclude<PaymentMethod, 'cash'>);
                   }
                 }}
-                className="flex items-center gap-4 p-4 bg-secondary rounded-lg hover:bg-primary/10 hover:border-primary border border-transparent transition-all text-left"
+                className={`flex items-center gap-4 p-4 bg-secondary rounded-lg border transition-all text-left ${
+                  isSelected
+                    ? 'bg-primary/10 border-primary'
+                    : 'hover:bg-primary/10 hover:border-primary border-transparent'
+                }`}
               >
                 <div className="w-12 h-12 bg-card rounded-lg flex items-center justify-center shrink-0">
                   <Icon className="w-6 h-6 text-primary" />
@@ -135,6 +142,15 @@ export function PaymentSelector({ total, onSelectPayment, onCancel }: PaymentSel
           })}
         </div>
       </div>
+
+      <Button
+        fullWidth
+        disabled={!selectedMethod}
+        onClick={() => selectedMethod && onSelectPayment(selectedMethod)}
+        className="mb-2"
+      >
+        Continuar con orden
+      </Button>
 
       <Button variant="outline" fullWidth onClick={onCancel}>Cancelar</Button>
     </Card>

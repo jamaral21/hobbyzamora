@@ -123,8 +123,8 @@ export default function POSPage() {
   };
 
   const handlePayment = async (method: PaymentMethod, amountPaid?: number) => {
-    const methodMap: Record<PaymentMethod, 'CASH' | 'CARD' | 'TRANSFER'> = {
-      card: 'CARD', cash: 'CASH', digital: 'TRANSFER',
+    const methodMap: Record<PaymentMethod, 'CASH' | 'CARD' | 'TRANSFER' | 'TERMINAL'> = {
+      card: 'CARD', cash: 'CASH', digital: 'TRANSFER', terminal: 'TERMINAL',
     };
     setPaymentError(null);
     try {
@@ -245,9 +245,9 @@ export default function POSPage() {
 
       {/* Main Content */}
       <div className="flex-1 overflow-hidden">
-        <div className="h-full grid grid-cols-1 lg:grid-cols-3 gap-6 p-6">
+        <div className="h-full min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-6 p-6">
           {/* Products Section */}
-          <div className="lg:col-span-2 flex flex-col gap-4">
+          <div className="lg:col-span-2 min-h-0 flex flex-col gap-4">
             {/* Search & Controls */}
             <Card>
               <CardContent className="flex gap-3">
@@ -270,7 +270,7 @@ export default function POSPage() {
             </Card>
 
             {/* Products Grid */}
-            <div className="flex-1 overflow-auto">
+            <div className="flex-1 min-h-0 overflow-auto">
               {isLoading ? (
                 <div className="flex items-center justify-center h-64">
                   <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -285,7 +285,7 @@ export default function POSPage() {
           </div>
 
           {/* Cart Section */}
-          <div>
+          <div className="min-h-0 h-full">
             <POSCart
               items={cartItems}
               onUpdateQuantity={handleUpdateQuantity}

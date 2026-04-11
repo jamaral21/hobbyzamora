@@ -63,7 +63,7 @@ export interface OrderItem {
 
 export interface Payment {
   id: string;
-  method: 'CARD' | 'CASH' | 'TRANSFER' | 'GETNET';
+  method: 'CARD' | 'CASH' | 'TRANSFER' | 'TERMINAL' | 'GETNET';
   status: 'PENDING' | 'APPROVED' | 'DECLINED' | 'CANCELLED' | 'REFUNDED';
   amount: number;
   paidAt?: string;
@@ -536,7 +536,7 @@ export const posAPI = {
     customerName?: string;
     customerEmail?: string;
     customerPhone?: string;
-    paymentMethod: 'CASH' | 'CARD' | 'TRANSFER';
+    paymentMethod: 'CASH' | 'CARD' | 'TRANSFER' | 'TERMINAL';
     amountPaid?: number;
     notes?: string;
   }) =>
@@ -684,7 +684,7 @@ export const paymentsAPI = {
 
   processManual: (data: {
     orderId: string;
-    method: 'CASH' | 'CARD' | 'TRANSFER';
+    method: 'CASH' | 'CARD' | 'TRANSFER' | 'TERMINAL';
     amount: number;
     cardLast4?: string;
     cardBrand?: string;
