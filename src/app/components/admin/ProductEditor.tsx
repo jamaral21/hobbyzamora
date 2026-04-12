@@ -10,14 +10,16 @@ export interface ProductEditorProps {
   onSave: (product: Partial<Product>) => void;
   onCancel: () => void;
   onUploadImage?: (file: File) => Promise<string>;
+  hideCategoryField?: boolean;
+  defaultCategory?: string;
 }
 
-export function ProductEditor({ product, onSave, onCancel, onUploadImage }: ProductEditorProps) {
+export function ProductEditor({ product, onSave, onCancel, onUploadImage, hideCategoryField = false, defaultCategory }: ProductEditorProps) {
   const [formData, setFormData] = useState<Partial<Product>>(
     product || {
       sku: '',
       name: '',
-      category: '',
+      category: defaultCategory || '',
       price: 0,
       cost: 0,
       stock: 0,
@@ -85,12 +87,14 @@ export function ProductEditor({ product, onSave, onCancel, onUploadImage }: Prod
                 required
               />
 
-              <Input
-                label="Categoría"
-                value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                required
-              />
+              {!hideCategoryField && (
+                <Input
+                  label="Categoría"
+                  value={formData.category}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  required
+                />
+              )}
 
               <Textarea
                 label="Descripción"

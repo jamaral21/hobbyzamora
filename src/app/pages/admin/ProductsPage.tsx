@@ -61,6 +61,7 @@ export default function ProductsPage() {
         status: data.status?.toUpperCase() || 'ACTIVE',
         initialStock: data.stock || 0,
         stock: data.stock || 0,
+        ...(editingProduct ? {} : { isPresale: isPresalesView }),
       };
       if (editingProduct) {
         await updateProduct.mutate((editingProduct as any).id, apiData);
