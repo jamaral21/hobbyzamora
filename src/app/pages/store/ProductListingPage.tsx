@@ -6,6 +6,7 @@ import { ProductCard } from '../../components/store/ProductCard';
 import { Button } from '../../components/design-system/Button';
 import { Select } from '../../components/design-system/Input';
 import { useProducts } from '../../hooks/useData';
+import { useAuth } from '../../contexts/AuthContext';
 
 const slugify = (text: string) =>
   text
@@ -24,6 +25,7 @@ export default function ProductListingPage() {
 }
 
 export function ProductListingPageContent({ presalesOnly = false }: { presalesOnly?: boolean }) {
+  const { isAuthenticated } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('featured');
   const [searchParams, setSearchParams] = useSearchParams();
@@ -35,8 +37,8 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
     if (!products) return [];
     return presalesOnly
       ? products.filter((p: any) => p.isPresale)
-      : products;
-  }, [products, presalesOnly]);
+      : (isAuthenticated ? products : products.filter((p: any) => !p.isPresale));
+  }, [products, presalesOnly, isAuthenticated]);
 
   const categories = useMemo(() => {
     if (!baseProducts.length) return ['all'];
