@@ -28,6 +28,28 @@ import InstagramHealthPage from './pages/admin/InstagramHealthPage';
 // POS Pages
 import POSPage from './pages/pos/POSPage';
 
+// Shipments ERP
+import { ShipmentsApp } from './components/layout/ShipmentsLayout';
+import ShipmentsDashboardPage from './pages/shipments/DashboardPage';
+import ComprasPage from './pages/shipments/ComprasPage';
+import BodegaJaponPage from './pages/shipments/BodegaJaponPage';
+import BoletasPage from './pages/shipments/BoletasPage';
+import PagosPage from './pages/shipments/PagosPage';
+import GAVJaponPage from './pages/shipments/GAVJaponPage';
+import CajasPage from './pages/shipments/CajasPage';
+import BodegaTransitoPage from './pages/shipments/BodegaTransitoPage';
+import ComprasWebPage from './pages/shipments/ComprasWebPage';
+import InternacionPage from './pages/shipments/InternacionPage';
+import CosteoPage from './pages/shipments/CosteoPage';
+import BodegaChilePage from './pages/shipments/BodegaChilePage';
+import ComprasLocalesPage from './pages/shipments/ComprasLocalesPage';
+import VentasPage from './pages/shipments/VentasPage';
+import GAVChilePage from './pages/shipments/GAVChilePage';
+import EstadoResultadosPage from './pages/shipments/EstadoResultadosPage';
+import BalancePage from './pages/shipments/BalancePage';
+import FlujoCajaPage from './pages/shipments/FlujoCajaPage';
+import ConfiguracionPage from './pages/shipments/ConfiguracionPage';
+
 export const router = createBrowserRouter([
   // Navigation Overview
   {
@@ -120,6 +142,33 @@ export const router = createBrowserRouter([
   {
     path: '/pos',
     Component: POSPage,
+  },
+
+  // Shipments ERP Routes
+  {
+    path: '/shipments',
+    Component: ShipmentsApp,
+    children: [
+      { index: true, Component: ShipmentsDashboardPage },
+      { path: 'compras', Component: ComprasPage },
+      { path: 'bodega-japon', Component: BodegaJaponPage },
+      { path: 'boletas', Component: BoletasPage },
+      { path: 'pagos', Component: PagosPage },
+      { path: 'gav-japon', Component: GAVJaponPage },
+      { path: 'cajas', Component: CajasPage },
+      { path: 'bodega-transito', Component: BodegaTransitoPage },
+      { path: 'compras-web', Component: ComprasWebPage },
+      { path: 'internacion', Component: InternacionPage },
+      { path: 'costeo', Component: CosteoPage },
+      { path: 'bodega-chile', Component: BodegaChilePage },
+      { path: 'compras-chile', Component: ComprasLocalesPage },
+      { path: 'ventas', Component: VentasPage },
+      { path: 'gav-chile', Component: GAVChilePage },
+      { path: 'eerr', Component: EstadoResultadosPage },
+      { path: 'balance', Component: BalancePage },
+      { path: 'flujo', Component: FlujoCajaPage },
+      { path: 'config', Component: ConfiguracionPage },
+    ],
   },
 
   // 404 Fallback
