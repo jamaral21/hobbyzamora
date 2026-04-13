@@ -1,7 +1,6 @@
 # HobbyZamora — Sistema de Gestión ERP
 
 **Versión:** v46  
-**Stack:** HTML5 + CSS3 + JavaScript vanilla (single-file)  
 **Persistencia:** localStorage (navegador local)  
 **Hoja de ruta:** Migración futura a PHP + MySQL
 
