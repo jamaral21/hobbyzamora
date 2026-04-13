@@ -5,13 +5,13 @@ import { CheckoutSummary } from '../../components/store/CheckoutSummary';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/design-system/Card';
 import { Input } from '../../components/design-system/Input';
 import { Button } from '../../components/design-system/Button';
-import { CreditCard, Lock, Loader2, MapPin, ShieldCheck, ChevronRight, AlertCircle } from 'lucide-react';
+import { CreditCard, Lock, Loader2, MapPin, ShieldCheck, ChevronRight, AlertCircle, Wallet, Landmark } from 'lucide-react';
 import { useCartStore } from '../../lib/store';
 import { ordersAPI, paymentsAPI } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { RequireAuth } from '../../components/auth/RequireAuth';
 
-type PaymentMethodType = 'credit' | 'debit';
+type PaymentMethodType = NonNullable<Parameters<typeof paymentsAPI.checkout>[1]>;
 
 export default function CheckoutPage() {
   return (
@@ -27,6 +27,7 @@ function CheckoutForm() {
   const { user } = useAuth();
   const [step, setStep] = useState<'shipping' | 'payment' | 'review'>('shipping');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [checkoutCompleted, setCheckoutCompleted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>('credit');
   const [shippingErrors, setShippingErrors] = useState<Record<string, string>>({});
@@ -52,10 +53,10 @@ function CheckoutForm() {
 
   // Redirect to cart if empty
   useEffect(() => {
-    if (cartItems.length === 0 && !isProcessing) {
+    if (cartItems.length === 0 && !isProcessing && !checkoutCompleted) {
       navigate('/store/cart');
     }
-  }, [cartItems.length, isProcessing, navigate]);
+  }, [cartItems.length, isProcessing, checkoutCompleted, navigate]);
 
   const checkoutItems = cartItems.map(item => ({
     id: item.id,
@@ -119,6 +120,7 @@ function CheckoutForm() {
       if (payment.checkoutUrl) {
         window.location.href = payment.checkoutUrl;
       } else {
+        setCheckoutCompleted(true);
         clearCart();
         navigate(`/store/order-confirmation?orderId=${order.id}`);
       }
@@ -257,11 +259,11 @@ function CheckoutForm() {
                 <CardContent className="space-y-4">
                   <div className="flex items-center gap-2 p-3 bg-[#00e676]/10 border border-[#00e676]/20 rounded-lg">
                     <Lock className="w-4 h-4 text-[#00e676]" />
-                    <span className="text-sm text-[#00e676]">Pago seguro procesado por Getnet</span>
+                    <span className="text-sm text-[#00e676]">Tarjetas procesadas de forma segura por Getnet</span>
                   </div>
 
                   <p className="text-sm text-muted-foreground">
-                    Selecciona el tipo de tarjeta con la que deseas pagar:
+                    Selecciona tu método de pago:
                   </p>
 
                   {/* Tarjeta de Crédito */}
@@ -336,10 +338,68 @@ function CheckoutForm() {
                     </div>
                   </button>
 
+                  {/* Transferencia */}
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('transfer')}
+                    className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                      paymentMethod === 'transfer'
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border bg-secondary hover:border-muted-foreground/30'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                          paymentMethod === 'transfer' ? 'border-primary' : 'border-muted-foreground'
+                        }`}>
+                          {paymentMethod === 'transfer' && (
+                            <div className="w-2.5 h-2.5 rounded-full bg-primary" />
+                          )}
+                        </div>
+                        <div>
+                          <span className="text-foreground font-medium">Transferencia Bancaria</span>
+                          <p className="text-xs text-muted-foreground mt-0.5">Un admin confirma manualmente el pago</p>
+                        </div>
+                      </div>
+                      <Landmark className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                  </button>
+
+                  {/* Efectivo */}
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('cash')}
+                    className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                      paymentMethod === 'cash'
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border bg-secondary hover:border-muted-foreground/30'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                          paymentMethod === 'cash' ? 'border-primary' : 'border-muted-foreground'
+                        }`}>
+                          {paymentMethod === 'cash' && (
+                            <div className="w-2.5 h-2.5 rounded-full bg-primary" />
+                          )}
+                        </div>
+                        <div>
+                          <span className="text-foreground font-medium">Pago en Efectivo</span>
+                          <p className="text-xs text-muted-foreground mt-0.5">Tu orden queda pendiente de validación</p>
+                        </div>
+                      </div>
+                      <Wallet className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                  </button>
+
                   <div className="flex items-center gap-2 p-3 bg-secondary rounded-lg">
                     <ShieldCheck className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                     <p className="text-xs text-muted-foreground">
-                      Al continuar serás redirigido a la pasarela segura de Getnet para ingresar los datos de tu tarjeta. No almacenamos información de tu tarjeta.
+                      {paymentMethod === 'credit' || paymentMethod === 'debit'
+                        ? 'Al continuar serás redirigido a la pasarela segura de Getnet para ingresar los datos de tu tarjeta. No almacenamos información de tu tarjeta.'
+                        : 'Tu orden será recibida y validada manualmente. Te notificaremos cuando el pago quede confirmado y el pedido comience a procesarse.'}
                     </p>
                   </div>
 
@@ -406,10 +466,15 @@ function CheckoutForm() {
                       </button>
                     </div>
                     <p className="text-sm text-foreground">
-                      {paymentMethod === 'credit' ? 'Tarjeta de Crédito' : 'Tarjeta de Débito'}
+                      {paymentMethod === 'credit' && 'Tarjeta de Crédito'}
+                      {paymentMethod === 'debit' && 'Tarjeta de Débito'}
+                      {paymentMethod === 'transfer' && 'Transferencia Bancaria'}
+                      {paymentMethod === 'cash' && 'Pago en Efectivo'}
                     </p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Procesado de forma segura por Getnet
+                      {paymentMethod === 'credit' || paymentMethod === 'debit'
+                        ? 'Procesado de forma segura por Getnet'
+                        : 'Confirmación manual por administración'}
                     </p>
                   </div>
 
@@ -456,7 +521,9 @@ function CheckoutForm() {
                       ) : (
                         <>
                           <Lock className="w-4 h-4 mr-2" />
-                          Pagar con Getnet
+                          {paymentMethod === 'credit' || paymentMethod === 'debit'
+                            ? 'Pagar con Getnet'
+                            : 'Confirmar Pedido'}
                         </>
                       )}
                     </Button>
