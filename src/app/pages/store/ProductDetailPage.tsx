@@ -267,17 +267,36 @@ export default function ProductDetailPage() {
                     <h3 className="text-sm text-foreground mb-1">
                       Información de Preventa
                     </h3>
-                    {product.presaleMaxQty != null && (
+                    {product.presaleData && (
+                      <>
+                        <p className="text-sm text-muted-foreground">
+                          Limitado a {product.presaleData.maxQuantity} por cliente
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {product.presaleData.availableQuantity} disponibles
+                        </p>
+                      </>
+                    )}
+                    {product.presaleMaxQty && !product.presaleData && (
                       <p className="text-sm text-muted-foreground">
-                        Máximo {product.presaleMaxQty} cupos por producto
+                        Limitado a {product.presaleMaxQty} por cliente
                       </p>
                     )}
-                    {product.presaleAvailQty != null ? (
+                    {product.presaleAvailQty != null && !product.presaleData && (
                       <p className="text-sm text-muted-foreground">
-                        {product.presaleAvailQty} cupos disponibles
+                        {product.presaleAvailQty} disponibles
                       </p>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">Cupos disponibles</p>
+                    )}
+                    {product.presaleEndDate && (
+                      <p className="text-sm text-muted-foreground">
+                        Disponible hasta el {new Date(product.presaleEndDate).toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      </p>
+                    )}
+                    {product.presaleEndDate && new Date(product.presaleEndDate) < new Date() && (
+                      <p className="text-sm text-destructive mt-1 font-medium">
+                        Esta preventa ha expirado
+                      </p>
+                    )}
                     )}
                   </div>
                 </div>
@@ -326,9 +345,22 @@ export default function ProductDetailPage() {
             )}
 
             {/* Actions */}
+            {/* Expired presale warning */}
+            {product.isPresale && product.presaleEndDate && new Date(product.presaleEndDate) < new Date() && (
+              <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg mb-4">
+                <AlertCircle className="w-5 h-5 text-destructive" />
+                <span className="text-sm text-destructive">Esta preventa ha expirado y ya no acepta reservas</span>
+              </div>
+            )}
+
             <div className="flex gap-3 mb-8">
               {product.isPresale ? (
-                myReservation && (myReservation.status === 'PENDING' || myReservation.status === 'NOTIFIED') ? (
+                // Presale expired → disabled
+                product.presaleEndDate && new Date(product.presaleEndDate) < new Date() ? (
+                  <Button fullWidth size="lg" disabled>
+                    Preventa Expirada
+                  </Button>
+                ) : myReservation && (myReservation.status === 'PENDING' || myReservation.status === 'NOTIFIED') ? (
                   <Button fullWidth size="lg" disabled variant="outline">
                     <Bookmark className="w-5 h-5" />
                     {myReservation.status === 'PENDING' ? 'Ya reservado' : 'Pago pendiente'}

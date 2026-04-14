@@ -13,11 +13,14 @@ export interface ProductCardProps {
 
 export function ProductCard({ product }: ProductCardProps) {
   const isLowStock = product.stock < 10;
+  const isExpiredPresale = product.isPresale && product.presaleEndDate && new Date(product.presaleEndDate) < new Date();
+  const isSoldOutPresale = product.isPresale && product.presaleAvailQty != null && product.presaleAvailQty <= 0;
+  const isDisabled = product.stock <= 0 || !!isExpiredPresale || !!isSoldOutPresale;
   const { addItem } = useCartStore();
   const [justAdded, setJustAdded] = useState(false);
 
   const handleAddToCart = () => {
-    if (product.stock <= 0) return;
+    if (isDisabled) return;
     addItem(product, 1);
     setJustAdded(true);
     window.setTimeout(() => setJustAdded(false), 1200);
@@ -37,6 +40,17 @@ export function ProductCard({ product }: ProductCardProps) {
               <Flame className="w-3 h-3 mr-1" />
               Preventa
             </Badge>
+          )}
+          {product.isPresale && product.presaleEndDate && (
+            <div className="absolute top-3 right-3">
+              {new Date(product.presaleEndDate) < new Date() ? (
+                <Badge variant="danger" className="text-[10px]">Expirada</Badge>
+              ) : (
+                <Badge variant="default" className="text-[10px] bg-background/80 backdrop-blur-sm">
+                  Hasta {new Date(product.presaleEndDate).toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })}
+                </Badge>
+              )}
+            </div>
           )}
           {/* Hover gradient */}
           <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
@@ -69,12 +83,12 @@ export function ProductCard({ product }: ProductCardProps) {
 
           <Button
             size="sm"
-            disabled={product.stock <= 0}
+            disabled={isDisabled}
             className="bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground border border-primary/20 hover:shadow-[0_0_12px_rgba(255,214,10,0.3)]"
             onClick={handleAddToCart}
           >
             <ShoppingCart className="w-4 h-4" />
-            {product.stock <= 0 ? 'Agotado' : justAdded ? 'Agregado' : 'Agregar'}
+            {isExpiredPresale ? 'Expirada' : isSoldOutPresale ? 'Agotada' : product.stock <= 0 ? 'Agotado' : justAdded ? 'Agregado' : 'Agregar'}
           </Button>
         </div>
       </div>

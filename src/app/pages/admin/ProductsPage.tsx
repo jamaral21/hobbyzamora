@@ -355,6 +355,8 @@ export default function ProductsPage() {
             <TableHead>Categoría</TableHead>
             <TableHead>Precio</TableHead>
             <TableHead>Stock</TableHead>
+            {isPresalesView && <TableHead>Disponibles</TableHead>}
+            {isPresalesView && <TableHead>Caducidad</TableHead>}
             <TableHead>Estado</TableHead>
             <TableHead>Acciones</TableHead>
           </TableRow>
@@ -388,6 +390,27 @@ export default function ProductsPage() {
                   )}
                 </div>
               </TableCell>
+              {isPresalesView && (
+                <TableCell>
+                  <span className="text-sm">{product.presaleAvailQty ?? '—'}</span>
+                </TableCell>
+              )}
+              {isPresalesView && (
+                <TableCell>
+                  {product.presaleEndDate ? (
+                    <div>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(product.presaleEndDate).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' })}
+                      </span>
+                      {new Date(product.presaleEndDate) < new Date() && (
+                        <Badge variant="danger" size="sm" className="ml-1.5">Vencida</Badge>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Sin fecha</span>
+                  )}
+                </TableCell>
+              )}
               <TableCell>
                 <Badge
                   variant={
