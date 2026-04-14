@@ -375,3 +375,72 @@ export async function sendNewOrderAdminEmail(order: OrderSummary): Promise<void>
   `);
   await send(adminEmail, `Nueva orden #${order.orderNumber} – HobbyZamora`, html);
 }
+
+/** Confirmación de reserva de preventa */
+export async function sendPresaleReservationEmail(
+  email: string,
+  name: string,
+  productName: string,
+  productPrice: number,
+): Promise<void> {
+  const link = `${BASE_URL}/store/presales`;
+  const html = layout(`Reserva confirmada – ${productName}`, `
+    <h2>¡Hola, ${name}! 🎉</h2>
+    <p>Tu reserva de preventa ha sido confirmada para:</p>
+    <div class="info-box" style="text-align:center;padding:20px">
+      <span style="font-size:18px;font-weight:700;color:#ffd60a">${productName}</span><br>
+      <span style="font-size:15px;color:#e8e6f0;margin-top:6px;display:block">Precio de preventa: ${formatPrice(productPrice)}</span>
+    </div>
+    <p>Te avisaremos cuando el producto llegue a nuestra tienda. En ese momento tendrás <strong style="color:#ffd60a">24 horas</strong> para completar el pago.</p>
+    <div style="text-align:center">
+      <a class="btn" href="${link}">Ver mis preventas</a>
+    </div>
+    <hr class="divider">
+    <p style="font-size:13px;color:#666">
+      Si no realizaste esta reserva, puedes ignorar este correo.
+    </p>
+  `);
+  await send(email, `Reserva confirmada: ${productName} – HobbyZamora`, html);
+}
+
+/** Notificación de llegada de preventa: producto llegó, usuario tiene 24h para pagar */
+export async function sendPresaleArrivalEmail(
+  email: string,
+  name: string,
+  productName: string,
+  reservationId: string,
+): Promise<void> {
+  const link = `${BASE_URL}/store/mis-preventas`;
+  const html = layout(`¡Tu preventa llegó! – ${productName}`, `
+    <h2>¡Hola, ${name}! 🎉</h2>
+    <p>Tu producto reservado ha llegado a nuestra tienda:</p>
+    <div class="info-box" style="text-align:center;padding:20px">
+      <span style="font-size:18px;font-weight:700;color:#ffd60a">${productName}</span>
+    </div>
+    <p>Tienes <strong style="color:#ffd60a">24 horas</strong> para ir a pagar tu preventa antes de que se libere el cupo.</p>
+    <div style="text-align:center">
+      <a class="btn" href="${link}">Ver mis preventas y pagar</a>
+    </div>
+    <hr class="divider">
+    <p style="font-size:13px;color:#666">
+      Si no pagas dentro de las 24 horas, tu reserva se liberará automáticamente 
+      y el producto quedará disponible para venta directa.
+    </p>
+  `);
+  await send(email, `¡Tu preventa llegó! Tienes 24h para pagar – HobbyZamora`, html);
+}
+
+/** Notificación de reserva expirada: el usuario no pagó a tiempo */
+export async function sendPresaleExpiredEmail(
+  email: string,
+  name: string,
+  productName: string,
+): Promise<void> {
+  const html = layout(`Tu reserva de preventa expiró – ${productName}`, `
+    <h2>Hola, ${name}</h2>
+    <p>Lamentablemente, tu reserva de preventa para <strong>${productName}</strong> ha expirado porque no se completó el pago dentro de las 24 horas.</p>
+    <p>El cupo ha sido liberado. Si aún te interesa el producto, puedes buscarlo en nuestra tienda.</p>
+    <a class="btn" href="${BASE_URL}/store/products">Ver tienda</a>
+  `);
+  await send(email, `Tu reserva de preventa expiró – HobbyZamora`, html);
+}

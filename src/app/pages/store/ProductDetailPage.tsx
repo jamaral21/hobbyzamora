@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router';
-import { ShoppingCart, Heart, Share2, AlertCircle, Clock, Loader2 } from 'lucide-react';
+import { ShoppingCart, Heart, Share2, AlertCircle, Clock, Loader2, Bookmark } from 'lucide-react';
 import { StoreLayout } from '../../components/layout/StoreLayout';
 import { Button } from '../../components/design-system/Button';
 import { Badge } from '../../components/design-system/Badge';
 import { Card } from '../../components/design-system/Card';
 import { VariantSelector } from '../../components/store/VariantSelector';
-import { productsAPI, wishlistAPI } from '../../lib/api';
+import { productsAPI, wishlistAPI, presaleAPI, type PresaleReservation } from '../../lib/api';
 import { useCartStore } from '../../lib/store';
 import { useAuth } from '../../contexts/AuthContext';
 import { AuthModal } from '../../components/auth/AuthModal';
@@ -21,6 +21,10 @@ export default function ProductDetailPage() {
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const [shareStatus, setShareStatus] = useState<'idle' | 'shared' | 'copied' | 'error'>('idle');
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showReserveDialog, setShowReserveDialog] = useState(false);
+  const [reserveLoading, setReserveLoading] = useState(false);
+  const [reserveError, setReserveError] = useState('');
+  const [myReservation, setMyReservation] = useState<PresaleReservation | null>(null);
   const { addItem } = useCartStore();
   const { isAuthenticated } = useAuth();
 
@@ -45,6 +49,31 @@ export default function ProductDetailPage() {
       .then(({ isFavorite }) => setIsFavorite(isFavorite))
       .catch(() => {});
   }, [id, isAuthenticated]);
+
+  useEffect(() => {
+    if (!id || !isAuthenticated) return;
+    presaleAPI.getMyReservations()
+      .then(({ reservations }) => {
+        const existing = reservations.find(r => r.product.id === id) ?? null;
+        setMyReservation(existing);
+      })
+      .catch(() => {});
+  }, [id, isAuthenticated]);
+
+  const handleReserve = async () => {
+    if (!id) return;
+    setReserveLoading(true);
+    setReserveError('');
+    try {
+      const { reservation } = await presaleAPI.reserve(id);
+      setMyReservation(reservation);
+      setShowReserveDialog(false);
+    } catch (error: any) {
+      setReserveError(error?.message ?? 'No se pudo completar la reserva. Intenta de nuevo.');
+    } finally {
+      setReserveLoading(false);
+    }
+  };
 
   const handleToggleFavorite = async () => {
     if (!isAuthenticated) {
@@ -125,7 +154,7 @@ export default function ProductDetailPage() {
     );
   }
 
-  const isLowStock = product.stock < 10;
+  const isLowStock = !product.isPresale && product.stock < 10;
 
   return (
     <StoreLayout>
@@ -230,7 +259,7 @@ export default function ProductDetailPage() {
             )}
 
             {/* Presale Info */}
-            {product.isPresale && product.presaleData && (
+            {product.isPresale && (
               <Card glow="primary" className="mb-6">
                 <div className="flex items-start gap-3">
                   <Clock className="w-5 h-5 text-primary mt-0.5" />
@@ -238,12 +267,18 @@ export default function ProductDetailPage() {
                     <h3 className="text-sm text-foreground mb-1">
                       Información de Preventa
                     </h3>
-                    <p className="text-sm text-muted-foreground">
-                      Limitado a {product.presaleData.maxQuantity} por cliente
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      {product.presaleData.availableQuantity} disponibles
-                    </p>
+                    {product.presaleMaxQty != null && (
+                      <p className="text-sm text-muted-foreground">
+                        Máximo {product.presaleMaxQty} cupos por producto
+                      </p>
+                    )}
+                    {product.presaleAvailQty != null ? (
+                      <p className="text-sm text-muted-foreground">
+                        {product.presaleAvailQty} cupos disponibles
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Cupos disponibles</p>
+                    )}
                   </div>
                 </div>
               </Card>
@@ -259,44 +294,70 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            {/* Quantity */}
-            <div className="mb-6">
-              <label className="text-sm text-muted-foreground mb-2 block">
-                Cantidad
-              </label>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  className="w-10 h-10 rounded-lg border border-border hover:bg-secondary text-foreground transition-colors"
-                >
-                  -
-                </button>
-                <input
-                  type="number"
-                  min="1"
-                  max={product.stock}
-                  value={quantity}
-                  onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
-                  className="w-20 px-3 py-2 text-center rounded-lg border border-border bg-input-background text-foreground"
-                />
-                <button
-                  onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
-                  className="w-10 h-10 rounded-lg border border-border hover:bg-secondary text-foreground transition-colors"
-                >
-                  +
-                </button>
+            {/* Quantity — solo para productos normales */}
+            {!product.isPresale && (
+              <div className="mb-6">
+                <label className="text-sm text-muted-foreground mb-2 block">
+                  Cantidad
+                </label>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                    className="w-10 h-10 rounded-lg border border-border hover:bg-secondary text-foreground transition-colors"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    min="1"
+                    max={product.stock}
+                    value={quantity}
+                    onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                    className="w-20 px-3 py-2 text-center rounded-lg border border-border bg-input-background text-foreground"
+                  />
+                  <button
+                    onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
+                    className="w-10 h-10 rounded-lg border border-border hover:bg-secondary text-foreground transition-colors"
+                  >
+                    +
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Actions */}
             <div className="flex gap-3 mb-8">
-              <Button fullWidth size="lg" onClick={() => addItem(product, quantity)} disabled={product.stock === 0}>
-                <ShoppingCart className="w-5 h-5" />
-                Agregar al Carrito
-              </Button>
-              <Button variant="outline" size="lg" onClick={() => { addItem(product, quantity); window.location.href = '/store/checkout'; }} disabled={product.stock === 0}>
-                Comprar Ahora
-              </Button>
+              {product.isPresale ? (
+                myReservation && (myReservation.status === 'PENDING' || myReservation.status === 'NOTIFIED') ? (
+                  <Button fullWidth size="lg" disabled variant="outline">
+                    <Bookmark className="w-5 h-5" />
+                    {myReservation.status === 'PENDING' ? 'Ya reservado' : 'Pago pendiente'}
+                  </Button>
+                ) : (product.presaleAvailQty ?? 0) <= 0 ? (
+                  <Button fullWidth size="lg" disabled>
+                    Sin disponibilidad
+                  </Button>
+                ) : (
+                  <Button
+                    fullWidth
+                    size="lg"
+                    onClick={isAuthenticated ? () => { setReserveError(''); setShowReserveDialog(true); } : () => setShowAuthModal(true)}
+                  >
+                    <Bookmark className="w-5 h-5" />
+                    Reservar
+                  </Button>
+                )
+              ) : (
+                <>
+                  <Button fullWidth size="lg" onClick={() => addItem(product, quantity)} disabled={product.stock === 0}>
+                    <ShoppingCart className="w-5 h-5" />
+                    Agregar al Carrito
+                  </Button>
+                  <Button variant="outline" size="lg" onClick={() => { addItem(product, quantity); window.location.href = '/store/checkout'; }} disabled={product.stock === 0}>
+                    Comprar Ahora
+                  </Button>
+                </>
+              )}
             </div>
 
             {/* Description */}
@@ -331,8 +392,47 @@ export default function ProductDetailPage() {
       <AuthModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
-        message="Inicia sesión para guardar favoritos"
+        message={product?.isPresale ? 'Inicia sesión para reservar este producto' : 'Inicia sesión para guardar favoritos'}
       />
+
+      {/* Dialogo de confirmación de reserva */}
+      {showReserveDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-zinc-900 border border-white/10 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+            <h2 className="text-lg font-bold text-white mb-1">Confirmar reserva</h2>
+            <p className="text-amber-400 font-semibold text-sm mb-1">{product.name}</p>
+            <p className="text-zinc-400 text-sm mb-1">
+              ${product.price.toLocaleString('es-CL')}
+            </p>
+            <p className="text-zinc-500 text-xs mb-6 leading-relaxed">
+              Al confirmar, reservas este producto. Cuando llegue recibirás un correo con{' '}
+              <span className="text-amber-400">24 horas</span> para completar el pago.
+            </p>
+            {reserveError && (
+              <p className="text-red-400 text-xs mb-4 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                {reserveError}
+              </p>
+            )}
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                fullWidth
+                onClick={() => setShowReserveDialog(false)}
+                disabled={reserveLoading}
+              >
+                Cancelar
+              </Button>
+              <Button fullWidth onClick={handleReserve} disabled={reserveLoading}>
+                {reserveLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  'Confirmar'
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </StoreLayout>
   );
 }

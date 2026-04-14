@@ -7,8 +7,8 @@ import { Input } from '../../components/design-system/Input';
 import { Button } from '../../components/design-system/Button';
 import { Badge } from '../../components/design-system/Badge';
 import { useAuth } from '../../contexts/AuthContext';
-import { ordersAPI, wishlistAPI, Order, WishlistItem } from '../../lib/api';
-import { User, Package, LogOut, Loader2, ChevronRight, Heart, X, ShoppingCart, Camera } from 'lucide-react';
+import { ordersAPI, wishlistAPI, presaleAPI, Order, WishlistItem, PresaleReservation } from '../../lib/api';
+import { User, Package, LogOut, Loader2, ChevronRight, Heart, X, ShoppingCart, Camera, Clock, CheckCircle, XCircle, AlertCircle, ShoppingBag, Sparkles } from 'lucide-react';
 import { useCartStore } from '../../lib/store';
 
 export default function AccountPage() {
@@ -27,12 +27,14 @@ function AccountContent() {
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
   const [loadingWishlist, setLoadingWishlist] = useState(true);
+  const [presales, setPresales] = useState<PresaleReservation[]>([]);
+  const [loadingPresales, setLoadingPresales] = useState(true);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [form, setForm] = useState({ name: user?.name || '', phone: user?.phone || '' });
-  const { addItem } = useCartStore();
+  const { addItem, items: cartItems } = useCartStore();
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -45,6 +47,11 @@ function AccountContent() {
       .then(setWishlist)
       .catch(() => {})
       .finally(() => setLoadingWishlist(false));
+
+    presaleAPI.getMyReservations()
+      .then((data) => setPresales(data.reservations))
+      .catch(() => {})
+      .finally(() => setLoadingPresales(false));
   }, []);
 
   const handleRemoveWishlist = async (productId: string) => {
@@ -307,6 +314,113 @@ function AccountContent() {
                         <X className="w-4 h-4" />
                       )}
                     </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Mis Preventas */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-amber-500" />
+              </div>
+              <CardTitle>Mis Preventas</CardTitle>
+            </div>
+            <Link to="/store/presales">
+              <Button variant="outline" size="sm">Ver todas</Button>
+            </Link>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loadingPresales ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            </div>
+          ) : presales.length === 0 ? (
+            <div className="text-center py-8">
+              <Sparkles className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+              <p className="text-muted-foreground mb-4">Aún no tienes preventas reservadas</p>
+              <Link to="/store/presales">
+                <Button variant="outline">Ver preventas disponibles</Button>
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {presales.map((r) => {
+                const img = r.product.images?.[0];
+                const statusMap: Record<string, { label: string; icon: any; color: string }> = {
+                  PENDING:  { label: 'Reservado',        icon: Clock,         color: 'text-blue-500' },
+                  NOTIFIED: { label: '¡Llegó! Pagar ya', icon: AlertCircle,   color: 'text-amber-500' },
+                  PAID:     { label: 'Pagado',            icon: CheckCircle,   color: 'text-emerald-500' },
+                  EXPIRED:  { label: 'Expirado',          icon: XCircle,       color: 'text-muted-foreground' },
+                };
+                const s = statusMap[r.status] ?? statusMap.PENDING;
+                const StatusIcon = s.icon;
+                const isNotified = r.status === 'NOTIFIED';
+
+                return (
+                  <div
+                    key={r.id}
+                    className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
+                      isNotified
+                        ? 'border-amber-500/40 bg-amber-500/5'
+                        : 'border-border hover:border-primary/25 hover:bg-secondary/30'
+                    }`}
+                  >
+                    {/* Thumb */}
+                    <Link to={`/store/product/${r.productId}`} className="shrink-0">
+                      <div className="w-16 h-16 rounded-lg overflow-hidden bg-secondary">
+                        {img ? (
+                          <img src={img} alt={r.product.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-muted-foreground/30">
+                            <Package className="w-5 h-5" />
+                          </div>
+                        )}
+                      </div>
+                    </Link>
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <Link to={`/store/product/${r.productId}`}>
+                        <p className="text-sm font-medium text-foreground truncate hover:text-primary transition-colors">
+                          {r.product.name}
+                        </p>
+                      </Link>
+                      <p className="text-sm font-bold text-primary font-[family-name:var(--font-mono)] mt-0.5">
+                        ${Number(r.product.price).toLocaleString('es-CL')}
+                      </p>
+                      <div className={`flex items-center gap-1 mt-1 text-xs font-medium ${s.color}`}>
+                        <StatusIcon className="w-3 h-3" />
+                        {s.label}
+                        {isNotified && r.expiresAt && (
+                          <span className="text-amber-500/70 ml-1">
+                            · expira {new Date(r.expiresAt).toLocaleString('es-CL', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* CTA for notified */}
+                    {isNotified && (
+                      <Button
+                        size="sm"
+                        className="shrink-0"
+                        onClick={() => {
+                          const alreadyInCart = cartItems.some(i => i.productId === r.productId);
+                          if (!alreadyInCart) addItem(r.product as any, 1);
+                        }}
+                      >
+                        <ShoppingBag className="w-3.5 h-3.5 mr-1" />
+                        {cartItems.some(i => i.productId === r.productId) ? 'En carrito' : 'Al carrito'}
+                      </Button>
+                    )}
                   </div>
                 );
               })}

@@ -22,6 +22,7 @@ import OrdersPage from './pages/admin/OrdersPage';
 import OrderDetailPage from './pages/admin/OrderDetailPage';
 import CustomersPage from './pages/admin/CustomersPage';
 import InstagramAgentPage from './pages/admin/InstagramAgentPage';
+import { PresalesPage as AdminPresalesPage } from './pages/admin/PresalesPage';
 
 import InstagramHealthPage from './pages/admin/InstagramHealthPage';
 
@@ -96,7 +97,11 @@ export const router = createBrowserRouter([
   },
   {
     path: '/admin/presales',
-    Component: ProductsPage, // Reuse products page with presale filter
+    Component: AdminPresalesPage,
+  },
+  {
+    path: '/admin/presales/new',
+    Component: ProductsPage,
   },
   {
     path: '/admin/store/product/:id',

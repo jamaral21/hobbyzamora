@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { Plus, Search, Filter, MoreVertical, Edit, Trash2, Eye, Loader2, Upload, Download, CheckCircle, AlertCircle, ImagePlus } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
@@ -19,7 +19,9 @@ export default function ProductsPage() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ACTIVE' | 'ARCHIVED' | 'HIDDEN' | 'ALL'>('ACTIVE');
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isEditorOpen, setIsEditorOpen] = useState(
+    (location.state as any)?.openEditor === true
+  );
   const [editingProduct, setEditingProduct] = useState(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ created: number; updated: number; skipped: number; errors: string[] } | null>(null);
@@ -62,6 +64,13 @@ export default function ProductsPage() {
         initialStock: data.stock || 0,
         stock: data.stock || 0,
         ...(editingProduct ? {} : { isPresale: isPresalesView }),
+        // Para preventa nueva: mapear stock como cupo de preventa
+        ...(isPresalesView && !editingProduct ? {
+          presaleMaxQty: data.stock || 0,
+          presaleAvailQty: data.stock || 0,
+          stock: 0,
+          initialStock: 0,
+        } : {}),
       };
       if (editingProduct) {
         await updateProduct.mutate((editingProduct as any).id, apiData);
@@ -70,6 +79,9 @@ export default function ProductsPage() {
       }
       refetch();
       setIsEditorOpen(false);
+      if (isPresalesView) {
+        navigate('/admin/presales');
+      }
     } catch (err) {
       console.error('Save product failed:', err);
     }

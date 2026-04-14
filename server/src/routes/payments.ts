@@ -119,6 +119,24 @@ async function notifyOrderProcessing(orderId: string): Promise<void> {
       cost: parseFloat(i.cost.toString()),
     })),
   }).catch(() => {});
+
+  // Marcar reservas de preventa como PAID si el usuario tenía reservas NOTIFIED
+  // para los productos incluidos en esta orden
+  if (order.userId) {
+    const presaleProductIds = order.items.map((i) => i.productId);
+    try {
+      await prisma.presaleReservation.updateMany({
+        where: {
+          userId: order.userId,
+          productId: { in: presaleProductIds },
+          status: 'NOTIFIED',
+        },
+        data: { status: 'PAID', paidAt: new Date() },
+      });
+    } catch (err) {
+      console.error('[presale] Error al marcar reservas como pagadas:', err);
+    }
+  }
 }
 
 // Unified checkout endpoint - routes to dev auto-approve or Getnet Chile

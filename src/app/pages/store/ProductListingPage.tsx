@@ -37,7 +37,7 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
     if (!products) return [];
     return presalesOnly
       ? products.filter((p: any) => p.isPresale)
-      : (isAuthenticated ? products : products.filter((p: any) => !p.isPresale));
+      : products;
   }, [products, presalesOnly, isAuthenticated]);
 
   const categories = useMemo(() => {

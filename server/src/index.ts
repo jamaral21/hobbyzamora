@@ -26,6 +26,7 @@ import posRoutes from './routes/pos.js';
 import paymentRoutes from './routes/payments.js';
 import chatRoutes from './routes/chat.js';
 import wishlistRoutes from './routes/wishlist.js';
+import presaleRoutes from './routes/presale.js';
 
 // Initialize Prisma
 export const prisma = new PrismaClient();
@@ -76,6 +77,7 @@ app.use('/api/pos', posRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/wishlist', wishlistRoutes);
+app.use('/api/presale', presaleRoutes);
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

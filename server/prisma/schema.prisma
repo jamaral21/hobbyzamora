@@ -26,10 +26,11 @@ model User {
   resetToken        String?
   resetTokenExpires DateTime?
 
-  orders    Order[]
-  cart      Cart?
-  addresses Address[]
-  wishlist  Wishlist[]
+  orders               Order[]
+  cart                 Cart?
+  addresses            Address[]
+  wishlist             Wishlist[]
+  presaleReservations  PresaleReservation[]
 
   @@map("users")
 }
@@ -72,6 +73,7 @@ model Product {
   presaleMaxQty     Int?
   presaleAvailQty   Int?
   presaleEndDate    DateTime?
+  presaleArrivedAt  DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -81,6 +83,7 @@ model Product {
   orderItems       OrderItem[]
   cartItems        CartItem[]
   wishlists        Wishlist[]
+  presaleReservations PresaleReservation[]
 
   @@map("products")
 }
@@ -314,4 +317,30 @@ model Wishlist {
 
   @@unique([userId, productId])
   @@map("wishlists")
+}
+
+// ==================== PRESALE RESERVATIONS ====================
+
+model PresaleReservation {
+  id        String   @id @default(uuid())
+  userId    String
+  productId String
+
+  // PENDING → arriving stock is notified → NOTIFIED → user pays → PAID
+  // If 24h pass after NOTIFIED without payment → EXPIRED
+  status    String   @default("PENDING")
+
+  notifiedAt DateTime?  // when the arrival email was sent
+  expiresAt  DateTime?  // notifiedAt + 24h
+  paidAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  // 1 reservation per user per product
+  @@unique([userId, productId])
+  @@map("presale_reservations")
 }

@@ -20,6 +20,7 @@ export interface Product {
   presaleMaxQty?: number;
   presaleAvailQty?: number;
   presaleEndDate?: string;
+  presaleArrivedAt?: string | null;
   variants?: ProductVariant[];
 }
 
@@ -746,4 +747,96 @@ export const wishlistAPI = {
 
   check: (productId: string) =>
     fetchAPI<{ isFavorite: boolean }>(`/wishlist/check/${productId}`),
+};
+
+// Presale API
+export type PresaleStatus = 'PENDING' | 'NOTIFIED' | 'PAID' | 'EXPIRED';
+
+export interface PresaleReservation {
+  id: string;
+  userId: string;
+  productId: string;
+  status: PresaleStatus;
+  notifiedAt: string | null;
+  expiresAt: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  product: {
+    id: string;
+    name: string;
+    sku: string;
+    price: number;
+    images: string[];
+    status: string;
+    isPresale: boolean;
+    presaleEndDate: string | null;
+  };
+}
+
+export interface AdminPresaleReservation {
+  id: string;
+  userId: string;
+  productId: string;
+  status: PresaleStatus;
+  notifiedAt: string | null;
+  expiresAt: string | null;
+  paidAt: string | null;
+  createdAt: string;
+  user: { id: string; name: string; email: string };
+  product: {
+    id: string;
+    name: string;
+    sku: string;
+    price: number;
+    images: string[];
+    presaleAvailQty: number | null;
+    presaleMaxQty: number | null;
+  };
+}
+
+export const presaleAPI = {
+  /** Reserve a presale product (authenticated) */
+  reserve: (productId: string) =>
+    fetchAPI<{ reservation: PresaleReservation }>(`/presale/reserve/${productId}`, {
+      method: 'POST',
+    }),
+
+  /** Cancel own PENDING reservation */
+  cancelReservation: (productId: string) =>
+    fetchAPI<{ message: string }>(`/presale/reserve/${productId}`, { method: 'DELETE' }),
+
+  /** Get logged-in user's reservations */
+  getMyReservations: () =>
+    fetchAPI<{ reservations: PresaleReservation[] }>('/presale/my'),
+
+  // ── Admin ──
+  adminList: (params?: { productId?: string; status?: string; page?: number; limit?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.productId) sp.set('productId', params.productId);
+    if (params?.status) sp.set('status', params.status);
+    if (params?.page) sp.set('page', String(params.page));
+    if (params?.limit) sp.set('limit', String(params.limit));
+    const q = sp.toString();
+    return fetchAPI<{ reservations: AdminPresaleReservation[]; pagination: any }>(
+      `/presale/admin/list${q ? `?${q}` : ''}`
+    );
+  },
+
+  /** Confirm product arrival → notify all PENDING reservers */
+  confirmArrival: (productId: string) =>
+    fetchAPI<{ message: string; notified: number }>(`/presale/admin/confirm-arrival/${productId}`, {
+      method: 'POST',
+    }),
+
+  /** Release expired NOTIFIED reservations → restore stock */
+  releaseExpired: () =>
+    fetchAPI<{ message: string; released: number }>('/presale/admin/release-expired', {
+      method: 'POST',
+    }),
+
+  /** Manually mark a reservation as paid */
+  markPaid: (reservationId: string) =>
+    fetchAPI<{ reservation: AdminPresaleReservation }>(`/presale/admin/mark-paid/${reservationId}`, {
+      method: 'PATCH',
+    }),
 };
