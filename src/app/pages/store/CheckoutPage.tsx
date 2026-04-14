@@ -394,6 +394,45 @@ function CheckoutForm() {
                     </div>
                   </button>
 
+                  {/* Datos bancarios para transferencia */}
+                  {paymentMethod === 'transfer' && (
+                    <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-3">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Landmark className="w-4 h-4 text-primary" />
+                        <span className="text-sm font-semibold text-foreground">Datos para la transferencia</span>
+                      </div>
+                      <div className="grid grid-cols-1 gap-1.5 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Nombre</span>
+                          <span className="text-foreground font-medium">Hobbyzamora SPA</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">RUT</span>
+                          <span className="text-foreground font-medium font-[family-name:var(--font-mono)]">78.270.143-6</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Banco</span>
+                          <span className="text-foreground font-medium">Banco Santander</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Tipo de cuenta</span>
+                          <span className="text-foreground font-medium">Cuenta Corriente</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">N° de cuenta</span>
+                          <span className="text-foreground font-medium font-[family-name:var(--font-mono)]">27844766</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Email</span>
+                          <span className="text-foreground font-medium">hobbyzamora@gmail.com</span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground pt-1 border-t border-primary/10">
+                        Una vez realizada la transferencia, sube tu comprobante y te confirmaremos el pedido a la brevedad.
+                      </p>
+                    </div>
+                  )}
+
                   <div className="flex items-center gap-2 p-3 bg-secondary rounded-lg">
                     <ShieldCheck className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                     <p className="text-xs text-muted-foreground">
@@ -476,6 +515,14 @@ function CheckoutForm() {
                         ? 'Procesado de forma segura por Getnet'
                         : 'Confirmación manual por administración'}
                     </p>
+                    {paymentMethod === 'transfer' && (
+                      <div className="mt-3 pt-3 border-t border-border space-y-1.5 text-xs">
+                        <p className="font-medium text-foreground mb-1">Datos bancarios:</p>
+                        <p className="text-muted-foreground">Hobbyzamora SPA · RUT 78.270.143-6</p>
+                        <p className="text-muted-foreground">Banco Santander · Cta. Corriente <span className="font-[family-name:var(--font-mono)]">27844766</span></p>
+                        <p className="text-muted-foreground">hobbyzamora@gmail.com</p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Items del pedido */}

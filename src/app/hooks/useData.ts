@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   productsAPI,
   ordersAPI,
@@ -33,17 +33,21 @@ function useFetch<T>(
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchFnRef = useRef(fetchFn);
+  useEffect(() => { fetchFnRef.current = fetchFn; });
+
   const fetch = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const result = await fetchFn();
+      const result = await fetchFnRef.current();
       setData(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setIsLoading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 
   useEffect(() => {
@@ -93,7 +97,7 @@ export function useOrders(params?: {
   limit?: number;
 }, options?: { enabled?: boolean }) {
   return useFetch(
-    () => ordersAPI.getAll(params).then((res) => res.orders),
+    () => ordersAPI.getAll(params),
     [params?.status, params?.source, params?.startDate, params?.endDate, params?.search, params?.page, params?.limit],
     options
   );
