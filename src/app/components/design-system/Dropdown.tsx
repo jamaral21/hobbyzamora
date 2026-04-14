@@ -28,8 +28,8 @@ export function Dropdown({ trigger, children, align = 'left' }: DropdownProps) {
       {isOpen && (
         <div
           className={clsx(
-            'absolute top-full mt-2 py-2 bg-white dark:bg-gray-900',
-            'border border-gray-200 dark:border-gray-800 rounded-xl shadow-lg',
+            'absolute top-full mt-2 py-2 bg-card',
+            'border border-border rounded-xl shadow-lg',
             'min-w-[160px] z-50',
             {
               'left-0': align === 'left',
@@ -59,8 +59,8 @@ export function DropdownItem({
       className={clsx(
         'w-full px-4 py-2 text-left text-sm transition-colors',
         danger
-          ? 'text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20'
-          : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+          ? 'text-destructive hover:bg-destructive/10'
+          : 'text-foreground hover:bg-secondary'
       )}
     >
       {children}

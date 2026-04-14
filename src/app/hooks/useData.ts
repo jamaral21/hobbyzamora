@@ -13,6 +13,8 @@ import {
   Customer,
   InstagramConversation,
   InventoryItem,
+  ProductSearchResult,
+  InventoryDiscrepancyResponse,
 } from '../lib/api';
 
 // Generic hook for data fetching
@@ -95,10 +97,11 @@ export function useOrders(params?: {
   search?: string;
   page?: number;
   limit?: number;
+  productIds?: string[];
 }, options?: { enabled?: boolean }) {
   return useFetch(
     () => ordersAPI.getAll(params),
-    [params?.status, params?.source, params?.startDate, params?.endDate, params?.search, params?.page, params?.limit],
+    [params?.status, params?.source, params?.startDate, params?.endDate, params?.search, params?.page, params?.limit, JSON.stringify(params?.productIds)],
     options
   );
 }
@@ -123,16 +126,66 @@ export function useInventory(params?: { productId?: string; lowStock?: boolean }
 }
 
 // Analytics hooks
-export function useDashboardStats(startDate?: string, endDate?: string, options?: { enabled?: boolean }) {
-  return useFetch(() => analyticsAPI.getDashboard(startDate, endDate), [startDate, endDate], options);
+export function useDashboardStats(startDate?: string, endDate?: string, productIds?: string[], options?: { enabled?: boolean }) {
+  return useFetch(() => analyticsAPI.getDashboard(startDate, endDate, productIds), [startDate, endDate, JSON.stringify(productIds)], options);
 }
 
-export function useSalesChart(days?: number, options?: { enabled?: boolean }) {
-  return useFetch(() => analyticsAPI.getSalesChart(days), [days], options);
+export function useSalesChart(days?: number, productIds?: string[], options?: { enabled?: boolean }) {
+  return useFetch(() => analyticsAPI.getSalesChart(days, productIds), [days, JSON.stringify(productIds)], options);
 }
 
 export function useTopProducts(limit?: number, period?: 'week' | 'month' | 'year', options?: { enabled?: boolean }) {
   return useFetch(() => analyticsAPI.getTopProducts(limit, period), [limit, period], options);
+}
+
+// Product search hook with debounce
+export function useProductSearch(query: string) {
+  const [options, setOptions] = useState<ProductSearchResult[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+
+    if (query.length < 2) {
+      setOptions([]);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+
+    timerRef.current = setTimeout(async () => {
+      try {
+        const results = await productsAPI.search(query, 20);
+        setOptions(results);
+      } catch {
+        setOptions([]);
+      } finally {
+        setIsLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
+    };
+  }, [query]);
+
+  return { options, isLoading };
+}
+
+// Inventory discrepancy hook — only fetches when productIds is non-empty
+export function useInventoryDiscrepancy(productIds: string[]) {
+  const enabled = productIds.length > 0;
+  return useFetch(
+    () => analyticsAPI.getInventoryDiscrepancy(productIds),
+    [JSON.stringify(productIds)],
+    { enabled }
+  );
 }
 
 // Customers hooks

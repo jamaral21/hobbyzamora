@@ -161,6 +161,30 @@ export interface InventoryBatch {
   receivedAt: string;
 }
 
+export interface ProductSearchResult {
+  id: string;
+  name: string;
+  sku: string;
+  ean: number | null;
+}
+
+export interface ProductInventoryInfo {
+  productId: string;
+  productName: string;
+  sku: string;
+  ean: number | null;
+  currentStock: number;
+  totalReceived: number;
+  totalSold: number;
+  totalRemaining: number;
+  expectedRemaining: number;
+  discrepancy: number;
+}
+
+export interface InventoryDiscrepancyResponse {
+  products: ProductInventoryInfo[];
+}
+
 export interface User {
   id: string;
   email: string;
@@ -168,6 +192,7 @@ export interface User {
   role: 'ADMIN' | 'STAFF' | 'CUSTOMER';
   phone?: string;
   avatarUrl?: string | null;
+  presaleBanned?: boolean;
 }
 
 // API Error class
@@ -319,6 +344,13 @@ export const productsAPI = {
 
   getCategories: () => fetchAPI<string[]>('/products/meta/categories'),
 
+  search: (query: string, limit?: number) => {
+    const searchParams = new URLSearchParams();
+    searchParams.set('q', query);
+    if (limit) searchParams.set('limit', String(limit));
+    return fetchAPI<ProductSearchResult[]>(`/products/search?${searchParams}`);
+  },
+
   importCSV: (products: Record<string, string>[], presale = false) =>
     fetchAPI<{ created: number; updated: number; skipped: number; errors: string[] }>(`/products/import${presale ? '?presale=true' : ''}`, {
       method: 'POST',
@@ -401,6 +433,7 @@ export const ordersAPI = {
     search?: string;
     page?: number;
     limit?: number;
+    productIds?: string[];
   }) => {
     const searchParams = new URLSearchParams();
     if (params?.status) searchParams.set('status', params.status);
@@ -410,6 +443,7 @@ export const ordersAPI = {
     if (params?.search) searchParams.set('search', params.search);
     if (params?.page) searchParams.set('page', String(params.page));
     if (params?.limit) searchParams.set('limit', String(params.limit));
+    if (params?.productIds?.length) searchParams.set('productIds', params.productIds.join(','));
     
     const query = searchParams.toString();
     return fetchAPI<{ orders: Order[]; pagination: any }>(`/orders${query ? `?${query}` : ''}`);
@@ -570,17 +604,21 @@ export const posAPI = {
 
 // Analytics API
 export const analyticsAPI = {
-  getDashboard: (startDate?: string, endDate?: string) => {
+  getDashboard: (startDate?: string, endDate?: string, productIds?: string[]) => {
     const params = new URLSearchParams();
     if (startDate) params.set('startDate', startDate);
     if (endDate) params.set('endDate', endDate);
+    if (productIds?.length) params.set('productIds', productIds.join(','));
     const query = params.toString();
     return fetchAPI<DashboardStats>(`/analytics/dashboard${query ? `?${query}` : ''}`);
   },
 
-  getSalesChart: (days?: number) => {
-    const query = days ? `?days=${days}` : '';
-    return fetchAPI<Array<{ date: string; sales: number; revenue: number }>>(`/analytics/sales-chart${query}`);
+  getSalesChart: (days?: number, productIds?: string[]) => {
+    const params = new URLSearchParams();
+    if (days) params.set('days', String(days));
+    if (productIds?.length) params.set('productIds', productIds.join(','));
+    const query = params.toString();
+    return fetchAPI<Array<{ date: string; sales: number; revenue: number }>>(`/analytics/sales-chart${query ? `?${query}` : ''}`);
   },
 
   getTopProducts: (limit?: number, period?: 'week' | 'month' | 'year') => {
@@ -599,6 +637,11 @@ export const analyticsAPI = {
 
   getOrdersByStatus: () =>
     fetchAPI<Array<{ status: string; count: number }>>('/analytics/orders-by-status'),
+
+  getInventoryDiscrepancy: (productIds: string[]) => {
+    const params = new URLSearchParams({ productIds: productIds.join(',') });
+    return fetchAPI<InventoryDiscrepancyResponse>(`/analytics/inventory-discrepancy?${params}`);
+  },
 };
 
 // Customers API
