@@ -317,12 +317,28 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
       });
     }
 
-    // Deduct stock directly from product
+    // Deduct stock / handle presale reservations
     for (const item of orderItems) {
-      await prisma.product.update({
-        where: { id: item.productId },
-        data: { stock: { decrement: item.quantity } },
-      });
+      const product = await prisma.product.findUnique({ where: { id: item.productId }, select: { isPresale: true } });
+      if (product?.isPresale) {
+        const userId = req.user?.id || null;
+        if (userId) {
+          await prisma.presaleReservation.upsert({
+            where: { userId_productId: { userId, productId: item.productId } },
+            update: { status: 'PAID', paidAt: new Date() },
+            create: { userId, productId: item.productId, status: 'PAID', paidAt: new Date() },
+          });
+        }
+        await prisma.product.update({
+          where: { id: item.productId },
+          data: { presaleAvailQty: { decrement: item.quantity } },
+        });
+      } else {
+        await prisma.product.update({
+          where: { id: item.productId },
+          data: { stock: { decrement: item.quantity } },
+        });
+      }
     }
 
     const orderResponse = {

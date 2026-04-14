@@ -91,6 +91,7 @@ router.get('/products', authenticate, requireRole('ADMIN', 'STAFF'), async (req,
       price: parseFloat(p.price.toString()),
       cost: parseFloat(p.cost.toString()),
       images: parseImages(p.images),
+      isPresale: p.isPresale,
       // Use batch stock if batches exist, otherwise fall back to the product's stock field
       stock: p.inventoryBatches.length > 0 ? batchStock : p.stock,
       variants: p.variants.map(v => ({
@@ -163,6 +164,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
       customerName = 'Walk-in Customer',
       customerEmail = '',
       customerPhone = '',
+      customerId,
       paymentMethod,
       amountPaid,
       notes,
@@ -185,7 +187,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
         return res.status(400).json({ error: `Product ${item.productId} not found` });
       }
 
-      if (product.stock < item.quantity) {
+      if (product.stock < item.quantity && !product.isPresale) {
         return res.status(400).json({ 
           error: `Insufficient stock for ${product.name}. Available: ${product.stock}` 
         });
@@ -286,12 +288,27 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
         },
       });
 
-      // Deduct stock immediately (reserved for this sale)
+      // Deduct stock / handle presale reservations (Getnet)
       for (const item of orderItems) {
-        await prisma.product.update({
-          where: { id: item.productId },
-          data: { stock: { decrement: item.quantity } },
-        });
+        const product = await prisma.product.findUnique({ where: { id: item.productId }, select: { isPresale: true } });
+        if (product?.isPresale) {
+          if (customerId) {
+            await prisma.presaleReservation.upsert({
+              where: { userId_productId: { userId: customerId, productId: item.productId } },
+              update: { status: 'PAID', paidAt: new Date() },
+              create: { userId: customerId, productId: item.productId, status: 'PAID', paidAt: new Date() },
+            });
+          }
+          await prisma.product.update({
+            where: { id: item.productId },
+            data: { presaleAvailQty: { decrement: item.quantity } },
+          });
+        } else {
+          await prisma.product.update({
+            where: { id: item.productId },
+            data: { stock: { decrement: item.quantity } },
+          });
+        }
       }
 
       return res.status(201).json({
@@ -344,12 +361,27 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
       },
     });
 
-    // Deduct stock directly from product
+    // Deduct stock / handle presale reservations (CASH/TRANSFER)
     for (const item of orderItems) {
-      await prisma.product.update({
-        where: { id: item.productId },
-        data: { stock: { decrement: item.quantity } },
-      });
+      const product = await prisma.product.findUnique({ where: { id: item.productId }, select: { isPresale: true } });
+      if (product?.isPresale) {
+        if (customerId) {
+          await prisma.presaleReservation.upsert({
+            where: { userId_productId: { userId: customerId, productId: item.productId } },
+            update: { status: 'PAID', paidAt: new Date() },
+            create: { userId: customerId, productId: item.productId, status: 'PAID', paidAt: new Date() },
+          });
+        }
+        await prisma.product.update({
+          where: { id: item.productId },
+          data: { presaleAvailQty: { decrement: item.quantity } },
+        });
+      } else {
+        await prisma.product.update({
+          where: { id: item.productId },
+          data: { stock: { decrement: item.quantity } },
+        });
+      }
     }
 
     // Calculate change if cash payment

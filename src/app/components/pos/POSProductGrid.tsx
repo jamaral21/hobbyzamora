@@ -29,8 +29,8 @@ export function POSProductGrid({ products, onSelect }: POSProductGridProps) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
       {products.map((product) => {
-        const outOfStock = product.stock <= 0;
-        const lowStock = product.stock > 0 && product.stock < 10;
+        const outOfStock = !product.isPresale && product.stock <= 0;
+        const lowStock = !product.isPresale && product.stock > 0 && product.stock < 10;
 
         return (
           <button
@@ -73,7 +73,7 @@ export function POSProductGrid({ products, onSelect }: POSProductGridProps) {
               <span className={`text-[10px] tabular-nums ${
                 outOfStock ? 'text-destructive' : lowStock ? 'text-[#ffab00]' : 'text-muted-foreground'
               }`}>
-                {product.stock} uds
+                {product.isPresale ? 'Preventa' : `${product.stock} uds`}
               </span>
             </div>
           </button>

@@ -17,10 +17,12 @@ export default function OrdersPage() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [showMoreFilters, setShowMoreFilters] = useState(false);
+  const [eanFilter, setEanFilter] = useState('');
+  const [skuFilter, setSkuFilter] = useState('');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 25;
 
-  const hasActiveExtraFilters = sourceFilter !== 'all' || dateFrom !== '' || dateTo !== '';
+  const hasActiveExtraFilters = sourceFilter !== 'all' || dateFrom !== '' || dateTo !== '' || eanFilter !== '' || skuFilter !== '';
 
   const resetPage = () => setPage(1);
 
@@ -28,6 +30,8 @@ export default function OrdersPage() {
     setSourceFilter('all');
     setDateFrom('');
     setDateTo('');
+    setEanFilter('');
+    setSkuFilter('');
     resetPage();
   };
 
@@ -61,9 +65,25 @@ export default function OrdersPage() {
       const orderDate = new Date(order.createdAt);
       const matchesFrom = dateFrom === '' || orderDate >= new Date(dateFrom);
       const matchesTo = dateTo === '' || orderDate <= new Date(dateTo + 'T23:59:59');
-      return matchesSearch && matchesStatus && matchesSource && matchesFrom && matchesTo;
+      const matchesEan =
+        eanFilter === '' ||
+        (Array.isArray(order.items) &&
+          order.items.some((item: any) =>
+            (item.barcode || item.ean || item.product?.barcode || '')
+              .toLowerCase()
+              .includes(eanFilter.toLowerCase())
+          ));
+      const matchesSku =
+        skuFilter === '' ||
+        (Array.isArray(order.items) &&
+          order.items.some((item: any) =>
+            (item.sku || item.product?.sku || '')
+              .toLowerCase()
+              .includes(skuFilter.toLowerCase())
+          ));
+      return matchesSearch && matchesStatus && matchesSource && matchesFrom && matchesTo && matchesEan && matchesSku;
     });
-  }, [orders, searchQuery, statusFilter, sourceFilter, dateFrom, dateTo]);
+  }, [orders, searchQuery, statusFilter, sourceFilter, dateFrom, dateTo, eanFilter, skuFilter]);
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { pending: 0, processing: 0, shipped: 0, delivered: 0 };
@@ -157,7 +177,7 @@ export default function OrdersPage() {
             Más Filtros
             {hasActiveExtraFilters && (
               <span className="ml-1.5 bg-white/20 text-xs rounded-full px-1.5 py-0.5 leading-none">
-                {[sourceFilter !== 'all', dateFrom !== '', dateTo !== ''].filter(Boolean).length}
+                {[sourceFilter !== 'all', dateFrom !== '', dateTo !== '', eanFilter !== '', skuFilter !== ''].filter(Boolean).length}
               </span>
             )}
           </Button>
@@ -196,6 +216,26 @@ export default function OrdersPage() {
                 onChange={(e) => setDateTo(e.target.value)}
                 style={{ colorScheme: 'dark' }}
                 className="px-3 py-1.5 rounded-lg border border-border bg-input-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">EAN / Código de barras</label>
+              <input
+                type="text"
+                placeholder="Buscar por EAN..."
+                value={eanFilter}
+                onChange={(e) => { setEanFilter(e.target.value); resetPage(); }}
+                className="px-3 py-1.5 rounded-lg border border-border bg-input-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 w-48"
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">SKU</label>
+              <input
+                type="text"
+                placeholder="Buscar por SKU..."
+                value={skuFilter}
+                onChange={(e) => { setSkuFilter(e.target.value); resetPage(); }}
+                className="px-3 py-1.5 rounded-lg border border-border bg-input-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 w-48"
               />
             </div>
             {hasActiveExtraFilters && (

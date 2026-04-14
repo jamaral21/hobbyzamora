@@ -136,6 +136,7 @@ export default function POSPage() {
           customerName: selectedCustomer.name,
           customerEmail: selectedCustomer.email,
           customerPhone: selectedCustomer.phone,
+          customerId: selectedCustomer.id,
         }),
       });
 
@@ -247,7 +248,7 @@ export default function POSPage() {
       <div className="flex-1 overflow-hidden">
         <div className="h-full grid grid-cols-1 lg:grid-cols-3 gap-6 p-6">
           {/* Products Section */}
-          <div className="lg:col-span-2 flex flex-col gap-4">
+          <div className="lg:col-span-2 flex flex-col gap-4 min-h-0">
             {/* Search & Controls */}
             <Card>
               <CardContent className="flex gap-3">

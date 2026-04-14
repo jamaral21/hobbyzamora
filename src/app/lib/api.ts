@@ -544,6 +544,7 @@ export const posAPI = {
     customerName?: string;
     customerEmail?: string;
     customerPhone?: string;
+    customerId?: string;
     paymentMethod: 'CASH' | 'CARD' | 'TRANSFER';
     amountPaid?: number;
     notes?: string;
