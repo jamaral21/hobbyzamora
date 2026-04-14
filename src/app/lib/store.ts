@@ -11,6 +11,8 @@ interface LocalCartItem {
   price: number;
   image?: string;
   variant?: string;
+  stock?: number;
+  isPresale?: boolean;
 }
 
 interface CartState {
@@ -45,14 +47,18 @@ export const useCartStore = create<CartState>()(
 
           if (existingIndex >= 0) {
             const newItems = [...state.items];
+            const existing = newItems[existingIndex];
+            const maxStock = existing.stock ?? Infinity;
             newItems[existingIndex] = {
-              ...newItems[existingIndex],
-              quantity: newItems[existingIndex].quantity + quantity,
+              ...existing,
+              quantity: Math.min(existing.quantity + quantity, maxStock),
             };
             return { items: newItems };
           }
 
-          const variantPrice = variantId && product.variants?.find(v => v.id === variantId)?.price;
+          const variantData = variantId ? product.variants?.find(v => v.id === variantId) : undefined;
+          const variantPrice = variantData?.price;
+          const variantStock = variantData?.stock;
 
           return {
             items: [
@@ -66,6 +72,8 @@ export const useCartStore = create<CartState>()(
                 price: variantPrice || product.price,
                 image: product.images[0],
                 variant: variantName,
+                stock: variantStock ?? product.stock,
+                isPresale: product.isPresale,
               },
             ],
           };

@@ -10,6 +10,8 @@ interface CartItem {
   quantity: number;
   image?: string;
   variant?: string;
+  stock?: number;
+  isPresale?: boolean;
 }
 
 export interface CartPanelProps {
@@ -44,6 +46,15 @@ export function CartPanel({ items, onUpdateQuantity, onRemove }: CartPanelProps)
               <p className="text-sm text-primary font-bold font-[family-name:var(--font-mono)] mt-2">
                 ${item.price.toLocaleString('es-CL')}
               </p>
+              {!item.isPresale && item.stock !== undefined && (
+                <p className={`text-xs mt-1 ${item.stock <= 3 ? 'text-orange-400' : 'text-muted-foreground'}`}>
+                  {item.stock === 0
+                    ? 'Sin stock'
+                    : item.stock <= 3
+                    ? `¡Solo ${item.stock} disponible${item.stock > 1 ? 's' : ''}!`
+                    : `Stock: ${item.stock}`}
+                </p>
+              )}
             </div>
             <div className="flex flex-col items-end gap-2">
               <button
@@ -64,7 +75,8 @@ export function CartPanel({ items, onUpdateQuantity, onRemove }: CartPanelProps)
                 <span className="text-sm w-8 text-center font-[family-name:var(--font-mono)]">{item.quantity}</span>
                 <button
                   onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
-                  className="p-1 hover:bg-secondary transition-colors"
+                  disabled={!item.isPresale && item.stock !== undefined && item.quantity >= item.stock}
+                  className="p-1 hover:bg-secondary transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                   aria-label="Aumentar cantidad"
                 >
                   <Plus className="w-4 h-4" />

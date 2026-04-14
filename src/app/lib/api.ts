@@ -431,6 +431,7 @@ export const ordersAPI = {
       country: string;
     };
     paymentMethod?: 'credit' | 'debit' | 'cash' | 'transfer';
+    notes?: string;
   }) =>
     fetchAPI<Order>('/orders', {
       method: 'POST',
@@ -838,5 +839,11 @@ export const presaleAPI = {
   markPaid: (reservationId: string) =>
     fetchAPI<{ reservation: AdminPresaleReservation }>(`/presale/admin/mark-paid/${reservationId}`, {
       method: 'PATCH',
+    }),
+
+  /** Admin: delete any reservation (restores quota if PENDING/NOTIFIED) */
+  adminDeleteReservation: (reservationId: string) =>
+    fetchAPI<{ message: string }>(`/presale/admin/reservation/${reservationId}`, {
+      method: 'DELETE',
     }),
 };

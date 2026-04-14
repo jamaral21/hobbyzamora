@@ -201,6 +201,7 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
       shipping,
       shippingAddress,
       paymentMethod,
+      notes,
     } = req.body;
 
     if (!items || items.length === 0) {
@@ -224,7 +225,7 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
         return res.status(400).json({ error: `Product ${item.productId} not found` });
       }
 
-      if (product.stock < item.quantity) {
+      if (product.stock < item.quantity && !product.isPresale) {
         return res.status(400).json({ 
           error: `Insufficient stock for ${product.name}. Available: ${product.stock}` 
         });
@@ -292,6 +293,7 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
         total,
         status: 'PENDING',
         source: 'ONLINE',
+        notes: notes || null,
         items: {
           create: orderItems,
         },

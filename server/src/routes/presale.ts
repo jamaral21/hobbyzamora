@@ -84,7 +84,16 @@ router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) =
       })
       .catch(() => {});
 
-    return res.status(201).json({ reservation });
+    return res.status(201).json({
+      reservation: {
+        ...reservation,
+        product: {
+          ...reservation.product,
+          images: parseImages(reservation.product.images),
+          price: parseFloat((reservation.product.price as any).toString()),
+        },
+      },
+    });
   } catch (error) {
     console.error('Presale reserve error:', error);
     return res.status(500).json({ error: 'Error al crear la reserva' });
@@ -411,6 +420,45 @@ router.patch(
     } catch (error) {
       console.error('Presale mark-paid error:', error);
       return res.status(500).json({ error: 'Error al marcar la reserva como pagada' });
+    }
+  }
+);
+
+/**
+ * DELETE /api/presale/admin/reservation/:reservationId
+ * Admin: delete any reservation and restore the product quota.
+ */
+router.delete(
+  '/admin/reservation/:reservationId',
+  authenticate,
+  requireRole('ADMIN', 'STAFF'),
+  async (req, res) => {
+    try {
+      const reservationId = req.params.reservationId as string;
+
+      const reservation = await prisma.presaleReservation.findUnique({
+        where: { id: reservationId },
+      });
+
+      if (!reservation) {
+        return res.status(404).json({ error: 'Reserva no encontrada' });
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.presaleReservation.delete({ where: { id: reservationId } });
+        // Restore quota only if it was an active reservation
+        if (reservation.status === 'PENDING' || reservation.status === 'NOTIFIED') {
+          await tx.product.update({
+            where: { id: reservation.productId },
+            data: { presaleAvailQty: { increment: 1 } },
+          });
+        }
+      });
+
+      return res.json({ message: 'Reserva eliminada' });
+    } catch (error) {
+      console.error('Presale admin delete error:', error);
+      return res.status(500).json({ error: 'Error al eliminar la reserva' });
     }
   }
 );

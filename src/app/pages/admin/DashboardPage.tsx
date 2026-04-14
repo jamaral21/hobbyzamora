@@ -67,12 +67,12 @@ export default function DashboardPage() {
     datePreset === 'today' ? 1 : datePreset === 'week' ? 7 : 30,
     { enabled: isAuthenticated }
   );
-  const { data: orders, isLoading: ordersLoading } = useOrders(
+  const { data: ordersData, isLoading: ordersLoading } = useOrders(
     { startDate: range.start, endDate: range.end, limit: 100 },
     { enabled: isAuthenticated }
   );
 
-  const allOrders = orders || [];
+  const allOrders = ordersData?.orders || [];
 
   // Derive KPIs from orders (client-side fallback until backend supports new fields)
   const kpis = useMemo(() => {

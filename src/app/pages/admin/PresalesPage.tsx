@@ -125,6 +125,7 @@ export function PresalesPage() {
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [releasingExpired, setReleasingExpired] = useState(false);
   const [markingPaid, setMarkingPaid] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
   const [pagination, setPagination] = useState({ total: 0, totalPages: 1, page: 1 });
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -227,6 +228,21 @@ export function PresalesPage() {
       showToast(err.message || 'Error al marcar como pagado', 'err');
     } finally {
       setMarkingPaid(null);
+    }
+  };
+
+  const handleDeleteReservation = async (reservationId: string) => {
+    if (!window.confirm('¿Eliminar esta reserva? El cupo será restaurado si estaba pendiente.')) return;
+    setDeletingId(reservationId);
+    try {
+      await presaleAPI.adminDeleteReservation(reservationId);
+      showToast('Reserva eliminada');
+      setReservations((prev) => prev.filter((r) => r.id !== reservationId));
+      await loadProducts();
+    } catch (err: any) {
+      showToast(err.message || 'Error al eliminar la reserva', 'err');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -453,20 +469,22 @@ export function PresalesPage() {
                       </td>
                       {/* Actions */}
                       <td className="px-4 py-3 text-right">
-                        {r.status === 'NOTIFIED' && (
-                          <button
-                            onClick={() => handleMarkPaid(r.id)}
-                            disabled={markingPaid === r.id}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-semibold hover:bg-green-500 disabled:opacity-60 transition-colors"
-                          >
-                            {markingPaid === r.id ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <CheckCircle className="w-3 h-3" />
-                            )}
-                            Marcar pagado
-                          </button>
-                        )}
+                        <div className="flex items-center justify-end gap-2">
+                          {r.status === 'NOTIFIED' && (
+                            <button
+                              onClick={() => handleMarkPaid(r.id)}
+                              disabled={markingPaid === r.id}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-semibold hover:bg-green-500 disabled:opacity-60 transition-colors"
+                            >
+                              {markingPaid === r.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <CheckCircle className="w-3 h-3" />
+                              )}
+                              Marcar pagado
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

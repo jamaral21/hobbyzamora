@@ -95,6 +95,53 @@ app.listen(PORT, () => {
   console.log(`🗂️ Uploads served from ${uploadsDir}`);
 });
 
+// ─── Presale expiration job ──────────────────────────────────────────────────
+// Runs every 15 minutes. Marks NOTIFIED reservations past their expiresAt as
+// EXPIRED and restores the available quota on the product.
+async function expirePresaleReservations() {
+  try {
+    const now = new Date();
+    const expired = await prisma.presaleReservation.findMany({
+      where: {
+        status: 'NOTIFIED',
+        expiresAt: { lte: now },
+      },
+      select: { id: true, productId: true },
+    });
+
+    if (expired.length === 0) return;
+
+    await prisma.$transaction(async (tx) => {
+      // Mark all as EXPIRED
+      await tx.presaleReservation.updateMany({
+        where: { id: { in: expired.map((r) => r.id) } },
+        data: { status: 'EXPIRED' },
+      });
+
+      // Restore quota per product (group by productId)
+      const countByProduct = expired.reduce<Record<string, number>>((acc, r) => {
+        acc[r.productId] = (acc[r.productId] ?? 0) + 1;
+        return acc;
+      }, {});
+
+      for (const [productId, count] of Object.entries(countByProduct)) {
+        await tx.product.update({
+          where: { id: productId },
+          data: { presaleAvailQty: { increment: count } },
+        });
+      }
+    });
+
+    console.log(`[presale] Expiradas ${expired.length} reserva(s). Cupos restaurados.`);
+  } catch (err) {
+    console.error('[presale] Error en job de expiración:', err);
+  }
+}
+
+// Run once at startup, then every 15 minutes
+expirePresaleReservations();
+setInterval(expirePresaleReservations, 15 * 60 * 1000);
+
 // Graceful shutdown
 process.on('SIGINT', async () => {
   await prisma.$disconnect();

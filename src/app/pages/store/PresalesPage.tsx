@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router';
 import { StoreLayout } from '../../components/layout/StoreLayout';
+import { RequireAuth } from '../../components/auth/RequireAuth';
 import { useAuth } from '../../contexts/AuthContext';
 import { AuthModal } from '../../components/auth/AuthModal';
 import { presaleAPI, productsAPI, PresaleReservation, Product } from '../../lib/api';
@@ -149,41 +150,16 @@ function ConfirmReserveDialog({
 
 
 export default function PresalesPage() {
-  const { isAuthenticated } = useAuth();
-
   return (
     <StoreLayout>
-      {isAuthenticated ? (
+      <RequireAuth message="Debes iniciar sesión para ver las preventas">
         <PresalesContent />
-      ) : (
-        <PublicPresalesView />
-      )}
+      </RequireAuth>
     </StoreLayout>
   );
 }
 
-// Vista pública: solo muestra las preventas disponibles sin sección de "Mis reservas"
-function PublicPresalesView() {
-  const EMPTY_SET = new Set<string>();
-  return (
-    <div className="min-h-screen bg-[#0a0a0f] py-12 px-4">
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-10">
-          <div className="flex items-center gap-3 mb-2">
-            <Sparkles className="w-5 h-5 text-amber-400" />
-            <span className="text-xs text-amber-400 font-mono tracking-widest uppercase">Preventas</span>
-          </div>
-          <h1 className="text-4xl font-black text-white tracking-tight">Preventas disponibles</h1>
-          <p className="text-zinc-400 mt-2">
-            Reserva productos antes de su llegada.{' '}
-            <Link to="/auth" className="text-amber-400 hover:underline">Inicia sesión</Link>{' '}para reservar.
-          </p>
-        </div>
-        <AvailablePresales reservedProductIds={EMPTY_SET} onReserved={() => {}} isAuthenticated={false} />
-      </div>
-    </div>
-  );
-}
+// Vista pública eliminada — las preventas requieren autenticación.
 
 // ─── Available presales section ───────────────────────────────────────────────
 
