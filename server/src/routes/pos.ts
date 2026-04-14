@@ -61,10 +61,9 @@ router.get('/products', authenticate, requireRole('ADMIN', 'STAFF'), async (req,
 
     const rawCode = (ean as string) || (barcode as string);
     if (rawCode) {
-      const parsedEan = parseInt(rawCode, 10);
       where.OR = [
         { sku: rawCode },
-        ...(Number.isNaN(parsedEan) ? [] : [{ ean: parsedEan }]),
+        { ean: rawCode },
       ];
     }
 
@@ -112,13 +111,13 @@ router.get('/products', authenticate, requireRole('ADMIN', 'STAFF'), async (req,
 // Get product by EAN/SKU
 router.get('/scan/:code', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) => {
   try {
-    const parsedEan = parseInt(req.params.code as string, 10);
+    const code = req.params.code as string;
     const product = await prisma.product.findFirst({
       where: {
         OR: [
-          { sku: req.params.code as string },
-          { sku: { contains: req.params.code as string } },
-          ...(Number.isNaN(parsedEan) ? [] : [{ ean: parsedEan }]),
+          { sku: code },
+          { sku: { contains: code } },
+          { ean: code },
         ],
         status: 'ACTIVE',
       },

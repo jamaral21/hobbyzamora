@@ -67,7 +67,7 @@ model Product {
   images      String
   status      String   @default("ACTIVE")
 
-  ean               Int?     @map("barcode")
+  ean               String?  @map("barcode")
 
   isPresale         Boolean   @default(false)
   presaleMaxQty     Int?

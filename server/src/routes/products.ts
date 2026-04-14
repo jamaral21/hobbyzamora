@@ -277,9 +277,9 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
       initialStock,
     } = req.body;
 
-    const parsedEan = ean !== undefined
-      ? parseInt(ean, 10)
-      : (barcode !== undefined ? parseInt(barcode, 10) : null);
+    const parsedEan: string | null = ean !== undefined
+      ? String(ean)
+      : (barcode !== undefined ? String(barcode) : null);
 
     // Check SKU uniqueness
     const existingBySku = await prisma.product.findUnique({ where: { sku } });
@@ -298,7 +298,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
         stock: initialStock || 0,
         images: JSON.stringify(images || []),
         status: status || 'ACTIVE',
-        ean: Number.isNaN(parsedEan as number) ? null : parsedEan,
+        ean: parsedEan,
         isPresale: isPresale || false,
         presaleMaxQty,
         presaleAvailQty,
@@ -349,9 +349,9 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
       presaleEndDate,
     } = req.body;
 
-    const parsedEan = ean !== undefined
-      ? parseInt(ean, 10)
-      : (barcode !== undefined ? parseInt(barcode, 10) : undefined);
+    const parsedEan: string | undefined = ean !== undefined
+      ? String(ean)
+      : (barcode !== undefined ? String(barcode) : undefined);
 
     const product = await prisma.product.update({
       where: { id },
@@ -499,12 +499,7 @@ router.post('/import', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
         price,
         cost,
         stock,
-        ean: (() => {
-          const rawEan = row.EAN || row.ean || row.barcode;
-          if (!rawEan) return null;
-          const parsed = parseInt(rawEan, 10);
-          return Number.isNaN(parsed) ? null : parsed;
-        })(),
+        ean: (row.EAN || row.ean || row.barcode) ? String(row.EAN || row.ean || row.barcode) : null,
         images: JSON.stringify(row.images ? row.images.split('|').map((s: string) => s.trim()) : []),
         status: ['ACTIVE', 'ARCHIVED'].includes((row.status || 'ACTIVE').toUpperCase())
           ? (row.status || 'ACTIVE').toUpperCase()
