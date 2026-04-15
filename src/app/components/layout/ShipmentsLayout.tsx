@@ -5,10 +5,10 @@ import { ShipmentsDataProvider } from '../../contexts/ShipmentsDataContext';
 
 function ShipmentsLayoutInner() {
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
+    <div className="flex h-screen overflow-hidden">
       <ShipmentsSidebar />
-      <main className="flex-1 overflow-y-auto">
-        <div className="max-w-7xl mx-auto p-6">
+      <main className="flex-1 overflow-y-auto bg-[#f0eef5] shipments-light">
+        <div className="p-6">
           <Outlet />
         </div>
       </main>
