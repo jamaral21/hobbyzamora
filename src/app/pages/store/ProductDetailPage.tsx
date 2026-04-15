@@ -297,7 +297,6 @@ export default function ProductDetailPage() {
                         Esta preventa ha expirado
                       </p>
                     )}
-                    )}
                   </div>
                 </div>
               </Card>
