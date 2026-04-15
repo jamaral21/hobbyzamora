@@ -53,6 +53,20 @@ const STATUS_LABELS: Record<string, string> = {
   REFUNDED: 'Reembolsado',
 };
 
+function getPaymentLabel(method?: string): string {
+  switch (method) {
+    case 'CARD':
+    case 'GETNET':
+      return '💳 Tarjeta';
+    case 'CASH':
+      return '💵 Efectivo';
+    case 'TRANSFER':
+      return '🏦 Transferencia';
+    default:
+      return '';
+  }
+}
+
 export default function DashboardPage() {
   const { isAuthenticated } = useAdminAuth();
   const [datePreset, setDatePreset] = useState<DatePreset>('month');
@@ -74,7 +88,6 @@ export default function DashboardPage() {
     productIdsParam,
     { enabled: isAuthenticated }
   );
-<<<<<<< Updated upstream
   const { data: ordersData, isLoading: ordersLoading } = useOrders(
     { startDate: range.start, endDate: range.end, limit: 100, productIds: productIdsParam },
     { enabled: isAuthenticated }
@@ -192,6 +205,30 @@ export default function DashboardPage() {
     return rows;
   }, [allOrders, selectedProductIds]);
 
+  // Payment method summary — totals by method from all orders
+  const paymentMethodSummary = useMemo(() => {
+    const validOrders = allOrders.filter(o => o.status !== 'CANCELLED' && o.status !== 'REFUNDED');
+    const map: Record<string, { label: string; total: number; count: number }> = {
+      CARD: { label: '💳 Tarjeta (Getnet)', total: 0, count: 0 },
+      CASH: { label: '💵 Efectivo', total: 0, count: 0 },
+      TRANSFER: { label: '🏦 Transferencia', total: 0, count: 0 },
+    };
+    for (const order of validOrders) {
+      const method = order.payments?.[0]?.method;
+      if (method === 'CARD' || method === 'GETNET') {
+        map.CARD.total += order.total;
+        map.CARD.count += 1;
+      } else if (method === 'CASH') {
+        map.CASH.total += order.total;
+        map.CASH.count += 1;
+      } else if (method === 'TRANSFER') {
+        map.TRANSFER.total += order.total;
+        map.TRANSFER.count += 1;
+      }
+    }
+    return Object.values(map);
+  }, [allOrders]);
+
   if (statsLoading || chartLoading || ordersLoading) {
     return (
       <AdminLayout>
@@ -298,8 +335,21 @@ export default function DashboardPage() {
         <SalesChart data={chartData || []} />
       </div>
 
-      {/* Product Summary */}
-      {productSummary.length > 0 && (
+      {/* Payment Method Summary */}
+      {allOrders.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+          {paymentMethodSummary.map((pm) => (
+            <div key={pm.label} className="bg-secondary/50 border border-border/50 rounded-lg p-4">
+              <p className="text-sm text-muted-foreground mb-1">{pm.label}</p>
+              <p className="text-lg text-foreground font-semibold">{formatCLP(pm.total)}</p>
+              <p className="text-xs text-muted-foreground">{pm.count} {pm.count === 1 ? 'orden' : 'órdenes'}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Product Summary — hide when filtering by specific products */}
+      {productSummary.length > 0 && selectedProductIds.length === 0 && (
         <Card className="mb-8">
           <CardHeader>
             <CardTitle>{selectedProductIds.length > 0 ? 'Resumen por Producto' : 'Resumen por EAN'}</CardTitle>
@@ -468,6 +518,11 @@ export default function DashboardPage() {
                             <Badge variant="default" size="sm">
                               {SOURCE_LABELS[order.source] || order.source}
                             </Badge>
+                            {order.payments?.[0]?.method && (
+                              <span className="text-[10px] text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">
+                                {getPaymentLabel(order.payments[0].method)}
+                              </span>
+                            )}
                           </div>
                           <p className="text-xs text-muted-foreground">
                             {order.customerName} • {new Date(order.createdAt).toLocaleDateString('es-CL')}

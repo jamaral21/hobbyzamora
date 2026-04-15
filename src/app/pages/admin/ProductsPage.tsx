@@ -212,14 +212,14 @@ export default function ProductsPage() {
   return (
     <AdminLayout>
       <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
           <div>
             <h1 className="text-3xl text-foreground mb-2">{isPresalesView ? 'Preventas' : 'Productos'}</h1>
             <p className="text-muted-foreground">
               {isPresalesView ? 'Gestiona productos en preventa' : 'Gestiona tu catálogo de productos'}
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2">
             <input
               ref={fileInputRef}
               type="file"
@@ -347,6 +347,7 @@ export default function ProductsPage() {
       </div>
 
       {/* Products Table */}
+      <div className="overflow-x-auto -mx-4 md:mx-0">
       <Table>
         <TableHeader>
           <TableRow>
@@ -468,6 +469,7 @@ export default function ProductsPage() {
           ))}
         </TableBody>
       </Table>
+      </div>
 
       {/* Product Editor Modal */}
       <Modal
