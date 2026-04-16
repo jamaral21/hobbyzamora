@@ -1,29 +1,38 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Link } from 'react-router';
-import { StoreLayout } from '../../components/layout/StoreLayout';
-import { RequireAuth } from '../../components/auth/RequireAuth';
-import { useAuth } from '../../contexts/AuthContext';
-import { AuthModal } from '../../components/auth/AuthModal';
-import { presaleAPI, productsAPI, PresaleReservation, Product } from '../../lib/api';
-import { useCartStore } from '../../lib/store';
 import {
+  Lock,
+  Star,
   Clock,
+  Loader2,
   Package,
+  CreditCard,
   CheckCircle,
+  ShieldAlert,
   XCircle,
   AlertCircle,
-  Loader2,
   ShoppingBag,
   Tag,
   Sparkles,
-  Lock,
   X,
 } from 'lucide-react';
+import { StoreLayout } from '../../components/layout/StoreLayout';
+import { RequireAuth } from '../../components/auth/RequireAuth';
+import { AuthModal } from '../../components/auth/AuthModal';
+import { Card } from '../../components/design-system/Card';
+import { Button } from '../../components/design-system/Button';
+import { presaleAPI, productsAPI, type PresaleReservation, type Product } from '../../lib/api';
+import { useCartStore } from '../../lib/store';
+import { useAuth } from '../../contexts/AuthContext';
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+type PresaleTab = 'reservas' | 'disponibles';
 
 function formatCLP(n: number) {
-  return new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(n);
+  return new Intl.NumberFormat('es-CL', {
+    style: 'currency',
+    currency: 'CLP',
+    maximumFractionDigits: 0,
+  }).format(n);
 }
 
 function timeLeft(expiresAt: string | null): string {
@@ -45,6 +54,15 @@ function presaleEndLabel(presaleEndDate?: string | null): string {
   if (days > 0) return `Expira en ${days}d ${hours}h`;
   if (hours > 0) return `Expira en ${hours}h ${minutes}m`;
   return `Expira en ${minutes}m`;
+}
+
+function PresaleKPICard({ value, label, color }: { value: number; label: string; color: string }) {
+  return (
+    <div className="flex-1 p-5 bg-card border border-border rounded-xl text-center">
+      <p className={`text-3xl font-bold ${color}`}>{value}</p>
+      <p className="text-sm text-muted-foreground mt-1">{label}</p>
+    </div>
+  );
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; Icon: any }> = {
@@ -75,8 +93,6 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; Icon: any }>
   },
 };
 
-// ─── Confirm dialog ───────────────────────────────────────────────────────────
-
 function ConfirmReserveDialog({
   product,
   onConfirm,
@@ -90,12 +106,7 @@ function ConfirmReserveDialog({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-        onClick={onCancel}
-      />
-      {/* Panel */}
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onCancel} />
       <div className="relative w-full max-w-sm rounded-2xl border border-white/10 bg-[#12121a] shadow-2xl p-6">
         <button
           onClick={onCancel}
@@ -108,15 +119,12 @@ function ConfirmReserveDialog({
           <div className="w-10 h-10 rounded-full bg-amber-500/15 flex items-center justify-center mb-4">
             <Tag className="w-5 h-5 text-amber-400" />
           </div>
-          <h3 className="text-white font-bold text-lg leading-snug mb-1">
-            Confirmar reserva
-          </h3>
+          <h3 className="text-white font-bold text-lg mb-1">Confirmar reserva</h3>
           <p className="text-zinc-400 text-sm">
             ¿Deseas reservar <span className="text-white font-semibold">{product.name}</span>?
           </p>
         </div>
 
-        {/* Product summary */}
         <div className="rounded-xl border border-white/8 bg-white/3 p-4 mb-5 flex items-center gap-3">
           {product.images?.[0] ? (
             <img
@@ -164,22 +172,6 @@ function ConfirmReserveDialog({
   );
 }
 
-
-
-export default function PresalesPage() {
-  return (
-    <StoreLayout>
-      <RequireAuth message="Debes iniciar sesión para ver las preventas">
-        <PresalesContent />
-      </RequireAuth>
-    </StoreLayout>
-  );
-}
-
-// Vista pública eliminada — las preventas requieren autenticación.
-
-// ─── Available presales section ───────────────────────────────────────────────
-
 function AvailablePresales({
   reservedProductIds,
   onReserved,
@@ -195,24 +187,28 @@ function AvailablePresales({
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [reserving, setReserving] = useState(false);
-  const [pendingProduct, setPendingProduct] = useState<Product | null>(null);  // product awaiting confirm
+  const [pendingProduct, setPendingProduct] = useState<Product | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const loadProducts = useCallback(() => {
+    setLoading(true);
     productsAPI
       .getAll({ presale: true }, isAuthenticated ? 'customer' : 'public')
       .then((data) => setProducts(data.products))
-      .catch(() => {})
+      .catch(() => setProducts([]))
       .finally(() => setLoading(false));
   }, [isAuthenticated]);
 
-  useEffect(() => { loadProducts(); }, [loadProducts]);
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
 
   const handleReserveClick = (product: Product) => {
     if (!isAuthenticated) {
       setShowAuthModal(true);
       return;
     }
+
     if (isBanned) {
       setErrors((prev) => ({
         ...prev,
@@ -220,20 +216,25 @@ function AvailablePresales({
       }));
       return;
     }
+
     setErrors((prev) => ({ ...prev, [product.id]: '' }));
     setPendingProduct(product);
   };
 
   const handleConfirm = async () => {
     if (!pendingProduct) return;
+
     setReserving(true);
     try {
       const data = await presaleAPI.reserve(pendingProduct.id);
       setPendingProduct(null);
-      onReserved(data.reservation);   // update parent list immediately
-      loadProducts();                  // refresh available qty
+      onReserved(data.reservation);
+      loadProducts();
     } catch (err: any) {
-      setErrors((prev) => ({ ...prev, [pendingProduct.id]: err.message || 'Error al reservar' }));
+      setErrors((prev) => ({
+        ...prev,
+        [pendingProduct.id]: err.message || 'Error al reservar',
+      }));
       setPendingProduct(null);
     } finally {
       setReserving(false);
@@ -241,25 +242,20 @@ function AvailablePresales({
   };
 
   const available = products.filter(
-    (p) =>
-      !reservedProductIds.has(p.id) &&
-      (p.presaleAvailQty == null || p.presaleAvailQty > 0) &&
-      (!p.presaleEndDate || new Date(p.presaleEndDate) > new Date())
+    (product) =>
+      !reservedProductIds.has(product.id) &&
+      (product.presaleAvailQty == null || product.presaleAvailQty > 0) &&
+      (!product.presaleEndDate || new Date(product.presaleEndDate) > new Date())
   );
-
-  if (loading) return null;
-  if (available.length === 0) return null;
 
   return (
     <>
-      {/* Auth modal for unauthenticated users */}
       <AuthModal
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
         message="Inicia sesión para reservar productos en preventa"
       />
 
-      {/* Confirm dialog */}
       {pendingProduct && (
         <ConfirmReserveDialog
           product={pendingProduct}
@@ -269,115 +265,94 @@ function AvailablePresales({
         />
       )}
 
-      <section className="mt-12">
-        <div className="flex items-center gap-3 mb-6">
-          <Sparkles className="w-5 h-5 text-amber-400" />
-          <h2 className="text-xl font-bold text-white">Preventas disponibles</h2>
+      <section className="space-y-4">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-amber-400" />
+          <h2 className="text-lg font-semibold text-foreground">Preventas disponibles</h2>
         </div>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {available.map((product) => {
-            const img = product.images?.[0];
-            const alreadyReserved = reservedProductIds.has(product.id);
-            const soldOut =
-              product.presaleAvailQty !== undefined &&
-              product.presaleAvailQty !== null &&
-              product.presaleAvailQty <= 0;
-            const endLabel = presaleEndLabel(product.presaleEndDate ?? null);
 
-            return (
-              <div
-                key={product.id}
-                className="relative rounded-2xl border border-white/8 bg-white/4 backdrop-blur-sm overflow-hidden group hover:border-amber-500/30 transition-all duration-300"
-              >
-                {/* Image — clickable to PDP */}
-                <Link to={`/store/product/${product.id}`} className="block">
-                  <div className="aspect-[4/3] bg-zinc-800 overflow-hidden">
-                    {img ? (
-                      <img
-                        src={img}
-                        alt={product.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Package className="w-12 h-12 text-zinc-600" />
-                      </div>
-                    )}
-                  </div>
-                </Link>
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        ) : available.length === 0 ? (
+          <Card className="text-center py-12">
+            <Package className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+            <h3 className="text-lg text-foreground mb-2">Sin preventas disponibles</h3>
+            <p className="text-sm text-muted-foreground">Por ahora no hay cupos activos para reservar.</p>
+          </Card>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {available.map((product) => {
+              const img = product.images?.[0];
+              const endLabel = presaleEndLabel(product.presaleEndDate ?? null);
 
-                {/* Content */}
-                <div className="p-5">
-                  <p className="text-xs text-zinc-500 font-mono mb-1">{product.sku}</p>
-                  <Link to={`/store/product/${product.id}`}>
-                    <h3 className="font-bold text-white text-sm leading-snug mb-2 hover:text-amber-400 transition-colors">
-                      {product.name}
-                    </h3>
+              return (
+                <Card key={product.id} className="overflow-hidden p-0">
+                  <Link to={`/store/product/${product.id}`} className="block">
+                    <div className="aspect-[4/3] bg-secondary overflow-hidden">
+                      {img ? (
+                        <img
+                          src={img}
+                          alt={product.name}
+                          className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Package className="w-12 h-12 text-muted-foreground/30" />
+                        </div>
+                      )}
+                    </div>
                   </Link>
 
-                  {/* Price + qty */}
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-amber-400 font-bold text-lg">{formatCLP(product.price)}</span>
-                    {typeof product.presaleAvailQty === 'number' && (
-                      <span className="text-xs text-zinc-500">
-                        {product.presaleAvailQty} cupos restantes
-                      </span>
+                  <div className="p-4 space-y-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground font-mono mb-1">{product.sku}</p>
+                      <Link to={`/store/product/${product.id}`}>
+                        <h3 className="text-sm font-medium text-foreground leading-snug hover:text-primary transition-colors">
+                          {product.name}
+                        </h3>
+                      </Link>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-lg font-bold text-primary">{formatCLP(product.price)}</span>
+                      {typeof product.presaleAvailQty === 'number' && (
+                        <span className="text-xs text-muted-foreground">{product.presaleAvailQty} cupos</span>
+                      )}
+                    </div>
+
+                    {endLabel && (
+                      <p className={`text-xs font-semibold ${endLabel === 'Expirado' ? 'text-red-500' : 'text-amber-500'}`}>
+                        {endLabel}
+                      </p>
                     )}
-                  </div>
 
-                  {endLabel && (
-                    <p className={`text-xs mb-4 font-semibold ${endLabel === 'Expirado' ? 'text-red-400' : 'text-amber-300'}`}>
-                      {endLabel}
-                    </p>
-                  )}
+                    {errors[product.id] && <p className="text-xs text-red-500">{errors[product.id]}</p>}
 
-                  {errors[product.id] && (
-                    <p className="text-red-400 text-xs mb-3">{errors[product.id]}</p>
-                  )}
-
-                  {alreadyReserved ? (
-                    <div className="flex items-center gap-2 text-emerald-400 text-sm font-semibold">
-                      <CheckCircle className="w-4 h-4" />
-                      Reservado
-                    </div>
-                  ) : isBanned ? (
-                    <div className="flex items-center gap-2 text-red-400 text-sm font-semibold">
-                      <XCircle className="w-4 h-4" />
-                      Cuenta bloqueada
-                    </div>
-                  ) : soldOut ? (
-                    <div className="flex items-center gap-2 text-zinc-500 text-sm">
-                      <XCircle className="w-4 h-4" />
-                      Sin cupos
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => handleReserveClick(product)}
-                      className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-sm transition-colors flex items-center justify-center gap-2"
-                    >
+                    <Button fullWidth onClick={() => handleReserveClick(product)}>
                       <Tag className="w-4 h-4" />
-                      Reservar (1 por cuenta)
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                      Reservar
+                    </Button>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </section>
     </>
   );
 }
 
-// ─── My reservations ──────────────────────────────────────────────────────────
-
 function PresalesContent() {
+  const [activeTab, setActiveTab] = useState<PresaleTab>('reservas');
   const [reservations, setReservations] = useState<PresaleReservation[]>([]);
   const [loading, setLoading] = useState(true);
   const { addItem, items: cartItems } = useCartStore();
   const { user } = useAuth();
 
-  const load = useCallback(() => {
+  const loadReservations = useCallback(() => {
     if (!user?.id) {
       setReservations([]);
       setLoading(false);
@@ -385,7 +360,6 @@ function PresalesContent() {
     }
 
     setLoading(true);
-    setReservations([]);
     presaleAPI
       .getMyReservations()
       .then((data) => setReservations(data.reservations))
@@ -393,176 +367,205 @@ function PresalesContent() {
       .finally(() => setLoading(false));
   }, [user?.id]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    loadReservations();
+  }, [loadReservations]);
 
-  // Called by AvailablePresales after a successful reserve — add to list immediately
   const handleReserved = useCallback((newReservation: PresaleReservation) => {
     setReservations((prev) => [newReservation, ...prev]);
+    setActiveTab('reservas');
   }, []);
 
   const reservedProductIds = new Set(
     reservations
-      .filter((r) => r.status === 'PENDING' || r.status === 'NOTIFIED' || r.status === 'PAID')
-      .map((r) => r.productId)
+      .filter((reservation) => ['PENDING', 'NOTIFIED', 'PAID'].includes(reservation.status))
+      .map((reservation) => reservation.productId)
   );
 
+  const kpis = useMemo(() => {
+    const reserved = reservations.filter((reservation) => reservation.status === 'PENDING').length;
+    const pending = reservations.filter((reservation) => reservation.status === 'NOTIFIED').length;
+    const paid = reservations.filter((reservation) => reservation.status === 'PAID').length;
+    return { reserved, pending, paid };
+  }, [reservations]);
+
   return (
-    <div className="min-h-screen bg-[#0a0a0f] py-12 px-4">
-      <div className="max-w-4xl mx-auto">
+    <div className="space-y-6">
+      <div className="flex gap-4">
+        <PresaleKPICard value={kpis.reserved} label="Reservados" color="text-primary" />
+        <PresaleKPICard value={kpis.pending} label="Por pagar" color="text-amber-400" />
+        <PresaleKPICard value={kpis.paid} label="Pagados" color="text-[#00e676]" />
+      </div>
 
-        {/* Header */}
-        <div className="mb-10">
-          <div className="flex items-center gap-3 mb-2">
-            <Lock className="w-5 h-5 text-amber-400" />
-            <span className="text-xs text-amber-400 font-mono tracking-widest uppercase">Exclusivo para miembros</span>
-          </div>
-          <h1 className="text-4xl font-black text-white tracking-tight">Mis Preventas</h1>
-          <p className="text-zinc-400 mt-2">
-            Reserva productos antes de su llegada al precio de preventa. Solo 1 reserva por producto por cuenta.
-          </p>
-        </div>
+      <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 w-fit">
+        <button
+          onClick={() => setActiveTab('reservas')}
+          className={`flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors ${
+            activeTab === 'reservas'
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <Star className="w-4 h-4" />
+          Mis Reservas
+        </button>
+        <button
+          onClick={() => setActiveTab('disponibles')}
+          className={`flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors ${
+            activeTab === 'disponibles'
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <Package className="w-4 h-4" />
+          Disponibles
+        </button>
+      </div>
 
-        {/* Stats bar */}
-        {reservations.length > 0 && (
-          <div className="grid grid-cols-3 gap-3 mb-10">
-            {[
-              { label: 'Reservados', value: reservations.filter((r) => r.status === 'PENDING').length, color: 'text-blue-400' },
-              { label: 'Por pagar', value: reservations.filter((r) => r.status === 'NOTIFIED').length, color: 'text-amber-400' },
-              { label: 'Pagados', value: reservations.filter((r) => r.status === 'PAID').length, color: 'text-emerald-400' },
-            ].map((stat) => (
-              <div key={stat.label} className="rounded-2xl border border-white/8 bg-white/3 p-4 text-center">
-                <p className={`text-2xl font-black ${stat.color}`}>{stat.value}</p>
-                <p className="text-xs text-zinc-500 mt-1">{stat.label}</p>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {user?.presaleBanned && (
-          <div className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-            Tu cuenta está bloqueada para nuevas preventas. Si necesitas revisar una cancelación, contacta al administrador.
-          </div>
-        )}
-
-        {/* My reservations list */}
-        {loading ? (
-          <div className="flex items-center justify-center py-24">
-            <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
+      {activeTab === 'reservas' ? (
+        loading ? (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
         ) : reservations.length === 0 ? (
-          <div className="text-center py-20 border border-white/8 rounded-2xl bg-white/3">
-            <ShoppingBag className="w-12 h-12 text-zinc-600 mx-auto mb-4" />
-            <p className="text-zinc-400 font-medium">Aún no tienes preventas reservadas.</p>
-            <p className="text-zinc-600 text-sm mt-1">Revisa las preventas disponibles abajo.</p>
-          </div>
+          <Card className="text-center py-12">
+            <ShoppingBag className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+            <h3 className="text-lg text-foreground mb-2">Sin reservas</h3>
+            <p className="text-sm text-muted-foreground mb-6">Aún no has reservado productos en preventa</p>
+            <Button onClick={() => setActiveTab('disponibles')}>Ver preventas disponibles</Button>
+          </Card>
         ) : (
           <div className="space-y-4">
-            {reservations.map((r) => {
-              const cfg = STATUS_CONFIG[r.status] ?? STATUS_CONFIG.PENDING;
-              const img = r.product.images?.[0];
-              const isNotified = r.status === 'NOTIFIED';
-              const isPending = r.status === 'PENDING';
-              const isCancelled = r.status === 'CANCELLED';
+            {reservations.map((reservation) => {
+              const config = STATUS_CONFIG[reservation.status] ?? STATUS_CONFIG.PENDING;
+              const img = reservation.product.images?.[0];
+              const isNotified = reservation.status === 'NOTIFIED';
+              const isPending = reservation.status === 'PENDING';
+              const isCancelled = reservation.status === 'CANCELLED';
+              const alreadyInCart = cartItems.some((item) => item.productId === reservation.productId);
 
               return (
-                <div
-                  key={r.id}
-                  className={`relative rounded-2xl border bg-white/3 backdrop-blur-sm overflow-hidden transition-all ${
-                    isNotified
-                      ? 'border-amber-500/40 shadow-[0_0_24px_rgba(245,158,11,0.08)]'
-                      : 'border-white/8'
-                  }`}
-                >
-                  <div className="flex gap-4 p-5">
-                    {/* Thumbnail */}
-                    <div className="w-20 h-20 rounded-xl bg-zinc-800 overflow-hidden flex-shrink-0">
+                <Card key={reservation.id} className="overflow-hidden p-0">
+                  <div className="flex gap-4 p-4">
+                    <div className="w-20 h-20 rounded-lg bg-secondary overflow-hidden flex-shrink-0">
                       {img ? (
-                        <img src={img} alt={r.product.name} className="w-full h-full object-cover" />
+                        <img src={img} alt={reservation.product.name} className="w-full h-full object-cover" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
-                          <Package className="w-8 h-8 text-zinc-600" />
+                          <Package className="w-8 h-8 text-muted-foreground/30" />
                         </div>
                       )}
                     </div>
 
-                    {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2 mb-1">
                         <Link
-                          to={`/store/product/${r.productId}`}
-                          className="font-bold text-white text-sm hover:text-amber-400 transition-colors leading-snug"
+                          to={`/store/product/${reservation.productId}`}
+                          className="text-sm font-medium text-foreground hover:text-primary transition-colors"
                         >
-                          {r.product.name}
+                          {reservation.product.name}
                         </Link>
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${cfg.color} flex-shrink-0`}>
-                          <cfg.Icon className="w-3 h-3" />
-                          {cfg.label}
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${config.color}`}>
+                          <config.Icon className="w-3 h-3" />
+                          {config.label}
                         </span>
                       </div>
 
-                      <p className="text-amber-400 font-bold text-base mb-2">
-                        {formatCLP(r.product.price)}
-                      </p>
+                      <p className="text-lg font-bold text-primary">{formatCLP(reservation.product.price)}</p>
 
-                      {/* Time left for notified */}
-                      {isNotified && r.expiresAt && (
-                        <p className="text-amber-400/80 text-xs font-mono mb-3">
-                          ⏱ {timeLeft(r.expiresAt)}
+                      {isNotified && reservation.expiresAt && (
+                        <p className="text-xs text-amber-500 font-semibold mt-1">
+                          <Clock className="w-3 h-3 inline mr-1" />
+                          {timeLeft(reservation.expiresAt)}
                         </p>
                       )}
 
-                      <p className="text-zinc-600 text-xs">
-                        Reservado el {new Date(r.createdAt).toLocaleDateString('es-CL')}
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Reservado el {new Date(reservation.createdAt).toLocaleDateString('es-CL')}
                       </p>
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  {(isNotified || isPending) && (
-                    <div className="border-t border-white/8 px-5 py-3 flex items-center justify-between gap-3">
+                  {(isNotified || isPending || isCancelled) && (
+                    <div className="px-4 py-3 border-t border-border bg-secondary/30 flex items-center justify-between gap-3">
                       {isNotified ? (
-                        <button
+                        <Button
+                          size="sm"
                           onClick={() => {
-                            const alreadyInCart = cartItems.some(i => i.productId === r.productId);
-                            if (!alreadyInCart) addItem(r.product as any, 1);
+                            if (!alreadyInCart) addItem(reservation.product as any, 1);
                           }}
-                          className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold text-sm transition-colors"
                         >
-                          {cartItems.some(i => i.productId === r.productId) ? (
-                            <><CheckCircle className="w-4 h-4" /> En el carrito</>
+                          {alreadyInCart ? (
+                            <>
+                              <CheckCircle className="w-4 h-4" />
+                              En el carrito
+                            </>
                           ) : (
-                            <><ShoppingBag className="w-4 h-4" /> Agregar al carrito</>
+                            <>
+                              <CreditCard className="w-4 h-4" />
+                              Agregar al carrito
+                            </>
                           )}
-                        </button>
-                      ) : (
-                        <p className="text-xs text-zinc-600 italic">Esperando confirmación de llegada...</p>
-                      )}
+                        </Button>
+                      ) : isPending ? (
+                        <p className="text-xs text-muted-foreground italic">Esperando confirmación de llegada...</p>
+                      ) : null}
 
-                      {isPending && (
-                        <p className="text-xs text-zinc-500 italic">Solo administración puede cancelar esta reserva.</p>
+                      {isCancelled && reservation.cancellationReason && (
+                        <p className="text-xs text-red-500">Cancelada por administración: {reservation.cancellationReason}</p>
                       )}
                     </div>
                   )}
-
-                  {isCancelled && r.cancellationReason && (
-                    <div className="border-t border-white/8 px-5 py-3">
-                      <p className="text-xs text-red-300">Cancelada por administración: {r.cancellationReason}</p>
-                    </div>
-                  )}
-                </div>
+                </Card>
               );
             })}
           </div>
-        )}
-
-        {/* Available presales below */}
+        )
+      ) : (
         <AvailablePresales
           reservedProductIds={reservedProductIds}
           onReserved={handleReserved}
           isAuthenticated={true}
           isBanned={!!user?.presaleBanned}
         />
-      </div>
+      )}
     </div>
+  );
+}
+
+export default function PresalesPage() {
+  const { user } = useAuth();
+
+  return (
+    <StoreLayout>
+      <RequireAuth message="Inicia sesión para ver preventas">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="mb-8">
+            <div className="flex items-center gap-2 mb-2">
+              <Lock className="w-4 h-4 text-primary/70" />
+              <span className="text-xs font-medium uppercase tracking-[0.25em] text-primary/70">
+                Exclusivo para miembros
+              </span>
+            </div>
+            <h1 className="text-3xl text-foreground mb-2">Mis Preventas</h1>
+            <p className="text-muted-foreground">
+              Reserva productos antes de su llegada al precio de preventa. Solo 1 reserva por producto por cuenta.
+            </p>
+          </div>
+
+          {user?.presaleBanned ? (
+            <Card className="text-center py-12">
+              <ShieldAlert className="w-12 h-12 text-destructive/50 mx-auto mb-4" />
+              <h3 className="text-lg text-foreground mb-2">Acceso a preventas suspendido</h3>
+              <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                Tu acceso a preventas ha sido suspendido debido a reservas no pagadas. Si crees que es un error, contáctanos por Instagram o email.
+              </p>
+            </Card>
+          ) : (
+            <PresalesContent />
+          )}
+        </div>
+      </RequireAuth>
+    </StoreLayout>
   );
 }

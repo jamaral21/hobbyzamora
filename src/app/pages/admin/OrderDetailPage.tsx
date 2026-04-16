@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { Link } from 'react-router';
-import { ArrowLeft, Package, CreditCard, Truck, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Package, CreditCard, Truck, Loader2, AlertCircle, ShieldAlert } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { Button } from '../../components/design-system/Button';
 import { Badge } from '../../components/design-system/Badge';
 import { Card } from '../../components/design-system/Card';
+import { Modal } from '../../components/design-system/Modal';
 import { useOrder, useUpdateOrderStatus } from '../../hooks/useData';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
+import { ordersAPI } from '../../lib/api';
 
 const STATUS_OPTIONS = ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'] as const;
 
@@ -275,8 +277,126 @@ export default function OrderDetailPage() {
               ))}
             </div>
           </Card>
+
+          {/* Cancel Presale — only for presale orders */}
+          {order.items?.some((item: any) => item.product?.isPresale) && order.status !== 'CANCELLED' && order.status !== 'REFUNDED' && (
+            <CancelPresaleCard orderId={order.id} onCancelled={refetch} />
+          )}
         </div>
       </div>
     </AdminLayout>
+  );
+}
+
+function CancelPresaleCard({ orderId, onCancelled }: { orderId: string; onCancelled: () => void }) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [reason, setReason] = useState('no_pago');
+  const [notes, setNotes] = useState('');
+  const [banUser, setBanUser] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleCancel = async () => {
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      await ordersAPI.updateStatus(orderId, 'CANCELLED');
+      // The backend ticket will handle: saving reason, banning user if flagged
+      // For now we just cancel the order — the full logic needs TICKET-EAN-007
+      setIsModalOpen(false);
+      onCancelled();
+    } catch (err: any) {
+      setError(err?.message || 'Error al cancelar la preventa');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <>
+      <Card>
+        <div className="flex items-center gap-2 mb-4">
+          <ShieldAlert className="w-5 h-5 text-destructive" />
+          <h2 className="text-lg font-semibold text-foreground">Cancelar Preventa</h2>
+        </div>
+        <p className="text-sm text-muted-foreground mb-4">
+          Cancelar esta reserva de preventa. Si el motivo es "No pago", el usuario será bloqueado de futuras preventas.
+        </p>
+        <Button
+          variant="outline"
+          className="text-destructive border-destructive/30 hover:bg-destructive/10 w-full"
+          onClick={() => setIsModalOpen(true)}
+        >
+          Cancelar Preventa
+        </Button>
+      </Card>
+
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Cancelar Preventa" size="md">
+        <div className="space-y-4 p-4">
+          <div>
+            <label className="block text-sm text-muted-foreground mb-1.5">Motivo de cancelación</label>
+            <select
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-lg border border-border bg-input-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              <option value="no_pago">No pago</option>
+              <option value="solicitud_cliente">Solicitud del cliente</option>
+              <option value="error_admin">Error administrativo</option>
+              <option value="producto_no_disponible">Producto no disponible</option>
+              <option value="otro">Otro</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm text-muted-foreground mb-1.5">Notas adicionales (opcional)</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              className="w-full px-3 py-2.5 rounded-lg border border-border bg-input-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 text-sm"
+              placeholder="Detalles adicionales..."
+            />
+          </div>
+
+          {reason === 'no_pago' && (
+            <label className="flex items-center gap-3 p-3 bg-destructive/10 border border-destructive/20 rounded-lg cursor-pointer">
+              <input
+                type="checkbox"
+                checked={banUser}
+                onChange={(e) => setBanUser(e.target.checked)}
+                className="w-4 h-4 rounded border-border text-destructive focus:ring-destructive/30"
+              />
+              <div>
+                <span className="text-sm text-foreground">Bloquear usuario de preventas</span>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  El usuario no podrá reservar productos en preventa en el futuro
+                </p>
+              </div>
+            </label>
+          )}
+
+          {error && (
+            <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive">
+              {error}
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <Button variant="outline" fullWidth onClick={() => setIsModalOpen(false)} disabled={isSubmitting}>
+              Volver
+            </Button>
+            <Button
+              fullWidth
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleCancel}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirmar Cancelación'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { DollarSign, TrendingUp, Loader2, Calendar, Receipt, ChevronDown, ChevronUp } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { DashboardWidget } from '../../components/admin/DashboardWidget';
@@ -15,18 +15,19 @@ type DatePreset = 'today' | 'week' | 'month' | 'custom';
 function getDateRange(preset: DatePreset): { start: string; end: string } {
   const now = new Date();
   const end = now.toISOString().split('T')[0];
+
   switch (preset) {
     case 'today':
       return { start: end, end };
     case 'week': {
-      const d = new Date(now);
-      d.setDate(d.getDate() - 7);
-      return { start: d.toISOString().split('T')[0], end };
+      const date = new Date(now);
+      date.setDate(date.getDate() - 7);
+      return { start: date.toISOString().split('T')[0], end };
     }
     case 'month': {
-      const d = new Date(now);
-      d.setMonth(d.getMonth() - 1);
-      return { start: d.toISOString().split('T')[0], end };
+      const date = new Date(now);
+      date.setMonth(date.getMonth() - 1);
+      return { start: date.toISOString().split('T')[0], end };
     }
     default:
       return { start: end, end };
@@ -34,7 +35,11 @@ function getDateRange(preset: DatePreset): { start: string; end: string } {
 }
 
 function formatCLP(value: number): string {
-  return value.toLocaleString('es-CL', { style: 'currency', currency: 'CLP', minimumFractionDigits: 0 });
+  return value.toLocaleString('es-CL', {
+    style: 'currency',
+    currency: 'CLP',
+    minimumFractionDigits: 0,
+  });
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -52,6 +57,20 @@ const STATUS_LABELS: Record<string, string> = {
   REFUNDED: 'Reembolsado',
 };
 
+function getPaymentLabel(method?: string): string {
+  switch (method) {
+    case 'CARD':
+    case 'GETNET':
+      return '💳 Tarjeta';
+    case 'CASH':
+      return '💵 Efectivo';
+    case 'TRANSFER':
+      return '🏦 Transferencia';
+    default:
+      return '—';
+  }
+}
+
 export default function DashboardPage() {
   const { isAuthenticated } = useAdminAuth();
   const [datePreset, setDatePreset] = useState<DatePreset>('month');
@@ -66,12 +85,9 @@ export default function DashboardPage() {
 
   const productIdsParam = selectedProductIds.length > 0 ? selectedProductIds : undefined;
 
-  const { data: stats, isLoading: statsLoading } = useDashboardStats(
-    range.start,
-    range.end,
-    productIdsParam,
-    { enabled: isAuthenticated }
-  );
+  const { data: stats, isLoading: statsLoading } = useDashboardStats(range.start, range.end, productIdsParam, {
+    enabled: isAuthenticated,
+  });
   const { data: chartData, isLoading: chartLoading } = useSalesChart(
     datePreset === 'today' ? 1 : datePreset === 'week' ? 7 : 30,
     productIdsParam,
@@ -98,7 +114,7 @@ export default function DashboardPage() {
       };
     }
 
-    const validOrders = allOrders.filter((o) => o.status !== 'CANCELLED' && o.status !== 'REFUNDED');
+    const validOrders = allOrders.filter((order) => order.status !== 'CANCELLED' && order.status !== 'REFUNDED');
     const sales = validOrders.reduce((sum, order) => sum + order.total, 0);
     const cost = validOrders.reduce(
       (sum, order) => sum + (order.items || []).reduce((itemCost, item) => itemCost + (item.cost || 0) * item.quantity, 0),
@@ -113,26 +129,27 @@ export default function DashboardPage() {
       marginPct: sales > 0 ? (margin / sales) * 100 : 0,
       count: validOrders.length,
     };
-  }, [stats, allOrders]);
+  }, [allOrders, stats]);
 
-  const skuSummary = useMemo(() => {
-    const validOrders = allOrders.filter((o) => o.status !== 'CANCELLED' && o.status !== 'REFUNDED');
-    const map = new Map<string, { sku: string; name: string; qty: number; revenue: number; cost: number }>();
+  const productSummary = useMemo(() => {
+    const validOrders = allOrders.filter((order) => order.status !== 'CANCELLED' && order.status !== 'REFUNDED');
+    const map = new Map<string, { ean: string; sku: string; name: string; qty: number; revenue: number; cost: number }>();
 
     for (const order of validOrders) {
       for (const item of order.items || []) {
-        if (selectedProductIds.length > 0 && !selectedProductIds.includes(item.productId)) {
-          continue;
-        }
+        if (selectedProductIds.length > 0 && !selectedProductIds.includes(item.productId)) continue;
 
-        const key = item.sku || item.productId;
+        const ean = String((item as any).ean ?? '—');
+        const key = item.productId || item.sku;
         const existing = map.get(key);
+
         if (existing) {
           existing.qty += item.quantity;
           existing.revenue += item.price * item.quantity;
           existing.cost += (item.cost || 0) * item.quantity;
         } else {
           map.set(key, {
+            ean,
             sku: item.sku || '—',
             name: item.name,
             qty: item.quantity,
@@ -145,6 +162,71 @@ export default function DashboardPage() {
 
     return Array.from(map.values()).sort((a, b) => b.revenue - a.revenue);
   }, [allOrders, selectedProductIds]);
+
+  const filteredSalesDetail = useMemo(() => {
+    if (selectedProductIds.length === 0) return [] as Array<{
+      orderNumber: string;
+      date: string;
+      customerName: string;
+      customerEmail: string;
+      customerPhone: string;
+      source: string;
+      status: string;
+      paymentMethod: string;
+      isPresale: boolean;
+      quantity: number;
+      price: number;
+      subtotal: number;
+    }>;
+
+    const validOrders = allOrders.filter((order) => order.status !== 'CANCELLED' && order.status !== 'REFUNDED');
+
+    return validOrders.flatMap((order) => {
+      const paymentMethod = getPaymentLabel(order.payments?.[0]?.method);
+
+      return (order.items || [])
+        .filter((item) => selectedProductIds.includes(item.productId))
+        .map((item) => ({
+          orderNumber: order.orderNumber,
+          date: new Date(order.createdAt).toLocaleDateString('es-CL'),
+          customerName: order.customerName,
+          customerEmail: order.customerEmail,
+          customerPhone: order.customerPhone || '',
+          source: SOURCE_LABELS[order.source] || order.source,
+          status: STATUS_LABELS[order.status] || order.status,
+          paymentMethod,
+          isPresale: !!(item as any).isPresale,
+          quantity: item.quantity,
+          price: item.price,
+          subtotal: item.price * item.quantity,
+        }));
+    });
+  }, [allOrders, selectedProductIds]);
+
+  const paymentMethodSummary = useMemo(() => {
+    const validOrders = allOrders.filter((order) => order.status !== 'CANCELLED' && order.status !== 'REFUNDED');
+    const map: Record<string, { label: string; total: number; count: number }> = {
+      CARD: { label: '💳 Tarjeta (Getnet)', total: 0, count: 0 },
+      CASH: { label: '💵 Efectivo', total: 0, count: 0 },
+      TRANSFER: { label: '🏦 Transferencia', total: 0, count: 0 },
+    };
+
+    for (const order of validOrders) {
+      const method = order.payments?.[0]?.method;
+      if (method === 'CARD' || method === 'GETNET') {
+        map.CARD.total += order.total;
+        map.CARD.count += 1;
+      } else if (method === 'CASH') {
+        map.CASH.total += order.total;
+        map.CASH.count += 1;
+      } else if (method === 'TRANSFER') {
+        map.TRANSFER.total += order.total;
+        map.TRANSFER.count += 1;
+      }
+    }
+
+    return Object.values(map);
+  }, [allOrders]);
 
   if (statsLoading || chartLoading || ordersLoading) {
     return (
@@ -166,6 +248,7 @@ export default function DashboardPage() {
               {kpis.count} {kpis.count === 1 ? 'venta' : 'ventas'} en el período seleccionado
             </p>
           </div>
+
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1 bg-secondary rounded-lg p-1">
               {(['today', 'week', 'month'] as DatePreset[]).map((preset) => (
@@ -182,6 +265,7 @@ export default function DashboardPage() {
                 </button>
               ))}
             </div>
+
             <button
               onClick={() => setDatePreset('custom')}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors ${
@@ -196,10 +280,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <ProductFilterBar
-          selectedProductIds={selectedProductIds}
-          onFilterChange={setSelectedProductIds}
-        />
+        <ProductFilterBar selectedProductIds={selectedProductIds} onFilterChange={setSelectedProductIds} />
       </div>
 
       {datePreset === 'custom' && (
@@ -229,12 +310,7 @@ export default function DashboardPage() {
           variant="primary"
           trend={{ value: kpis.count, label: 'órdenes' }}
         />
-        <DashboardWidget
-          title="Costos"
-          value={formatCLP(kpis.cost)}
-          icon={Receipt}
-          variant="warning"
-        />
+        <DashboardWidget title="Costos" value={formatCLP(kpis.cost)} icon={Receipt} variant="warning" />
         <DashboardWidget
           title="Margen"
           value={formatCLP(kpis.margin)}
@@ -248,27 +324,39 @@ export default function DashboardPage() {
         <SalesChart data={chartData || []} />
       </div>
 
-      {selectedProductIds.length > 0 && (
-        <div className="mb-8">
-          <InventoryDiscrepancyPanel
-            data={inventoryData?.products ?? []}
-            error={inventoryError}
-          />
+      {allOrders.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+          {paymentMethodSummary.map((payment) => (
+            <div key={payment.label} className="bg-secondary/50 border border-border/50 rounded-lg p-4">
+              <p className="text-sm text-muted-foreground mb-1">{payment.label}</p>
+              <p className="text-lg text-foreground font-semibold">{formatCLP(payment.total)}</p>
+              <p className="text-xs text-muted-foreground">
+                {payment.count} {payment.count === 1 ? 'orden' : 'órdenes'}
+              </p>
+            </div>
+          ))}
         </div>
       )}
 
-      {skuSummary.length > 0 && (
+      {selectedProductIds.length > 0 && (
+        <div className="mb-8">
+          <InventoryDiscrepancyPanel data={inventoryData?.products ?? []} error={inventoryError} />
+        </div>
+      )}
+
+      {productSummary.length > 0 && (
         <Card className="mb-8">
           <CardHeader>
-            <CardTitle>Resumen por SKU</CardTitle>
+            <CardTitle>{selectedProductIds.length > 0 ? 'Resumen por Producto' : 'Resumen por EAN'}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="text-left py-2 text-muted-foreground font-normal">SKU</th>
+                    <th className="text-left py-2 text-muted-foreground font-normal">EAN</th>
                     <th className="text-left py-2 text-muted-foreground font-normal">Producto</th>
+                    <th className="text-left py-2 text-muted-foreground font-normal">SKU</th>
                     <th className="text-right py-2 text-muted-foreground font-normal">Uds.</th>
                     <th className="text-right py-2 text-muted-foreground font-normal">Venta</th>
                     <th className="text-right py-2 text-muted-foreground font-normal">Costo</th>
@@ -276,10 +364,11 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {skuSummary.map((row) => (
-                    <tr key={row.sku} className="border-b border-border/50 hover:bg-secondary/50">
-                      <td className="py-2.5 text-foreground font-mono text-xs">{row.sku}</td>
+                  {productSummary.map((row, index) => (
+                    <tr key={index} className="border-b border-border/50 hover:bg-secondary/50">
+                      <td className="py-2.5 text-foreground font-mono text-xs">{row.ean}</td>
                       <td className="py-2.5 text-foreground truncate max-w-[200px]">{row.name}</td>
+                      <td className="py-2.5 text-muted-foreground font-mono text-xs">{row.sku}</td>
                       <td className="py-2.5 text-right text-foreground">{row.qty}</td>
                       <td className="py-2.5 text-right text-foreground">{formatCLP(row.revenue)}</td>
                       <td className="py-2.5 text-right text-muted-foreground">{formatCLP(row.cost)}</td>
@@ -295,17 +384,90 @@ export default function DashboardPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>
-            {selectedProductIds.length > 0 ? 'Pedidos con el producto seleccionado' : 'Detalle de Ventas'}
-          </CardTitle>
+          <CardTitle>{selectedProductIds.length > 0 ? 'Ventas del Producto Seleccionado' : 'Detalle de Ventas'}</CardTitle>
         </CardHeader>
         <CardContent>
-          {allOrders.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">
-              {selectedProductIds.length > 0
-                ? 'No hay pedidos que incluyan los productos seleccionados en este período'
-                : 'No hay ventas en este período'}
-            </p>
+          {selectedProductIds.length > 0 ? (
+            filteredSalesDetail.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No hay ventas de este producto en el período</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-2 text-muted-foreground font-normal">Orden</th>
+                      <th className="text-left py-2 text-muted-foreground font-normal">Fecha</th>
+                      <th className="text-left py-2 text-muted-foreground font-normal">Cliente</th>
+                      <th className="text-left py-2 text-muted-foreground font-normal">Contacto</th>
+                      <th className="text-left py-2 text-muted-foreground font-normal">Canal</th>
+                      <th className="text-left py-2 text-muted-foreground font-normal">Pago</th>
+                      <th className="text-left py-2 text-muted-foreground font-normal">Tipo</th>
+                      <th className="text-left py-2 text-muted-foreground font-normal">Estado</th>
+                      <th className="text-right py-2 text-muted-foreground font-normal">Cant.</th>
+                      <th className="text-right py-2 text-muted-foreground font-normal">Precio</th>
+                      <th className="text-right py-2 text-muted-foreground font-normal">Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSalesDetail.map((row, index) => (
+                      <tr key={index} className="border-b border-border/50 hover:bg-secondary/50">
+                        <td className="py-2.5 text-foreground font-mono text-xs">{row.orderNumber}</td>
+                        <td className="py-2.5 text-muted-foreground text-xs">{row.date}</td>
+                        <td className="py-2.5 text-foreground text-xs truncate max-w-[140px]">{row.customerName}</td>
+                        <td className="py-2.5 text-muted-foreground text-xs">
+                          {row.customerEmail && <span className="block truncate max-w-[160px]">{row.customerEmail}</span>}
+                          {row.customerPhone && <span className="block text-[10px]">{row.customerPhone}</span>}
+                        </td>
+                        <td className="py-2.5">
+                          <Badge variant="default" size="sm">{row.source}</Badge>
+                        </td>
+                        <td className="py-2.5 text-xs text-muted-foreground">{row.paymentMethod}</td>
+                        <td className="py-2.5">
+                          {row.isPresale ? <Badge variant="presale" size="sm">Preventa</Badge> : <span className="text-xs text-muted-foreground">Venta</span>}
+                        </td>
+                        <td className="py-2.5">
+                          <Badge
+                            variant={
+                              row.status === 'Entregado'
+                                ? 'success'
+                                : row.status === 'Cancelado' || row.status === 'Reembolsado'
+                                  ? 'danger'
+                                  : row.status === 'Enviado'
+                                    ? 'info'
+                                    : row.status === 'Procesando'
+                                      ? 'warning'
+                                      : 'default'
+                            }
+                            size="sm"
+                          >
+                            {row.status}
+                          </Badge>
+                        </td>
+                        <td className="py-2.5 text-right text-foreground">{row.quantity}</td>
+                        <td className="py-2.5 text-right text-foreground font-mono">{formatCLP(row.price)}</td>
+                        <td className="py-2.5 text-right text-foreground font-mono">{formatCLP(row.subtotal)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
+                      <td colSpan={8} className="py-2.5 text-muted-foreground">
+                        Total ({filteredSalesDetail.length} ventas)
+                      </td>
+                      <td className="py-2.5 text-right text-foreground">
+                        {filteredSalesDetail.reduce((sum, row) => sum + row.quantity, 0)}
+                      </td>
+                      <td className="py-2.5 text-right"></td>
+                      <td className="py-2.5 text-right text-primary font-mono">
+                        {formatCLP(filteredSalesDetail.reduce((sum, row) => sum + row.subtotal, 0))}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )
+          ) : allOrders.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">No hay ventas en este período</p>
           ) : (
             <div className="space-y-2">
               {allOrders.map((order) => {
@@ -339,9 +501,12 @@ export default function DashboardPage() {
                             >
                               {STATUS_LABELS[order.status] || order.status}
                             </Badge>
-                            <Badge variant="default" size="sm">
-                              {SOURCE_LABELS[order.source] || order.source}
-                            </Badge>
+                            <Badge variant="default" size="sm">{SOURCE_LABELS[order.source] || order.source}</Badge>
+                            {order.payments?.[0]?.method && (
+                              <span className="text-[10px] text-muted-foreground bg-secondary px-1.5 py-0.5 rounded">
+                                {getPaymentLabel(order.payments[0].method)}
+                              </span>
+                            )}
                           </div>
                           <p className="text-xs text-muted-foreground">
                             {order.customerName} • {new Date(order.createdAt).toLocaleDateString('es-CL')}
@@ -355,11 +520,7 @@ export default function DashboardPage() {
                             <p className="text-xs text-[#00e676]">+{formatCLP(orderMargin)}</p>
                           )}
                         </div>
-                        {isExpanded ? (
-                          <ChevronUp className="w-4 h-4 text-muted-foreground" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                        )}
+                        {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
                       </div>
                     </button>
 
@@ -377,8 +538,8 @@ export default function DashboardPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {(order.items || []).map((item, idx) => (
-                              <tr key={idx} className="border-t border-border/30">
+                            {(order.items || []).map((item, index) => (
+                              <tr key={index} className="border-t border-border/30">
                                 <td className="py-1.5 text-foreground font-mono">{item.sku || '—'}</td>
                                 <td className="py-1.5 text-foreground truncate max-w-[180px]">{item.name}</td>
                                 <td className="py-1.5 text-right text-foreground">{item.quantity}</td>

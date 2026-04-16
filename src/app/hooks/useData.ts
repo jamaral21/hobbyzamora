@@ -8,14 +8,9 @@ import {
   instagramAPI,
   posAPI,
   Product,
-  Order,
-  DashboardStats,
-  Customer,
-  InstagramConversation,
-  InventoryItem,
+  ProductSearchResult,
 } from '../lib/api';
 
-// Generic hook for data fetching
 interface UseFetchState<T> {
   data: T | null;
   isLoading: boolean;
@@ -34,7 +29,9 @@ function useFetch<T>(
   const [error, setError] = useState<string | null>(null);
 
   const fetchFnRef = useRef(fetchFn);
-  useEffect(() => { fetchFnRef.current = fetchFn; });
+  useEffect(() => {
+    fetchFnRef.current = fetchFn;
+  });
 
   const fetch = useCallback(async () => {
     setIsLoading(true);
@@ -59,15 +56,17 @@ function useFetch<T>(
   return { data, isLoading: enabled ? isLoading : true, error, refetch: fetch };
 }
 
-// Products hooks
-export function useProducts(params?: {
-  category?: string;
-  status?: string;
-  search?: string;
-  presale?: boolean;
-  page?: number;
-  limit?: number;
-}, options?: { enabled?: boolean; authMode?: 'auto' | 'customer' | 'admin' }) {
+export function useProducts(
+  params?: {
+    category?: string;
+    status?: string;
+    search?: string;
+    presale?: boolean;
+    page?: number;
+    limit?: number;
+  },
+  options?: { enabled?: boolean; authMode?: 'auto' | 'customer' | 'admin' }
+) {
   return useFetch(
     () => productsAPI.getAll(params, options?.authMode ?? 'auto').then((res) => res.products),
     [params?.category, params?.status, params?.search, params?.presale, params?.page, params?.limit, options?.authMode],
@@ -76,27 +75,26 @@ export function useProducts(params?: {
 }
 
 export function useProduct(id: string | undefined) {
-  return useFetch(
-    () => (id ? productsAPI.getById(id) : Promise.resolve(null)),
-    [id]
-  );
+  return useFetch(() => (id ? productsAPI.getById(id) : Promise.resolve(null)), [id]);
 }
 
 export function useCategories() {
   return useFetch(() => productsAPI.getCategories(), []);
 }
 
-// Orders hooks
-export function useOrders(params?: {
-  status?: string;
-  source?: string;
-  startDate?: string;
-  endDate?: string;
-  search?: string;
-  productIds?: string[];
-  page?: number;
-  limit?: number;
-}, options?: { enabled?: boolean }) {
+export function useOrders(
+  params?: {
+    status?: string;
+    source?: string;
+    startDate?: string;
+    endDate?: string;
+    search?: string;
+    productIds?: string[];
+    page?: number;
+    limit?: number;
+  },
+  options?: { enabled?: boolean }
+) {
   return useFetch(
     () => ordersAPI.getAll(params),
     [params?.status, params?.source, params?.startDate, params?.endDate, params?.search, params?.productIds?.join(','), params?.page, params?.limit],
@@ -105,25 +103,17 @@ export function useOrders(params?: {
 }
 
 export function useOrder(id: string | undefined) {
-  return useFetch(
-    () => (id ? ordersAPI.getById(id) : Promise.resolve(null)),
-    [id]
-  );
+  return useFetch(() => (id ? ordersAPI.getById(id) : Promise.resolve(null)), [id]);
 }
 
 export function useMyOrders() {
   return useFetch(() => ordersAPI.getMyOrders(), []);
 }
 
-// Inventory hooks
 export function useInventory(params?: { productId?: string; lowStock?: boolean }) {
-  return useFetch(
-    () => inventoryAPI.getAll(params),
-    [params?.productId, params?.lowStock]
-  );
+  return useFetch(() => inventoryAPI.getAll(params), [params?.productId, params?.lowStock]);
 }
 
-// Analytics hooks
 export function useDashboardStats(startDate?: string, endDate?: string, productIds?: string[], options?: { enabled?: boolean }) {
   return useFetch(
     () => analyticsAPI.getDashboard(startDate, endDate, productIds),
@@ -140,19 +130,53 @@ export function useSalesChart(days?: number, productIds?: string[], options?: { 
   );
 }
 
-export function useInventoryDiscrepancy(productIds: string[], options?: { enabled?: boolean }) {
-  return useFetch(
-    () => analyticsAPI.getInventoryDiscrepancy(productIds),
-    [productIds.join(',')],
-    options
-  );
-}
-
 export function useTopProducts(limit?: number, period?: 'week' | 'month' | 'year', options?: { enabled?: boolean }) {
   return useFetch(() => analyticsAPI.getTopProducts(limit, period), [limit, period], options);
 }
 
-// Customers hooks
+export function useProductSearch(query: string) {
+  const [options, setOptions] = useState<ProductSearchResult[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+
+    if (query.trim().length < 2) {
+      setOptions([]);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    timerRef.current = setTimeout(async () => {
+      try {
+        const results = await productsAPI.search(query.trim(), 20);
+        setOptions(results);
+      } catch {
+        setOptions([]);
+      } finally {
+        setIsLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [query]);
+
+  return { options, isLoading };
+}
+
+export function useInventoryDiscrepancy(productIds: string[], options?: { enabled?: boolean }) {
+  const enabled = (options?.enabled ?? true) && productIds.length > 0;
+  return useFetch(
+    () => analyticsAPI.getInventoryDiscrepancy(productIds),
+    [productIds.join(',')],
+    { enabled }
+  );
+}
+
 export function useCustomers(params?: { search?: string; page?: number; limit?: number }, options?: { enabled?: boolean }) {
   return useFetch(
     () => customersAPI.getAll(params).then((res) => res.customers),
@@ -162,26 +186,15 @@ export function useCustomers(params?: { search?: string; page?: number; limit?: 
 }
 
 export function useCustomer(id: string | undefined) {
-  return useFetch(
-    () => (id ? customersAPI.getById(id) : Promise.resolve(null)),
-    [id]
-  );
+  return useFetch(() => (id ? customersAPI.getById(id) : Promise.resolve(null)), [id]);
 }
 
-// Instagram hooks
 export function useInstagramConversations(params?: { status?: string; search?: string }, options?: { enabled?: boolean }) {
-  return useFetch(
-    () => instagramAPI.getConversations(params),
-    [params?.status, params?.search],
-    options
-  );
+  return useFetch(() => instagramAPI.getConversations(params), [params?.status, params?.search], options);
 }
 
 export function useInstagramConversation(id: string | undefined) {
-  return useFetch(
-    () => (id ? instagramAPI.getConversation(id) : Promise.resolve(null)),
-    [id]
-  );
+  return useFetch(() => (id ? instagramAPI.getConversation(id) : Promise.resolve(null)), [id]);
 }
 
 export function useInstagramStats() {
@@ -192,12 +205,8 @@ export function useInstagramHealth() {
   return useFetch(() => instagramAPI.getHealth(), []);
 }
 
-// POS hooks
 export function usePOSProducts(search?: string, category?: string) {
-  return useFetch(
-    () => posAPI.getProducts(search, category),
-    [search, category]
-  );
+  return useFetch(() => posAPI.getProducts(search, category), [search, category]);
 }
 
 export function useTodaySales() {
@@ -208,7 +217,6 @@ export function usePOSRegister() {
   return useFetch(() => posAPI.getRegister(), []);
 }
 
-// Mutation hooks with loading states
 interface UseMutationState<T, A extends any[]> {
   mutate: (...args: A) => Promise<T>;
   isLoading: boolean;
@@ -216,38 +224,28 @@ interface UseMutationState<T, A extends any[]> {
   reset: () => void;
 }
 
-export function useMutation<T, A extends any[]>(
-  mutationFn: (...args: A) => Promise<T>
-): UseMutationState<T, A> {
+export function useMutation<T, A extends any[]>(mutationFn: (...args: A) => Promise<T>): UseMutationState<T, A> {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const mutate = useCallback(
-    async (...args: A): Promise<T> => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const result = await mutationFn(...args);
-        return result;
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : 'An error occurred';
-        setError(errorMessage);
-        throw err;
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [mutationFn]
-  );
-
-  const reset = useCallback(() => {
+  const mutate = useCallback(async (...args: A): Promise<T> => {
+    setIsLoading(true);
     setError(null);
-  }, []);
+    try {
+      return await mutationFn(...args);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+      throw err;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [mutationFn]);
+
+  const reset = useCallback(() => setError(null), []);
 
   return { mutate, isLoading, error, reset };
 }
 
-// Example mutation hooks
 export function useCreateOrder() {
   return useMutation(ordersAPI.create);
 }
@@ -277,8 +275,7 @@ export function useCreatePOSSale() {
 }
 
 export function useSendInstagramMessage() {
-  return useMutation(
-    (conversationId: string, content: string, productId?: string) =>
-      instagramAPI.sendMessage(conversationId, content, productId)
+  return useMutation((conversationId: string, content: string, productId?: string) =>
+    instagramAPI.sendMessage(conversationId, content, productId)
   );
 }

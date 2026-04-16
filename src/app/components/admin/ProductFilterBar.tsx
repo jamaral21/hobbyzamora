@@ -1,74 +1,72 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Search, X } from 'lucide-react';
-import { productsAPI, Product } from '../../lib/api';
+import { clsx } from 'clsx';
+import { useProductSearch } from '../../hooks/useData';
 import { Badge } from '../design-system/Badge';
-import { Button } from '../design-system/Button';
+import type { ProductSearchResult } from '../../lib/api';
 
-interface ProductFilterBarProps {
+export interface ProductFilterBarProps {
   selectedProductIds: string[];
-  onFilterChange: (ids: string[]) => void;
+  onFilterChange: (productIds: string[]) => void;
 }
 
 export function ProductFilterBar({ selectedProductIds, onFilterChange }: ProductFilterBarProps) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<Product[]>([]);
-  const [selectedProducts, setSelectedProducts] = useState<Product[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const [selectedProducts, setSelectedProducts] = useState<ProductSearchResult[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const { options, isLoading } = useProductSearch(query);
 
   useEffect(() => {
     setSelectedProducts((prev) => prev.filter((product) => selectedProductIds.includes(product.id)));
   }, [selectedProductIds]);
 
-  useEffect(() => {
-    let cancelled = false;
+  const filteredOptions = options.filter((option) => !selectedProductIds.includes(option.id));
 
-    if (query.trim().length < 2) {
-      setResults([]);
-      return;
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
     }
 
-    setIsLoading(true);
-    productsAPI.search(query.trim(), 8)
-      .then((products) => {
-        if (cancelled) return;
-        setResults(products.filter((product) => !selectedProductIds.includes(product.id)));
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setResults([]);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      });
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [query, selectedProductIds]);
+  useEffect(() => {
+    if (query.trim().length >= 2) {
+      setIsOpen(true);
+    } else {
+      setIsOpen(false);
+    }
+  }, [query]);
 
-  const addProduct = (product: Product) => {
+  const handleSelect = useCallback((product: ProductSearchResult) => {
     if (selectedProductIds.includes(product.id)) return;
 
-    setSelectedProducts((prev) => [product, ...prev]);
-    onFilterChange([...selectedProductIds, product.id]);
+    const next = [product, ...selectedProducts];
+    setSelectedProducts(next);
+    onFilterChange(next.map((item) => item.id));
     setQuery('');
-    setResults([]);
-  };
+    setIsOpen(false);
+    inputRef.current?.focus();
+  }, [onFilterChange, selectedProductIds, selectedProducts]);
 
-  const removeProduct = (productId: string) => {
-    setSelectedProducts((prev) => prev.filter((product) => product.id !== productId));
-    onFilterChange(selectedProductIds.filter((id) => id !== productId));
-  };
+  const handleRemove = useCallback((productId: string) => {
+    const next = selectedProducts.filter((product) => product.id !== productId);
+    setSelectedProducts(next);
+    onFilterChange(next.map((product) => product.id));
+  }, [onFilterChange, selectedProducts]);
 
-  const clearAll = () => {
+  const handleClear = useCallback(() => {
     setSelectedProducts([]);
-    setResults([]);
-    setQuery('');
     onFilterChange([]);
-  };
+    setQuery('');
+    setIsOpen(false);
+  }, [onFilterChange]);
 
   const selectedSummary = useMemo(() => {
     if (selectedProducts.length === 0) return 'Sin filtro activo';
@@ -76,78 +74,92 @@ export function ProductFilterBar({ selectedProductIds, onFilterChange }: Product
     return `${selectedProducts.length} productos seleccionados`;
   }, [selectedProducts.length]);
 
-  return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2">
-          <div>
-            <p className="text-sm text-foreground">Filtrar por producto</p>
-            <p className="text-xs text-muted-foreground">Busca por nombre, SKU o EAN para actualizar el dashboard.</p>
-          </div>
+  const showEmpty = query.trim().length >= 2 && !isLoading && filteredOptions.length === 0;
 
-          {selectedProductIds.length > 0 && (
-            <Button type="button" variant="ghost" size="sm" onClick={clearAll}>
-              Limpiar filtro
-            </Button>
+  return (
+    <div ref={containerRef} className="relative rounded-xl border border-border bg-card p-4">
+      <div className="mb-3">
+        <p className="text-sm text-foreground">Filtrar por producto</p>
+        <p className="text-xs text-muted-foreground">Busca por nombre, SKU o EAN para actualizar el dashboard.</p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <span className="text-xs text-muted-foreground">{selectedSummary}</span>
+        {selectedProducts.map((product) => (
+          <span key={product.id} className="inline-flex items-center gap-1">
+            <Badge variant="brand" size="sm">
+              {product.name}
+            </Badge>
+            <button
+              type="button"
+              onClick={() => handleRemove(product.id)}
+              className="rounded-full p-1 text-muted-foreground hover:text-foreground hover:bg-secondary"
+              aria-label={`Quitar ${product.name}`}
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </span>
+        ))}
+        {selectedProductIds.length > 0 && (
+          <button
+            type="button"
+            onClick={handleClear}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors px-1.5 py-0.5"
+          >
+            Limpiar filtro
+          </button>
+        )}
+      </div>
+
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+        <input
+          ref={inputRef}
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => query.trim().length >= 2 && setIsOpen(true)}
+          placeholder="Buscar por EAN o nombre del producto…"
+          className={clsx(
+            'w-full pl-9 pr-4 py-2 rounded-lg text-sm text-foreground placeholder:text-muted-foreground',
+            'bg-input-background border border-border transition-all duration-200',
+            'focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-offset-background',
+            'focus:border-primary/40 focus:ring-primary/30'
+          )}
+        />
+      </div>
+
+      {isOpen && (
+        <div className="absolute z-50 mt-1 left-4 right-4 rounded-lg border border-border bg-card shadow-lg overflow-hidden">
+          {isLoading && <div className="px-3 py-2 text-xs text-muted-foreground">Buscando…</div>}
+
+          {showEmpty && (
+            <div className="px-3 py-3 text-sm text-muted-foreground text-center">
+              No se encontraron productos
+            </div>
+          )}
+
+          {!isLoading && filteredOptions.length > 0 && (
+            <ul className="max-h-60 overflow-y-auto py-1">
+              {filteredOptions.map((product) => (
+                <li key={product.id}>
+                  <button
+                    type="button"
+                    onClick={() => handleSelect(product)}
+                    className="w-full text-left px-3 py-2 hover:bg-secondary/70 transition-colors"
+                  >
+                    <p className="text-sm text-foreground truncate">{product.name}</p>
+                    <p className="text-xs text-muted-foreground font-mono">
+                      {product.ean != null ? `EAN ${product.ean}` : 'Sin EAN'}
+                      <span className="text-muted-foreground/50"> · {product.sku}</span>
+                    </p>
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
-
-        <div className="relative">
-          <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Escribe 2 o más caracteres"
-            className="w-full rounded-lg border border-border bg-background pl-9 pr-3 py-2 text-sm text-foreground outline-none focus:border-primary"
-          />
-        </div>
-
-        {query.trim().length >= 2 && (
-          <div className="rounded-lg border border-border bg-background/70 overflow-hidden">
-            {isLoading ? (
-              <p className="px-3 py-3 text-sm text-muted-foreground">Buscando productos...</p>
-            ) : results.length === 0 ? (
-              <p className="px-3 py-3 text-sm text-muted-foreground">No se encontraron productos</p>
-            ) : (
-              <div className="max-h-64 overflow-y-auto">
-                {results.map((product) => (
-                  <button
-                    key={product.id}
-                    type="button"
-                    onClick={() => addProduct(product)}
-                    className="w-full px-3 py-2.5 text-left border-b border-border/50 last:border-b-0 hover:bg-secondary/60 transition-colors"
-                  >
-                    <div className="text-sm text-foreground">{product.name}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {product.sku} • {product.ean ? `EAN ${product.ean}` : 'Sin EAN'}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-muted-foreground">{selectedSummary}</span>
-          {selectedProducts.map((product) => (
-            <span key={product.id} className="inline-flex items-center gap-1">
-              <Badge variant="brand" size="sm">
-                {product.name}
-              </Badge>
-              <button
-                type="button"
-                onClick={() => removeProduct(product.id)}
-                className="rounded-full p-1 text-muted-foreground hover:text-foreground hover:bg-secondary"
-                aria-label={`Quitar ${product.name}`}
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </span>
-          ))}
-        </div>
-      </div>
+      )}
     </div>
   );
 }

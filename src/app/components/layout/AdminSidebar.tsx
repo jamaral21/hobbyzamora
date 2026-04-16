@@ -11,9 +11,11 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
+  Menu,
+  X,
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
 
 interface NavItem {
@@ -34,34 +36,117 @@ const navItems: NavItem[] = [
 export function AdminSidebar() {
   const location = useLocation();
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
   const { logout } = useAdminAuth();
 
+  // Close mobile sidebar on route change
+  useEffect(() => {
+    setIsMobileOpen(false);
+  }, [location.pathname]);
+
   return (
-    <aside
-      className={clsx(
-        'flex flex-col h-screen bg-card border-r border-border transition-all duration-300',
-        isCollapsed ? 'w-16' : 'w-64'
+    <>
+      {/* Mobile hamburger button */}
+      <button
+        onClick={() => setIsMobileOpen(true)}
+        className="fixed top-4 left-4 z-40 p-2 rounded-lg bg-card border border-border md:hidden"
+        aria-label="Abrir menú"
+      >
+        <Menu className="w-5 h-5 text-foreground" />
+      </button>
+
+      {/* Mobile overlay */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+          onClick={() => setIsMobileOpen(false)}
+        />
       )}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between h-16 px-4 border-b border-border">
-        {!isCollapsed && (
+
+      {/* Sidebar */}
+      <aside
+        className={clsx(
+          'flex flex-col h-screen bg-card border-r border-border transition-all duration-300',
+          // Desktop
+          'hidden md:flex',
+          isCollapsed ? 'md:w-16' : 'md:w-64',
+        )}
+      >
+        <SidebarContent
+          isCollapsed={isCollapsed}
+          onToggleCollapse={() => setIsCollapsed(!isCollapsed)}
+          location={location}
+          logout={logout}
+        />
+      </aside>
+
+      {/* Mobile sidebar (overlay) */}
+      <aside
+        className={clsx(
+          'fixed inset-y-0 left-0 z-50 flex flex-col w-72 bg-card border-r border-border transition-transform duration-300 md:hidden',
+          isMobileOpen ? 'translate-x-0' : '-translate-x-full',
+        )}
+      >
+        <div className="flex items-center justify-between h-16 px-4 border-b border-border">
           <Link to="/admin" className="flex items-center gap-2">
             <img src="/logo.png" alt="HobbyZamora" className="w-8 h-8 rounded-lg object-contain" />
             <span className="text-foreground">HobbyZamora</span>
           </Link>
-        )}
-        <button
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="p-2 rounded-lg hover:bg-secondary transition-colors"
-        >
-          {isCollapsed ? (
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
-          ) : (
-            <ChevronLeft className="w-4 h-4 text-muted-foreground" />
+          <button
+            onClick={() => setIsMobileOpen(false)}
+            className="p-2 rounded-lg hover:bg-secondary transition-colors"
+          >
+            <X className="w-4 h-4 text-muted-foreground" />
+          </button>
+        </div>
+        <SidebarContent
+          isCollapsed={false}
+          onToggleCollapse={() => {}}
+          location={location}
+          logout={logout}
+          hidCollapseButton
+        />
+      </aside>
+    </>
+  );
+}
+
+function SidebarContent({
+  isCollapsed,
+  onToggleCollapse,
+  location,
+  logout,
+  hidCollapseButton,
+}: {
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
+  location: { pathname: string };
+  logout: () => void;
+  hidCollapseButton?: boolean;
+}) {
+  return (
+    <>
+      {/* Header — desktop only */}
+      {!hidCollapseButton && (
+        <div className="flex items-center justify-between h-16 px-4 border-b border-border">
+          {!isCollapsed && (
+            <Link to="/admin" className="flex items-center gap-2">
+              <img src="/logo.png" alt="HobbyZamora" className="w-8 h-8 rounded-lg object-contain" />
+              <span className="text-foreground">HobbyZamora</span>
+            </Link>
           )}
-        </button>
-      </div>
+          <button
+            onClick={onToggleCollapse}
+            className="p-2 rounded-lg hover:bg-secondary transition-colors"
+          >
+            {isCollapsed ? (
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            ) : (
+              <ChevronLeft className="w-4 h-4 text-muted-foreground" />
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 overflow-y-auto">
@@ -110,6 +195,6 @@ export function AdminSidebar() {
           {!isCollapsed && <span className="text-sm">Cerrar Sesión</span>}
         </button>
       </div>
-    </aside>
+    </>
   );
 }

@@ -192,6 +192,60 @@ export function ProductEditor({
               )}
             </CardContent>
           </Card>
+
+          {/* Presale Settings */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Preventa</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!formData.isPresale}
+                  onChange={(e) => setFormData({ ...formData, isPresale: e.target.checked })}
+                  className="w-4 h-4 rounded border-border text-primary focus:ring-primary/30"
+                />
+                <span className="text-sm text-foreground">Este producto es una preventa</span>
+              </label>
+
+              {formData.isPresale && (
+                <div className="space-y-4 pt-2 border-t border-border">
+                  <Input
+                    label="Fecha de caducidad"
+                    type="date"
+                    value={formData.presaleEndDate ? formData.presaleEndDate.split('T')[0] : ''}
+                    onChange={(e) => setFormData({ ...formData, presaleEndDate: e.target.value || undefined })}
+                  />
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input
+                      label="Máx. por cliente"
+                      type="number"
+                      min="1"
+                      value={formData.presaleMaxQty ?? ''}
+                      onChange={(e) => setFormData({ ...formData, presaleMaxQty: e.target.value ? parseInt(e.target.value) : undefined })}
+                      placeholder="Ej: 2"
+                    />
+                    <Input
+                      label="Unidades disponibles"
+                      type="number"
+                      min="0"
+                      value={formData.presaleAvailQty ?? ''}
+                      onChange={(e) => setFormData({ ...formData, presaleAvailQty: e.target.value ? parseInt(e.target.value) : undefined })}
+                      placeholder="Ej: 50"
+                    />
+                  </div>
+                  {formData.presaleEndDate && (
+                    <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                      <p className="text-xs text-amber-400">
+                        La preventa se cerrará automáticamente el {new Date(formData.presaleEndDate).toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' })} o cuando se agoten las unidades.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* Sidebar */}

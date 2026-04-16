@@ -124,11 +124,18 @@ export interface DashboardStats {
   orderCount?: number;
 }
 
-export interface InventoryDiscrepancyItem {
+export interface ProductSearchResult {
+  id: string;
+  name: string;
+  sku: string;
+  ean: number | null;
+}
+
+export interface ProductInventoryInfo {
   productId: string;
   productName: string;
   sku: string;
-  ean?: string | null;
+  ean: number | null;
   currentStock: number;
   totalReceived: number;
   totalSold: number;
@@ -137,8 +144,10 @@ export interface InventoryDiscrepancyItem {
   discrepancy: number;
 }
 
+export interface InventoryDiscrepancyItem extends ProductInventoryInfo {}
+
 export interface InventoryDiscrepancyResponse {
-  products: InventoryDiscrepancyItem[];
+  products: ProductInventoryInfo[];
 }
 
 export interface InstagramConversation {
@@ -347,8 +356,13 @@ export const productsAPI = {
   getCategories: () => fetchAPI<string[]>('/products/meta/categories'),
 
   search: async (query: string, limit = 8) => {
-    const response = await productsAPI.getAll({ search: query, limit });
-    return response.products;
+    const response = await productsAPI.getAll({ search: query, limit }, 'admin');
+    return response.products.map((product) => ({
+      id: product.id,
+      name: product.name,
+      sku: product.sku,
+      ean: product.ean ?? null,
+    }));
   },
 
   importCSV: (products: Record<string, string>[], presale = false) =>

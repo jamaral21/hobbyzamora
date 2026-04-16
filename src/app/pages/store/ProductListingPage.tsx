@@ -37,9 +37,16 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
 
   const baseProducts = useMemo(() => {
     if (!products) return [];
-    return presalesOnly
-      ? products.filter((p: any) => p.isPresale)
-      : products;
+    if (presalesOnly) {
+      // Filter out expired presales (past end date) and sold-out presales (availQty = 0)
+      return products.filter((p: any) => {
+        if (!p.isPresale) return false;
+        if (p.presaleEndDate && new Date(p.presaleEndDate) < new Date()) return false;
+        if (p.presaleAvailQty != null && p.presaleAvailQty <= 0) return false;
+        return true;
+      });
+    }
+    return isAuthenticated ? products : products.filter((p: any) => !p.isPresale);
   }, [products, presalesOnly, isAuthenticated]);
 
   const categories = useMemo(() => {
