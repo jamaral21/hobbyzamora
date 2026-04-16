@@ -12,9 +12,20 @@ export interface ProductEditorProps {
   onUploadImage?: (file: File) => Promise<string>;
   hideCategoryField?: boolean;
   defaultCategory?: string;
+  verificationMode?: boolean;
+  submitLabel?: string;
 }
 
-export function ProductEditor({ product, onSave, onCancel, onUploadImage, hideCategoryField = false, defaultCategory }: ProductEditorProps) {
+export function ProductEditor({
+  product,
+  onSave,
+  onCancel,
+  onUploadImage,
+  hideCategoryField = false,
+  defaultCategory,
+  verificationMode = false,
+  submitLabel = 'Guardar Producto',
+}: ProductEditorProps) {
   const [formData, setFormData] = useState<Partial<Product>>(
     product || {
       sku: '',
@@ -29,15 +40,50 @@ export function ProductEditor({ product, onSave, onCancel, onUploadImage, hideCa
     }
   );
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [validationError, setValidationError] = useState('');
   const imageInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (verificationMode) {
+      const missingFields = [
+        !String(formData.sku || '').trim() && 'SKU',
+        (formData.ean === null || formData.ean === undefined || String(formData.ean).trim() === '') && 'EAN',
+        !String(formData.name || '').trim() && 'nombre',
+        !String(formData.category || '').trim() && 'categoría',
+        (!Number.isFinite(Number(formData.price)) || Number(formData.price) <= 0) && 'precio',
+        (!Number.isFinite(Number(formData.cost)) || Number(formData.cost) < 0) && 'costo',
+        (!Number.isFinite(Number(formData.stock)) || Number(formData.stock) < 0) && 'stock',
+      ].filter(Boolean);
+
+      if (missingFields.length > 0) {
+        setValidationError(`Antes de convertir, verifica: ${missingFields.join(', ')}`);
+        return;
+      }
+    }
+
+    setValidationError('');
     onSave(formData);
   };
 
   return (
     <form onSubmit={handleSubmit}>
+      {verificationMode && (
+        <div className="mb-5 rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 to-orange-500/10 p-4">
+          <p className="text-sm font-semibold text-foreground mb-1">Verificación obligatoria antes de convertir</p>
+          <p className="text-xs text-muted-foreground">
+            Revisa SKU, EAN, nombre, categoría, precio, costo y stock. Al guardar, esta preventa pasará a producto normal.
+          </p>
+        </div>
+      )}
+
+      {validationError && (
+        <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-600">
+          {validationError}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Details */}
         <div className="lg:col-span-2 space-y-6">
@@ -98,7 +144,7 @@ export function ProductEditor({ product, onSave, onCancel, onUploadImage, hideCa
 
               <Textarea
                 label="Descripción"
-                value={formData.description}
+                value={formData.description ?? ''}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 rows={4}
               />
@@ -223,7 +269,7 @@ export function ProductEditor({ product, onSave, onCancel, onUploadImage, hideCa
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancelar
         </Button>
-        <Button type="submit">Guardar Producto</Button>
+        <Button type="submit">{submitLabel}</Button>
       </div>
     </form>
   );

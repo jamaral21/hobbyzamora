@@ -22,7 +22,7 @@ CREATE TABLE "new_products" (
     "presaleMaxQty" INTEGER,
     "presaleAvailQty" INTEGER,
     "presaleEndDate" DATETIME,
-    "arrivedAt" DATETIME,
+    "presaleArrivedAt" DATETIME,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" DATETIME NOT NULL
 );
@@ -30,8 +30,8 @@ CREATE TABLE "new_products" (
 INSERT INTO "new_products" SELECT
     "id", "sku", "name", "description", "category", "price", "cost", "stock",
     "images", "status",
-    CAST("barcode" AS TEXT),
-    "isPresale", "presaleMaxQty", "presaleAvailQty", "presaleEndDate", "arrivedAt",
+    CASE WHEN "barcode" IS NOT NULL THEN '' || "barcode" ELSE NULL END,
+    "isPresale", "presaleMaxQty", "presaleAvailQty", "presaleEndDate", "presaleArrivedAt",
     "createdAt", "updatedAt"
 FROM "products";
 

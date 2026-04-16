@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { ShoppingCart, AlertCircle, Flame } from 'lucide-react';
+import { ShoppingCart, AlertCircle, Flame, Clock3 } from 'lucide-react';
 import { Card } from '../design-system/Card';
 import { Button } from '../design-system/Button';
 import { Badge } from '../design-system/Badge';
@@ -11,10 +11,26 @@ export interface ProductCardProps {
   product: Product;
 }
 
+function getPresaleExpiryLabel(presaleEndDate?: string | null) {
+  if (!presaleEndDate) return null;
+
+  const diff = new Date(presaleEndDate).getTime() - Date.now();
+  if (diff <= 0) return 'Expirado';
+
+  const days = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  const minutes = Math.max(1, Math.floor((diff % 3600000) / 60000));
+
+  if (days > 0) return `Expira en ${days}d ${hours}h`;
+  if (hours > 0) return `Expira en ${hours}h ${minutes}m`;
+  return `Expira en ${minutes}m`;
+}
+
 export function ProductCard({ product }: ProductCardProps) {
   const isLowStock = product.stock < 10;
   const { addItem } = useCartStore();
   const [justAdded, setJustAdded] = useState(false);
+  const presaleExpiryLabel = product.isPresale ? getPresaleExpiryLabel(product.presaleEndDate ?? null) : null;
 
   const handleAddToCart = () => {
     if (product.stock <= 0) return;
@@ -53,6 +69,13 @@ export function ProductCard({ product }: ProductCardProps) {
         </div>
 
         <p className="text-muted-foreground mb-3 uppercase tracking-wider text-xs">{product.category}</p>
+
+        {presaleExpiryLabel && (
+          <div className={`mb-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${presaleExpiryLabel === 'Expirado' ? 'bg-red-500/10 text-red-500' : 'bg-amber-500/10 text-amber-500'}`}>
+            <Clock3 className="w-3 h-3" />
+            {presaleExpiryLabel}
+          </div>
+        )}
 
         <div className="flex items-end justify-between mt-auto">
           <div>

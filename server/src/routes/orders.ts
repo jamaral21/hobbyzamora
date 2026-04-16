@@ -6,6 +6,7 @@ import {
   sendOrderStatusEmail,
   sendNewOrderAdminEmail,
 } from '../lib/emailService.js';
+import { getPresaleUnavailableReason } from '../lib/presaleUtils.js';
 
 const router = Router();
 
@@ -39,6 +40,17 @@ function parseImages(images: unknown): string[] {
   return [images];
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function parseProductIdsParam(value: unknown): string[] {
+  if (typeof value !== 'string') return [];
+
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => UUID_REGEX.test(item));
+}
+
 // Get all orders (admin)
 router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) => {
   try {
@@ -46,39 +58,54 @@ router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) =>
       status, 
       source, 
       startDate, 
-      endDate, 
+      endDate,
+      productIds,
       search,
       page = '1', 
       limit = '50' 
     } = req.query;
 
-    const where: any = {};
-
-    if (status) {
-      where.status = status;
-    }
+    const baseWhere: any = {};
 
     if (source) {
-      where.source = source;
+      baseWhere.source = source;
     }
 
     if (startDate || endDate) {
-      where.createdAt = {};
-      if (startDate) where.createdAt.gte = new Date(startDate as string);
-      if (endDate) where.createdAt.lte = new Date(endDate as string);
+      baseWhere.createdAt = {};
+      if (startDate) baseWhere.createdAt.gte = new Date(startDate as string);
+      if (endDate) {
+        const endDateExclusive = new Date(endDate as string);
+        endDateExclusive.setDate(endDateExclusive.getDate() + 1);
+        baseWhere.createdAt.lt = endDateExclusive;
+      }
+    }
+
+    const filteredProductIds = parseProductIdsParam(productIds);
+    if (filteredProductIds.length > 0) {
+      baseWhere.items = {
+        some: {
+          productId: { in: filteredProductIds },
+        },
+      };
     }
 
     if (search) {
-      where.OR = [
+      baseWhere.OR = [
         { orderNumber: { contains: search as string } },
         { customerName: { contains: search as string } },
         { customerEmail: { contains: search as string } },
       ];
     }
 
+    const where: any = {
+      ...baseWhere,
+      ...(status ? { status } : {}),
+    };
+
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
 
-    const [orders, total] = await Promise.all([
+    const [orders, total, groupedStatusCounts] = await Promise.all([
       prisma.order.findMany({
         where,
         include: {
@@ -94,7 +121,25 @@ router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) =>
         orderBy: { createdAt: 'desc' },
       }),
       prisma.order.count({ where }),
+      prisma.order.groupBy({
+        by: ['status'],
+        where: baseWhere,
+        _count: { status: true },
+      }),
     ]);
+
+    const statusCounts = {
+      PENDING: 0,
+      PROCESSING: 0,
+      SHIPPED: 0,
+      DELIVERED: 0,
+      CANCELLED: 0,
+      REFUNDED: 0,
+    };
+
+    for (const row of groupedStatusCounts) {
+      statusCounts[row.status as keyof typeof statusCounts] = row._count.status;
+    }
 
     res.json({
       orders: orders.map(o => ({
@@ -126,6 +171,7 @@ router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) =>
         total,
         totalPages: Math.ceil(total / parseInt(limit as string)),
       },
+      statusCounts,
     });
   } catch (error) {
     console.error('Get orders error:', error);
@@ -208,6 +254,13 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'No items in order' });
     }
 
+    const presaleUser = req.user?.id
+      ? await prisma.user.findUnique({
+          where: { id: req.user.id },
+          select: { id: true, presaleBanned: true },
+        })
+      : null;
+
     // Validate and get product details
     const orderItems: any[] = [];
     let subtotal = 0;
@@ -226,16 +279,37 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
       }
 
       if (product.stock < item.quantity && !product.isPresale) {
-        return res.status(400).json({ 
-          error: `Insufficient stock for ${product.name}. Available: ${product.stock}` 
+        return res.status(400).json({
+          error: `Insufficient stock for ${product.name}. Available: ${product.stock}`
         });
       }
 
-      // Check presale limits
-      if (product.isPresale && product.presaleMaxQty) {
-        if (item.quantity > product.presaleMaxQty) {
-          return res.status(400).json({ 
-            error: `Max quantity for presale is ${product.presaleMaxQty}` 
+      if (product.isPresale) {
+        if (!req.user?.id) {
+          return res.status(401).json({ error: 'Debes iniciar sesión para comprar una preventa' });
+        }
+
+        if (presaleUser?.presaleBanned) {
+          return res.status(403).json({ error: 'Tu cuenta está bloqueada para futuras preventas' });
+        }
+
+        const existingReservation = await prisma.presaleReservation.findUnique({
+          where: { userId_productId: { userId: req.user.id, productId: product.id } },
+          select: { status: true },
+        });
+
+        const hasActiveReservation = Boolean(
+          existingReservation && ['PENDING', 'NOTIFIED', 'PAID'].includes(existingReservation.status)
+        );
+
+        const unavailableReason = getPresaleUnavailableReason(product);
+        if (unavailableReason && !(hasActiveReservation && unavailableReason === 'No hay cupos disponibles para esta preventa')) {
+          return res.status(400).json({ error: `${product.name}: ${unavailableReason}` });
+        }
+
+        if (product.presaleMaxQty && item.quantity > product.presaleMaxQty) {
+          return res.status(400).json({
+            error: `Max quantity for presale is ${product.presaleMaxQty}`
           });
         }
       }
@@ -321,18 +395,35 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
     for (const item of orderItems) {
       const product = await prisma.product.findUnique({ where: { id: item.productId }, select: { isPresale: true } });
       if (product?.isPresale) {
-        const userId = req.user?.id || null;
+        const userId = req.user?.id;
+        let shouldDecrementQuota = true;
+
         if (userId) {
+          const existingReservation = await prisma.presaleReservation.findUnique({
+            where: { userId_productId: { userId, productId: item.productId } },
+          });
+
+          shouldDecrementQuota = !existingReservation || !['PENDING', 'NOTIFIED'].includes(existingReservation.status);
+
           await prisma.presaleReservation.upsert({
             where: { userId_productId: { userId, productId: item.productId } },
-            update: { status: 'PAID', paidAt: new Date() },
+            update: {
+              status: 'PAID',
+              paidAt: new Date(),
+              cancelledAt: null,
+              cancellationReason: null,
+              cancelledBy: null,
+            },
             create: { userId, productId: item.productId, status: 'PAID', paidAt: new Date() },
           });
         }
-        await prisma.product.update({
-          where: { id: item.productId },
-          data: { presaleAvailQty: { decrement: item.quantity } },
-        });
+
+        if (shouldDecrementQuota) {
+          await prisma.product.update({
+            where: { id: item.productId },
+            data: { presaleAvailQty: { decrement: item.quantity } },
+          });
+        }
       } else {
         await prisma.product.update({
           where: { id: item.productId },

@@ -138,9 +138,34 @@ async function expirePresaleReservations() {
   }
 }
 
+async function closeExpiredPresaleProducts() {
+  try {
+    const now = new Date();
+    const result = await prisma.product.updateMany({
+      where: {
+        isPresale: true,
+        status: 'ACTIVE',
+        presaleEndDate: { lte: now },
+      },
+      data: { status: 'HIDDEN' },
+    });
+
+    if (result.count > 0) {
+      console.log(`[presale] Cerradas ${result.count} preventa(s) vencidas por fecha.`);
+    }
+  } catch (err) {
+    console.error('[presale] Error al cerrar preventas vencidas:', err);
+  }
+}
+
+async function runPresaleMaintenance() {
+  await expirePresaleReservations();
+  await closeExpiredPresaleProducts();
+}
+
 // Run once at startup, then every 15 minutes
-expirePresaleReservations();
-setInterval(expirePresaleReservations, 15 * 60 * 1000);
+runPresaleMaintenance();
+setInterval(runPresaleMaintenance, 15 * 60 * 1000);
 
 // Graceful shutdown
 process.on('SIGINT', async () => {

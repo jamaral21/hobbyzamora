@@ -14,6 +14,7 @@ import {
   Bell,
   Trash2,
   Edit,
+  Ban,
 } from 'lucide-react';
 import { presaleAPI, productsAPI, AdminPresaleReservation, Product } from '../../lib/api';
 import { ImageWithFallback } from '../../components/figma/ImageWithFallback';
@@ -32,11 +33,27 @@ function formatCLP(n: number) {
   }).format(n);
 }
 
+function getPresaleEndLabel(presaleEndDate?: string | null) {
+  if (!presaleEndDate) return null;
+
+  const diff = new Date(presaleEndDate).getTime() - Date.now();
+  if (diff <= 0) return 'Expirado';
+
+  const days = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  const minutes = Math.max(1, Math.floor((diff % 3600000) / 60000));
+
+  if (days > 0) return `Expira en ${days}d ${hours}h`;
+  if (hours > 0) return `Expira en ${hours}h ${minutes}m`;
+  return `Expira en ${minutes}m`;
+}
+
 const STATUS_CONFIG: Record<string, { label: string; color: string; Icon: any }> = {
   PENDING: { label: 'Pendiente', color: 'bg-blue-100 text-blue-700', Icon: Clock },
   NOTIFIED: { label: 'Notificado', color: 'bg-amber-100 text-amber-700', Icon: AlertCircle },
   PAID: { label: 'Pagado', color: 'bg-green-100 text-green-700', Icon: CheckCircle },
   EXPIRED: { label: 'Expirado', color: 'bg-zinc-100 text-zinc-500', Icon: XCircle },
+  CANCELLED: { label: 'Cancelada', color: 'bg-red-100 text-red-700', Icon: XCircle },
 };
 
 // ─── Presale products summary ─────────────────────────────────────────────────
@@ -45,11 +62,13 @@ function PresaleProductCard({
   product,
   onConfirmArrival,
   onEdit,
+  onConvert,
   loadingId,
 }: {
   product: Product;
   onConfirmArrival: (productId: string) => void;
   onEdit: (product: Product) => void;
+  onConvert: (product: Product) => void;
   loadingId: string | null;
 }) {
   const img = product.images?.[0];
@@ -57,6 +76,11 @@ function PresaleProductCard({
   const avail = product.presaleAvailQty ?? 0;
   const reserved = Math.max(0, max - avail);
   const pct = max > 0 ? Math.min((reserved / max) * 100, 100) : 0;
+  const presaleEndLabel = getPresaleEndLabel(product.presaleEndDate ?? null);
+  const isArrivalConfirmed = Boolean(product.presaleArrivedAt);
+  const isExpiredByDate = Boolean(product.presaleEndDate && new Date(product.presaleEndDate) <= new Date());
+  const isSoldOut = typeof product.presaleAvailQty === 'number' && product.presaleAvailQty <= 0;
+  const readyToConvert = Boolean(product.isPresale && (isExpiredByDate || isSoldOut || product.status === 'HIDDEN'));
 
   return (
     <div className="bg-card border border-border rounded-xl p-4 flex gap-4 items-start">
@@ -76,6 +100,11 @@ function PresaleProductCard({
             {reserved}/{max} reservados
           </span>
         </div>
+        {presaleEndLabel && (
+          <p className={`text-xs mt-1 font-semibold ${presaleEndLabel === 'Expirado' ? 'text-red-500' : 'text-amber-600'}`}>
+            {presaleEndLabel}
+          </p>
+        )}
         {/* progress bar */}
         <div className="mt-2 h-1.5 w-full bg-secondary rounded-full overflow-hidden">
           <div
@@ -85,6 +114,9 @@ function PresaleProductCard({
         </div>
         {avail <= 0 && (
           <p className="text-xs text-red-500 mt-1 font-medium">Sin cupos disponibles</p>
+        )}
+        {readyToConvert && (
+          <p className="text-xs text-emerald-600 mt-1 font-medium">Lista para verificar y convertir a producto</p>
         )}
       </div>
       <div className="flex flex-col gap-2">
@@ -96,18 +128,28 @@ function PresaleProductCard({
           <Edit className="w-3.5 h-3.5" />
           Editar
         </button>
+        {readyToConvert && (
+          <button
+            onClick={() => onConvert(product)}
+            className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-500 transition-colors"
+            title="Verificar datos y convertir a producto"
+          >
+            <CheckCircle className="w-3.5 h-3.5" />
+            Convertir
+          </button>
+        )}
         <button
           onClick={() => onConfirmArrival(product.id)}
-          disabled={loadingId === product.id}
+          disabled={loadingId === product.id || isArrivalConfirmed}
           className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 disabled:opacity-60 transition-colors"
-          title="Notificar a todos los reservadores pendientes"
+          title={isArrivalConfirmed ? 'La llegada ya fue confirmada' : 'Notificar a todos los reservadores pendientes'}
         >
           {loadingId === product.id ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
           ) : (
             <PackageCheck className="w-3.5 h-3.5" />
           )}
-          Llegó
+          {isArrivalConfirmed ? 'Confirmado' : 'Llegó'}
         </button>
       </div>
     </div>
@@ -126,9 +168,12 @@ export function PresalesPage() {
   const [releasingExpired, setReleasingExpired] = useState(false);
   const [markingPaid, setMarkingPaid] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [blockingUserId, setBlockingUserId] = useState<string | null>(null);
+  const [restoringUserId, setRestoringUserId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
   const [pagination, setPagination] = useState({ total: 0, totalPages: 1, page: 1 });
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editorMode, setEditorMode] = useState<'edit' | 'convert'>('edit');
   const [savingProduct, setSavingProduct] = useState(false);
 
   const showToast = (msg: string, type: 'ok' | 'err' = 'ok') => {
@@ -155,7 +200,7 @@ export function PresalesPage() {
 
   const loadProducts = async () => {
     try {
-      const data = await productsAPI.getAll({ presale: true, limit: 100 });
+      const data = await productsAPI.getAll({ presale: true, status: 'ALL', limit: 100 }, 'admin');
       setProducts(data.products);
     } catch { /* noop */ }
   };
@@ -179,20 +224,32 @@ export function PresalesPage() {
     if (!editingProduct) return;
     setSavingProduct(true);
     try {
-      // Preservar reservas existentes al actualizar el cupo
       const apiData = { ...data };
-      if (data.stock != null && data.stock > 0) {
-        const oldMax = editingProduct.presaleMaxQty ?? 0;
-        const oldAvail = editingProduct.presaleAvailQty ?? oldMax;
-        const reservedCount = Math.max(0, oldMax - oldAvail);
-        const newMax = data.stock;
-        const newAvail = Math.max(0, newMax - reservedCount);
-        apiData.presaleMaxQty = newMax;
-        apiData.presaleAvailQty = newAvail;
-        apiData.stock = 0;
+
+      if (editorMode === 'convert') {
+        apiData.isPresale = false;
+        apiData.status = 'ACTIVE';
+        apiData.presaleMaxQty = null;
+        apiData.presaleAvailQty = null;
+        apiData.presaleEndDate = null;
+        await productsAPIFull.update(editingProduct.id, apiData);
+        showToast('Preventa verificada y convertida a producto');
+      } else {
+        // Preservar reservas existentes al actualizar el cupo
+        if (data.stock != null && data.stock > 0) {
+          const oldMax = editingProduct.presaleMaxQty ?? 0;
+          const oldAvail = editingProduct.presaleAvailQty ?? oldMax;
+          const reservedCount = Math.max(0, oldMax - oldAvail);
+          const newMax = data.stock;
+          const newAvail = Math.max(0, newMax - reservedCount);
+          apiData.presaleMaxQty = newMax;
+          apiData.presaleAvailQty = newAvail;
+          apiData.stock = 0;
+        }
+        await productsAPIFull.update(editingProduct.id, apiData);
+        showToast('Preventa actualizada');
       }
-      await productsAPIFull.update(editingProduct.id, apiData);
-      showToast('Preventa actualizada');
+
       setEditingProduct(null);
       await loadProducts();
     } catch (err: any) {
@@ -232,17 +289,64 @@ export function PresalesPage() {
   };
 
   const handleDeleteReservation = async (reservationId: string) => {
-    if (!window.confirm('¿Eliminar esta reserva? El cupo será restaurado si estaba pendiente.')) return;
+    const reason = window.prompt('Motivo de cancelación de la reserva:');
+    if (!reason || !reason.trim()) return;
+
+    const banUser = window.confirm('¿También deseas bloquear a este usuario para futuras preventas?');
+
     setDeletingId(reservationId);
     try {
-      await presaleAPI.adminDeleteReservation(reservationId);
-      showToast('Reserva eliminada');
-      setReservations((prev) => prev.filter((r) => r.id !== reservationId));
-      await loadProducts();
+      const data = await presaleAPI.adminCancelReservation(reservationId, reason.trim(), banUser);
+      showToast(data.message);
+      await Promise.all([loadReservations(pagination.page), loadProducts()]);
     } catch (err: any) {
-      showToast(err.message || 'Error al eliminar la reserva', 'err');
+      showToast(err.message || 'Error al cancelar la reserva', 'err');
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  const handleBlockUserAccess = async (userId: string) => {
+    const confirmed = window.confirm('¿Bloquear a este usuario para futuras preventas?');
+    if (!confirmed) return;
+
+    setBlockingUserId(userId);
+    try {
+      const data = await presaleAPI.blockUserAccess(userId);
+      showToast(data.message);
+      setReservations((prev) =>
+        prev.map((r) =>
+          r.user.id === userId
+            ? { ...r, user: { ...r.user, presaleBanned: true } }
+            : r
+        )
+      );
+    } catch (err: any) {
+      showToast(err.message || 'Error al bloquear al usuario', 'err');
+    } finally {
+      setBlockingUserId(null);
+    }
+  };
+
+  const handleRestoreUserAccess = async (userId: string) => {
+    const confirmed = window.confirm('¿Restaurar el acceso a preventas para este usuario?');
+    if (!confirmed) return;
+
+    setRestoringUserId(userId);
+    try {
+      const data = await presaleAPI.restoreUserAccess(userId);
+      showToast(data.message);
+      setReservations((prev) =>
+        prev.map((r) =>
+          r.user.id === userId
+            ? { ...r, user: { ...r.user, presaleBanned: false } }
+            : r
+        )
+      );
+    } catch (err: any) {
+      showToast(err.message || 'Error al restaurar el acceso', 'err');
+    } finally {
+      setRestoringUserId(null);
     }
   };
 
@@ -338,8 +442,8 @@ export function PresalesPage() {
         <div>
           <div className="flex items-center gap-2 mb-3">
             <Bell className="w-4 h-4 text-primary" />
-            <h3 className="font-semibold text-sm">Productos preventa activos</h3>
-            <span className="text-xs text-muted-foreground">— Confirma la llegada para notificar a los reservadores</span>
+            <h3 className="font-semibold text-sm">Productos en preventa</h3>
+            <span className="text-xs text-muted-foreground">— Edita, confirma llegada o verifica los datos para convertir las preventas finalizadas en productos</span>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {products.map((p) => (
@@ -347,11 +451,21 @@ export function PresalesPage() {
                 key={p.id}
                 product={p}
                 onConfirmArrival={handleConfirmArrival}
-                onEdit={(prod) => setEditingProduct({
-          ...prod,
-          // Precargar stock con presaleMaxQty para que el editor muestre el cupo correcto
-          stock: prod.presaleMaxQty ?? prod.stock ?? 0,
-        })}
+                onEdit={(prod) => {
+                  setEditorMode('edit');
+                  setEditingProduct({
+                    ...prod,
+                    stock: prod.presaleMaxQty ?? prod.stock ?? 0,
+                  });
+                }}
+                onConvert={(prod) => {
+                  setEditorMode('convert');
+                  setEditingProduct({
+                    ...prod,
+                    status: 'ACTIVE',
+                    stock: prod.presaleAvailQty ?? prod.stock ?? 0,
+                  });
+                }}
                 loadingId={confirmingId}
               />
             ))}
@@ -381,6 +495,7 @@ export function PresalesPage() {
             <option value="NOTIFIED">Notificado</option>
             <option value="PAID">Pagado</option>
             <option value="EXPIRED">Expirado</option>
+            <option value="CANCELLED">Cancelado</option>
           </select>
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
         </div>
@@ -431,6 +546,9 @@ export function PresalesPage() {
                       <td className="px-4 py-3">
                         <p className="font-medium">{r.user.name}</p>
                         <p className="text-xs text-muted-foreground">{r.user.email}</p>
+                        {r.user.presaleBanned && (
+                          <p className="text-[11px] text-red-600 font-semibold mt-1">Bloqueado para preventas</p>
+                        )}
                       </td>
                       {/* Product */}
                       <td className="px-4 py-3">
@@ -450,6 +568,9 @@ export function PresalesPage() {
                           <cfg.Icon className="w-3 h-3" />
                           {isExpired ? 'Por liberar' : cfg.label}
                         </span>
+                        {r.cancellationReason && (
+                          <p className="text-[11px] text-muted-foreground mt-1 max-w-56">Motivo: {r.cancellationReason}</p>
+                        )}
                       </td>
                       {/* Notified at */}
                       <td className="px-4 py-3 text-xs text-muted-foreground">
@@ -482,6 +603,51 @@ export function PresalesPage() {
                                 <CheckCircle className="w-3 h-3" />
                               )}
                               Marcar pagado
+                            </button>
+                          )}
+
+                          {r.status === 'EXPIRED' && !r.user.presaleBanned && (
+                            <button
+                              onClick={() => handleBlockUserAccess(r.user.id)}
+                              disabled={blockingUserId === r.user.id}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-amber-600 text-white text-xs font-semibold hover:bg-amber-500 disabled:opacity-60 transition-colors"
+                            >
+                              {blockingUserId === r.user.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Ban className="w-3 h-3" />
+                              )}
+                              Bloquear usuario
+                            </button>
+                          )}
+
+                          {r.user.presaleBanned && (
+                            <button
+                              onClick={() => handleRestoreUserAccess(r.user.id)}
+                              disabled={restoringUserId === r.user.id}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-500 disabled:opacity-60 transition-colors"
+                            >
+                              {restoringUserId === r.user.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <RefreshCw className="w-3 h-3" />
+                              )}
+                              Restaurar acceso
+                            </button>
+                          )}
+
+                          {(r.status === 'PENDING' || r.status === 'NOTIFIED') && (
+                            <button
+                              onClick={() => handleDeleteReservation(r.id)}
+                              disabled={deletingId === r.id}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-500 disabled:opacity-60 transition-colors"
+                            >
+                              {deletingId === r.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <XCircle className="w-3 h-3" />
+                              )}
+                              Cancelar
                             </button>
                           )}
                         </div>
@@ -520,13 +686,15 @@ export function PresalesPage() {
         <Modal
           isOpen={!!editingProduct}
           onClose={() => setEditingProduct(null)}
-          title={`Editar preventa: ${editingProduct.name}`}
+          title={editorMode === 'convert' ? `Verificar y convertir: ${editingProduct.name}` : `Editar preventa: ${editingProduct.name}`}
           size="lg"
         >
           <ProductEditor
             product={editingProduct as any}
             onSave={handleEditProduct}
             onCancel={() => setEditingProduct(null)}
+            verificationMode={editorMode === 'convert'}
+            submitLabel={editorMode === 'convert' ? 'Verificar y convertir a producto' : 'Guardar preventa'}
           />
           {savingProduct && (
             <div className="absolute inset-0 flex items-center justify-center bg-background/60 rounded-2xl">

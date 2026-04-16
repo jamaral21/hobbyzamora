@@ -124,6 +124,23 @@ export interface DashboardStats {
   orderCount?: number;
 }
 
+export interface InventoryDiscrepancyItem {
+  productId: string;
+  productName: string;
+  sku: string;
+  ean?: string | null;
+  currentStock: number;
+  totalReceived: number;
+  totalSold: number;
+  totalRemaining: number;
+  expectedRemaining: number;
+  discrepancy: number;
+}
+
+export interface InventoryDiscrepancyResponse {
+  products: InventoryDiscrepancyItem[];
+}
+
 export interface InstagramConversation {
   id: string;
   customerName: string;
@@ -168,6 +185,7 @@ export interface User {
   role: 'ADMIN' | 'STAFF' | 'CUSTOMER';
   phone?: string;
   avatarUrl?: string | null;
+  presaleBanned?: boolean;
 }
 
 // API Error class
@@ -178,13 +196,22 @@ export class ApiError extends Error {
   }
 }
 
-// Base fetch function with auth
-async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  // Use admin token for admin API calls, fallback to customer token
+type AuthMode = 'auto' | 'customer' | 'admin' | 'public';
+
+function getAuthToken(mode: AuthMode = 'auto') {
   const adminToken = localStorage.getItem('adminToken');
   const customerToken = localStorage.getItem('token');
-  const token = adminToken || customerToken;
-  
+
+  if (mode === 'public') return null;
+  if (mode === 'customer') return customerToken;
+  if (mode === 'admin') return adminToken;
+  return customerToken || adminToken;
+}
+
+// Base fetch function with auth
+async function fetchAPI<T>(endpoint: string, options?: RequestInit, authMode: AuthMode = 'auto'): Promise<T> {
+  const token = getAuthToken(authMode);
+
   const response = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
     headers: {
@@ -226,16 +253,16 @@ export const authAPI = {
     localStorage.removeItem('token');
   },
 
-  getMe: () => fetchAPI<User>('/auth/me'),
+  getMe: () => fetchAPI<User>('/auth/me', undefined, 'customer'),
 
   updateProfile: (data: { name?: string; phone?: string }) =>
     fetchAPI<User>('/auth/me', {
       method: 'PATCH',
       body: JSON.stringify(data),
-    }),
+    }, 'customer'),
 
   uploadAvatar: async (file: File) => {
-    const token = localStorage.getItem('adminToken') || localStorage.getItem('token');
+    const token = getAuthToken('customer');
     const formData = new FormData();
     formData.append('avatar', file);
 
@@ -286,7 +313,7 @@ export const productsAPI = {
     presale?: boolean;
     page?: number;
     limit?: number;
-  }) => {
+  }, authMode: AuthMode = 'auto') => {
     const searchParams = new URLSearchParams();
     if (params?.category) searchParams.set('category', params.category);
     if (params?.status) searchParams.set('status', params.status);
@@ -296,34 +323,39 @@ export const productsAPI = {
     if (params?.limit) searchParams.set('limit', String(params.limit));
     
     const query = searchParams.toString();
-    return fetchAPI<{ products: Product[]; pagination: any }>(`/products${query ? `?${query}` : ''}`);
+    return fetchAPI<{ products: Product[]; pagination: any }>(`/products${query ? `?${query}` : ''}`, undefined, authMode);
   },
 
   getById: (id: string) => fetchAPI<Product>(`/products/${id}`),
-  getByIdAdmin: (id: string) => fetchAPI<Product>(`/products/admin-detail/${id}`),
+  getByIdAdmin: (id: string) => fetchAPI<Product>(`/products/admin-detail/${id}`, undefined, 'admin'),
 
   create: (data: Partial<Product> & { initialStock?: number }) =>
     fetchAPI<Product>('/products', {
       method: 'POST',
       body: JSON.stringify(data),
-    }),
+    }, 'admin'),
 
   update: (id: string, data: Partial<Product>) =>
     fetchAPI<Product>(`/products/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
-    }),
+    }, 'admin'),
 
   delete: (id: string) =>
-    fetchAPI<{ message: string }>(`/products/${id}`, { method: 'DELETE' }),
+    fetchAPI<{ message: string }>(`/products/${id}`, { method: 'DELETE' }, 'admin'),
 
   getCategories: () => fetchAPI<string[]>('/products/meta/categories'),
+
+  search: async (query: string, limit = 8) => {
+    const response = await productsAPI.getAll({ search: query, limit });
+    return response.products;
+  },
 
   importCSV: (products: Record<string, string>[], presale = false) =>
     fetchAPI<{ created: number; updated: number; skipped: number; errors: string[] }>(`/products/import${presale ? '?presale=true' : ''}`, {
       method: 'POST',
       body: JSON.stringify({ products }),
-    }),
+    }, 'admin'),
 
   uploadImages: async (file: File, onProgress?: (pct: number) => void) => {
     const token = localStorage.getItem('adminToken') || localStorage.getItem('token');
@@ -399,6 +431,7 @@ export const ordersAPI = {
     startDate?: string;
     endDate?: string;
     search?: string;
+    productIds?: string[];
     page?: number;
     limit?: number;
   }) => {
@@ -408,11 +441,16 @@ export const ordersAPI = {
     if (params?.startDate) searchParams.set('startDate', params.startDate);
     if (params?.endDate) searchParams.set('endDate', params.endDate);
     if (params?.search) searchParams.set('search', params.search);
+    if (params?.productIds?.length) searchParams.set('productIds', params.productIds.join(','));
     if (params?.page) searchParams.set('page', String(params.page));
     if (params?.limit) searchParams.set('limit', String(params.limit));
     
     const query = searchParams.toString();
-    return fetchAPI<{ orders: Order[]; pagination: any }>(`/orders${query ? `?${query}` : ''}`);
+    return fetchAPI<{
+      orders: Order[];
+      pagination: any;
+      statusCounts?: Record<string, number>;
+    }>(`/orders${query ? `?${query}` : ''}`, undefined, 'admin');
   },
 
   getById: (id: string) => fetchAPI<Order>(`/orders/${id}`),
@@ -442,35 +480,35 @@ export const ordersAPI = {
     fetchAPI<Order>(`/orders/${id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
-    }),
+    }, 'admin'),
 
-  getMyOrders: () => fetchAPI<Order[]>('/orders/my/orders'),
+  getMyOrders: () => fetchAPI<Order[]>('/orders/my/orders', undefined, 'customer'),
 
   deleteById: (id: string) =>
-    fetchAPI<{ message: string }>(`/orders/${id}`, { method: 'DELETE' }),
+    fetchAPI<{ message: string }>(`/orders/${id}`, { method: 'DELETE' }, 'admin'),
 };
 
 // Cart API
 export const cartAPI = {
-  getCart: () => fetchAPI<Cart>('/cart'),
+  getCart: () => fetchAPI<Cart>('/cart', undefined, 'customer'),
 
   addItem: (productId: string, quantity: number, variantId?: string) =>
     fetchAPI<CartItem>('/cart/items', {
       method: 'POST',
       body: JSON.stringify({ productId, quantity, variantId }),
-    }),
+    }, 'customer'),
 
   updateItem: (itemId: string, quantity: number) =>
     fetchAPI<CartItem>(`/cart/items/${itemId}`, {
       method: 'PATCH',
       body: JSON.stringify({ quantity }),
-    }),
+    }, 'customer'),
 
   removeItem: (itemId: string) =>
-    fetchAPI<{ message: string }>(`/cart/items/${itemId}`, { method: 'DELETE' }),
+    fetchAPI<{ message: string }>(`/cart/items/${itemId}`, { method: 'DELETE' }, 'customer'),
 
   clearCart: () =>
-    fetchAPI<{ message: string }>('/cart', { method: 'DELETE' }),
+    fetchAPI<{ message: string }>('/cart', { method: 'DELETE' }, 'customer'),
 };
 
 // Inventory API
@@ -484,20 +522,20 @@ export const inventoryAPI = {
     return fetchAPI<{
       inventory: InventoryItem[];
       summary: { totalProducts: number; totalValue: number; lowStockCount: number };
-    }>(`/inventory${query ? `?${query}` : ''}`);
+    }>(`/inventory${query ? `?${query}` : ''}`, undefined, 'admin');
   },
 
   receive: (productId: string, quantity: number, unitCost: number, batchCode?: string) =>
     fetchAPI<InventoryBatch>('/inventory/receive', {
       method: 'POST',
       body: JSON.stringify({ productId, quantity, unitCost, batchCode }),
-    }),
+    }, 'admin'),
 
   adjust: (batchId: string, adjustment: number, reason?: string) =>
     fetchAPI<InventoryBatch>('/inventory/adjust', {
       method: 'POST',
       body: JSON.stringify({ batchId, adjustment, reason }),
-    }),
+    }, 'admin'),
 
   getMovements: (params?: {
     productId?: string;
@@ -516,14 +554,14 @@ export const inventoryAPI = {
     if (params?.limit) searchParams.set('limit', String(params.limit));
     
     const query = searchParams.toString();
-    return fetchAPI<{ movements: any[]; pagination: any }>(`/inventory/movements${query ? `?${query}` : ''}`);
+    return fetchAPI<{ movements: any[]; pagination: any }>(`/inventory/movements${query ? `?${query}` : ''}`, undefined, 'admin');
   },
 
   importCSV: (batches: Record<string, string>[]) =>
     fetchAPI<{ created: number; skipped: number; errors: string[] }>('/inventory/import', {
       method: 'POST',
       body: JSON.stringify({ batches }),
-    }),
+    }, 'admin'),
 };
 
 // POS API
@@ -534,10 +572,10 @@ export const posAPI = {
     if (category) searchParams.set('category', category);
     
     const query = searchParams.toString();
-    return fetchAPI<Product[]>(`/pos/products${query ? `?${query}` : ''}`);
+    return fetchAPI<Product[]>(`/pos/products${query ? `?${query}` : ''}`, undefined, 'admin');
   },
 
-  scanProduct: (code: string) => fetchAPI<Product>(`/pos/scan/${code}`),
+  scanProduct: (code: string) => fetchAPI<Product>(`/pos/scan/${code}`, undefined, 'admin'),
 
   createSale: (data: {
     items: Array<{ productId: string; quantity: number; price?: number; variantName?: string }>;
@@ -552,35 +590,45 @@ export const posAPI = {
     fetchAPI<Order & { change: number; checkoutUrl?: string; requestId?: number; paymentId?: string }>('/pos/sale', {
       method: 'POST',
       body: JSON.stringify(data),
-    }),
+    }, 'admin'),
 
   getTodaySales: () =>
     fetchAPI<{
       sales: Order[];
       summary: { count: number; totalSales: number; totalItems: number };
-    }>('/pos/today'),
+    }>('/pos/today', undefined, 'admin'),
 
   getRegister: () =>
     fetchAPI<{
       total: number;
       byMethod: Record<string, { count: number; total: number }>;
       transactionCount: number;
-    }>('/pos/register'),
+    }>('/pos/register', undefined, 'admin'),
 };
 
 // Analytics API
 export const analyticsAPI = {
-  getDashboard: (startDate?: string, endDate?: string) => {
+  getDashboard: (startDate?: string, endDate?: string, productIds?: string[]) => {
     const params = new URLSearchParams();
     if (startDate) params.set('startDate', startDate);
     if (endDate) params.set('endDate', endDate);
+    if (productIds?.length) params.set('productIds', productIds.join(','));
     const query = params.toString();
-    return fetchAPI<DashboardStats>(`/analytics/dashboard${query ? `?${query}` : ''}`);
+    return fetchAPI<DashboardStats>(`/analytics/dashboard${query ? `?${query}` : ''}`, undefined, 'admin');
   },
 
-  getSalesChart: (days?: number) => {
-    const query = days ? `?days=${days}` : '';
-    return fetchAPI<Array<{ date: string; sales: number; revenue: number }>>(`/analytics/sales-chart${query}`);
+  getSalesChart: (days?: number, productIds?: string[]) => {
+    const params = new URLSearchParams();
+    if (days) params.set('days', String(days));
+    if (productIds?.length) params.set('productIds', productIds.join(','));
+    const query = params.toString();
+    return fetchAPI<Array<{ date: string; sales: number; revenue: number }>>(`/analytics/sales-chart${query ? `?${query}` : ''}`, undefined, 'admin');
+  },
+
+  getInventoryDiscrepancy: (productIds: string[]) => {
+    const params = new URLSearchParams();
+    params.set('productIds', productIds.join(','));
+    return fetchAPI<InventoryDiscrepancyResponse>(`/analytics/inventory-discrepancy?${params.toString()}`, undefined, 'admin');
   },
 
   getTopProducts: (limit?: number, period?: 'week' | 'month' | 'year') => {
@@ -589,16 +637,16 @@ export const analyticsAPI = {
     if (period) searchParams.set('period', period);
     
     const query = searchParams.toString();
-    return fetchAPI<Array<{ name: string; sales: number; revenue: number }>>(`/analytics/top-products${query ? `?${query}` : ''}`);
+    return fetchAPI<Array<{ name: string; sales: number; revenue: number }>>(`/analytics/top-products${query ? `?${query}` : ''}`, undefined, 'admin');
   },
 
   getOrdersBySource: (period?: 'week' | 'month') => {
     const query = period ? `?period=${period}` : '';
-    return fetchAPI<Array<{ source: string; count: number; total: number }>>(`/analytics/orders-by-source${query}`);
+    return fetchAPI<Array<{ source: string; count: number; total: number }>>(`/analytics/orders-by-source${query}`, undefined, 'admin');
   },
 
   getOrdersByStatus: () =>
-    fetchAPI<Array<{ status: string; count: number }>>('/analytics/orders-by-status'),
+    fetchAPI<Array<{ status: string; count: number }>>('/analytics/orders-by-status', undefined, 'admin'),
 };
 
 // Customers API
@@ -610,14 +658,14 @@ export const customersAPI = {
     if (params?.limit) searchParams.set('limit', String(params.limit));
     
     const query = searchParams.toString();
-    return fetchAPI<{ customers: Customer[]; pagination: any }>(`/customers${query ? `?${query}` : ''}`);
+    return fetchAPI<{ customers: Customer[]; pagination: any }>(`/customers${query ? `?${query}` : ''}`, undefined, 'admin');
   },
 
-  getById: (id: string) => fetchAPI<Customer & { recentOrders: Order[] }>(`/customers/${id}`),
+  getById: (id: string) => fetchAPI<Customer & { recentOrders: Order[] }>(`/customers/${id}`, undefined, 'admin'),
 
   getTopCustomers: (limit?: number) => {
     const query = limit ? `?limit=${limit}` : '';
-    return fetchAPI<Customer[]>(`/customers/stats/top${query}`);
+    return fetchAPI<Customer[]>(`/customers/stats/top${query}`, undefined, 'admin');
   },
 };
 
@@ -629,33 +677,33 @@ export const instagramAPI = {
     if (params?.search) searchParams.set('search', params.search);
     
     const query = searchParams.toString();
-    return fetchAPI<InstagramConversation[]>(`/instagram/conversations${query ? `?${query}` : ''}`);
+    return fetchAPI<InstagramConversation[]>(`/instagram/conversations${query ? `?${query}` : ''}`, undefined, 'admin');
   },
 
   getConversation: (id: string) =>
-    fetchAPI<InstagramConversation & { messages: InstagramMessage[] }>(`/instagram/conversations/${id}`),
+    fetchAPI<InstagramConversation & { messages: InstagramMessage[] }>(`/instagram/conversations/${id}`, undefined, 'admin'),
 
   sendMessage: (conversationId: string, content: string, productId?: string) =>
     fetchAPI<InstagramMessage>(`/instagram/conversations/${conversationId}/messages`, {
       method: 'POST',
       body: JSON.stringify({ content, productId }),
-    }),
+    }, 'admin'),
 
   takeOver: (conversationId: string) =>
     fetchAPI<InstagramConversation>(`/instagram/conversations/${conversationId}/takeover`, {
       method: 'POST',
-    }),
+    }, 'admin'),
 
   returnToBot: (conversationId: string) =>
     fetchAPI<InstagramConversation>(`/instagram/conversations/${conversationId}/return-to-bot`, {
       method: 'POST',
-    }),
+    }, 'admin'),
 
   updateStatus: (conversationId: string, status: 'ACTIVE' | 'PENDING' | 'RESOLVED') =>
     fetchAPI<InstagramConversation>(`/instagram/conversations/${conversationId}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
-    }),
+    }, 'admin'),
 
   getStats: () =>
     fetchAPI<{
@@ -665,7 +713,7 @@ export const instagramAPI = {
       todayMessages: number;
       conversionRate: number;
       avgResponseTime: string;
-    }>('/instagram/stats'),
+    }>('/instagram/stats', undefined, 'admin'),
 
   getHealth: () =>
     fetchAPI<{
@@ -677,7 +725,7 @@ export const instagramAPI = {
       scopes?: string[];
       error?: string;
       code?: number;
-    }>('/instagram/health'),
+    }>('/instagram/health', undefined, 'admin'),
 };
 
 // Payments API
@@ -739,20 +787,20 @@ export interface WishlistItem {
 }
 
 export const wishlistAPI = {
-  getAll: () => fetchAPI<WishlistItem[]>('/wishlist'),
+  getAll: () => fetchAPI<WishlistItem[]>('/wishlist', undefined, 'customer'),
 
   add: (productId: string) =>
-    fetchAPI<{ id: string }>(`/wishlist/${productId}`, { method: 'POST' }),
+    fetchAPI<{ id: string }>(`/wishlist/${productId}`, { method: 'POST' }, 'customer'),
 
   remove: (productId: string) =>
-    fetchAPI<{ message: string }>(`/wishlist/${productId}`, { method: 'DELETE' }),
+    fetchAPI<{ message: string }>(`/wishlist/${productId}`, { method: 'DELETE' }, 'customer'),
 
   check: (productId: string) =>
-    fetchAPI<{ isFavorite: boolean }>(`/wishlist/check/${productId}`),
+    fetchAPI<{ isFavorite: boolean }>(`/wishlist/check/${productId}`, undefined, 'customer'),
 };
 
 // Presale API
-export type PresaleStatus = 'PENDING' | 'NOTIFIED' | 'PAID' | 'EXPIRED';
+export type PresaleStatus = 'PENDING' | 'NOTIFIED' | 'PAID' | 'EXPIRED' | 'CANCELLED';
 
 export interface PresaleReservation {
   id: string;
@@ -762,6 +810,9 @@ export interface PresaleReservation {
   notifiedAt: string | null;
   expiresAt: string | null;
   paidAt: string | null;
+  cancelledAt?: string | null;
+  cancellationReason?: string | null;
+  cancelledBy?: string | null;
   createdAt: string;
   product: {
     id: string;
@@ -783,8 +834,11 @@ export interface AdminPresaleReservation {
   notifiedAt: string | null;
   expiresAt: string | null;
   paidAt: string | null;
+  cancelledAt?: string | null;
+  cancellationReason?: string | null;
+  cancelledBy?: string | null;
   createdAt: string;
-  user: { id: string; name: string; email: string };
+  user: { id: string; name: string; email: string; presaleBanned?: boolean };
   product: {
     id: string;
     name: string;
@@ -801,15 +855,15 @@ export const presaleAPI = {
   reserve: (productId: string) =>
     fetchAPI<{ reservation: PresaleReservation }>(`/presale/reserve/${productId}`, {
       method: 'POST',
-    }),
+    }, 'customer'),
 
-  /** Cancel own PENDING reservation */
+  /** Customer self-cancel is disabled; only admins can cancel a reservation */
   cancelReservation: (productId: string) =>
-    fetchAPI<{ message: string }>(`/presale/reserve/${productId}`, { method: 'DELETE' }),
+    fetchAPI<{ message: string }>(`/presale/reserve/${productId}`, { method: 'DELETE' }, 'customer'),
 
   /** Get logged-in user's reservations */
   getMyReservations: () =>
-    fetchAPI<{ reservations: PresaleReservation[] }>('/presale/my'),
+    fetchAPI<{ reservations: PresaleReservation[] }>('/presale/my', undefined, 'customer'),
 
   // ── Admin ──
   adminList: (params?: { productId?: string; status?: string; page?: number; limit?: number }) => {
@@ -820,7 +874,9 @@ export const presaleAPI = {
     if (params?.limit) sp.set('limit', String(params.limit));
     const q = sp.toString();
     return fetchAPI<{ reservations: AdminPresaleReservation[]; pagination: any }>(
-      `/presale/admin/list${q ? `?${q}` : ''}`
+      `/presale/admin/list${q ? `?${q}` : ''}`,
+      undefined,
+      'admin'
     );
   },
 
@@ -828,23 +884,42 @@ export const presaleAPI = {
   confirmArrival: (productId: string) =>
     fetchAPI<{ message: string; notified: number }>(`/presale/admin/confirm-arrival/${productId}`, {
       method: 'POST',
-    }),
+    }, 'admin'),
 
   /** Release expired NOTIFIED reservations → restore stock */
   releaseExpired: () =>
     fetchAPI<{ message: string; released: number }>('/presale/admin/release-expired', {
       method: 'POST',
-    }),
+    }, 'admin'),
 
   /** Manually mark a reservation as paid */
   markPaid: (reservationId: string) =>
     fetchAPI<{ reservation: AdminPresaleReservation }>(`/presale/admin/mark-paid/${reservationId}`, {
       method: 'PATCH',
-    }),
+    }, 'admin'),
 
-  /** Admin: delete any reservation (restores quota if PENDING/NOTIFIED) */
+  /** Admin: cancel a reservation, store the reason, and optionally ban the user */
+  adminCancelReservation: (reservationId: string, reason: string, banUser = false) =>
+    fetchAPI<{ message: string; reservation: AdminPresaleReservation }>(`/presale/admin/cancel/${reservationId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ reason, banUser }),
+    }, 'admin'),
+
+  /** Admin: block a user from future presales */
+  blockUserAccess: (userId: string) =>
+    fetchAPI<{ message: string; user: User }>(`/presale/admin/block-access/${userId}`, {
+      method: 'PATCH',
+    }, 'admin'),
+
+  /** Admin: restore presale access for a blocked user */
+  restoreUserAccess: (userId: string) =>
+    fetchAPI<{ message: string; user: User }>(`/presale/admin/restore-access/${userId}`, {
+      method: 'PATCH',
+    }, 'admin'),
+
+  /** Legacy hard delete for cleanup */
   adminDeleteReservation: (reservationId: string) =>
     fetchAPI<{ message: string }>(`/presale/admin/reservation/${reservationId}`, {
       method: 'DELETE',
-    }),
+    }, 'admin'),
 };

@@ -38,6 +38,10 @@ export default function OrdersPage() {
   const { data: ordersData, isLoading } = useOrders(
     {
       status: statusFilter !== 'all' ? statusFilter.toUpperCase() : undefined,
+      source: sourceFilter !== 'all' ? sourceFilter.toUpperCase() : undefined,
+      startDate: dateFrom || undefined,
+      endDate: dateTo || undefined,
+      search: searchQuery || undefined,
       page,
       limit: PAGE_SIZE,
     },
@@ -54,17 +58,6 @@ export default function OrdersPage() {
 
   const filteredOrders = useMemo(() => {
     return orders.filter((order: any) => {
-      const matchesSearch =
-        order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (order.customerName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (order.customerEmail || '').toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesStatus =
-        statusFilter === 'all' || order.status === statusFilter.toUpperCase();
-      const matchesSource =
-        sourceFilter === 'all' || (order.source || '').toUpperCase() === sourceFilter.toUpperCase();
-      const orderDate = new Date(order.createdAt);
-      const matchesFrom = dateFrom === '' || orderDate >= new Date(dateFrom);
-      const matchesTo = dateTo === '' || orderDate <= new Date(dateTo + 'T23:59:59');
       const matchesEan =
         eanFilter === '' ||
         (Array.isArray(order.items) &&
@@ -81,18 +74,19 @@ export default function OrdersPage() {
               .toLowerCase()
               .includes(skuFilter.toLowerCase())
           ));
-      return matchesSearch && matchesStatus && matchesSource && matchesFrom && matchesTo && matchesEan && matchesSku;
+      return matchesEan && matchesSku;
     });
-  }, [orders, searchQuery, statusFilter, sourceFilter, dateFrom, dateTo, eanFilter, skuFilter]);
+  }, [orders, eanFilter, skuFilter]);
 
   const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = { pending: 0, processing: 0, shipped: 0, delivered: 0 };
-    orders.forEach((o: any) => {
-      const status = o.status.toLowerCase();
-      if (counts[status] !== undefined) counts[status]++;
-    });
-    return counts;
-  }, [orders]);
+    const counts = ordersData?.statusCounts ?? {};
+    return {
+      pending: counts.PENDING ?? 0,
+      processing: counts.PROCESSING ?? 0,
+      shipped: counts.SHIPPED ?? 0,
+      delivered: counts.DELIVERED ?? 0,
+    };
+  }, [ordersData]);
 
   if (isLoading) {
     return (
@@ -255,12 +249,12 @@ export default function OrdersPage() {
 
         {/* Stats */}
         <div className="grid grid-cols-4 gap-4 mb-8">
-          {[
+          {([
             { key: 'pending', label: 'Pendiente' },
             { key: 'processing', label: 'Procesando' },
             { key: 'shipped', label: 'Enviado' },
             { key: 'delivered', label: 'Entregado' },
-          ].map(({ key, label }) => {
+          ] as Array<{ key: keyof typeof statusCounts; label: string }>).map(({ key, label }) => {
             const count = statusCounts[key] || 0;
             return (
               <div

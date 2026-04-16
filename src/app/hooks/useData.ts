@@ -67,10 +67,10 @@ export function useProducts(params?: {
   presale?: boolean;
   page?: number;
   limit?: number;
-}, options?: { enabled?: boolean }) {
+}, options?: { enabled?: boolean; authMode?: 'auto' | 'customer' | 'admin' }) {
   return useFetch(
-    () => productsAPI.getAll(params).then((res) => res.products),
-    [params?.category, params?.status, params?.search, params?.presale, params?.page, params?.limit],
+    () => productsAPI.getAll(params, options?.authMode ?? 'auto').then((res) => res.products),
+    [params?.category, params?.status, params?.search, params?.presale, params?.page, params?.limit, options?.authMode],
     options
   );
 }
@@ -93,12 +93,13 @@ export function useOrders(params?: {
   startDate?: string;
   endDate?: string;
   search?: string;
+  productIds?: string[];
   page?: number;
   limit?: number;
 }, options?: { enabled?: boolean }) {
   return useFetch(
     () => ordersAPI.getAll(params),
-    [params?.status, params?.source, params?.startDate, params?.endDate, params?.search, params?.page, params?.limit],
+    [params?.status, params?.source, params?.startDate, params?.endDate, params?.search, params?.productIds?.join(','), params?.page, params?.limit],
     options
   );
 }
@@ -123,12 +124,28 @@ export function useInventory(params?: { productId?: string; lowStock?: boolean }
 }
 
 // Analytics hooks
-export function useDashboardStats(startDate?: string, endDate?: string, options?: { enabled?: boolean }) {
-  return useFetch(() => analyticsAPI.getDashboard(startDate, endDate), [startDate, endDate], options);
+export function useDashboardStats(startDate?: string, endDate?: string, productIds?: string[], options?: { enabled?: boolean }) {
+  return useFetch(
+    () => analyticsAPI.getDashboard(startDate, endDate, productIds),
+    [startDate, endDate, productIds?.join(',')],
+    options
+  );
 }
 
-export function useSalesChart(days?: number, options?: { enabled?: boolean }) {
-  return useFetch(() => analyticsAPI.getSalesChart(days), [days], options);
+export function useSalesChart(days?: number, productIds?: string[], options?: { enabled?: boolean }) {
+  return useFetch(
+    () => analyticsAPI.getSalesChart(days, productIds),
+    [days, productIds?.join(',')],
+    options
+  );
+}
+
+export function useInventoryDiscrepancy(productIds: string[], options?: { enabled?: boolean }) {
+  return useFetch(
+    () => analyticsAPI.getInventoryDiscrepancy(productIds),
+    [productIds.join(',')],
+    options
+  );
 }
 
 export function useTopProducts(limit?: number, period?: 'week' | 'month' | 'year', options?: { enabled?: boolean }) {

@@ -59,8 +59,10 @@ const heroSlides: HeroSlide[] = [
 ];
 
 export default function HomePage() {
-  const { data: products, isLoading } = useProducts();
   const { isAuthenticated } = useAuth();
+  const { data: products, isLoading } = useProducts(undefined, {
+    authMode: isAuthenticated ? 'customer' : 'public',
+  });
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const allProducts = products && products.length > 0 ? products : mockProducts;

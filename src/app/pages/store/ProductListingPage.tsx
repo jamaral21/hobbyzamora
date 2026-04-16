@@ -31,7 +31,9 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
   const [searchParams, setSearchParams] = useSearchParams();
   const categoryParam = searchParams.get('category') || 'all';
 
-  const { data: products, isLoading } = useProducts();
+  const { data: products, isLoading } = useProducts(undefined, {
+    authMode: isAuthenticated ? 'customer' : 'public',
+  });
 
   const baseProducts = useMemo(() => {
     if (!products) return [];

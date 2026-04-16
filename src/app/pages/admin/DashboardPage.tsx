@@ -3,11 +3,12 @@ import { DollarSign, TrendingUp, Loader2, Calendar, Receipt, ChevronDown, Chevro
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { DashboardWidget } from '../../components/admin/DashboardWidget';
 import { SalesChart } from '../../components/admin/SalesChart';
+import { ProductFilterBar } from '../../components/admin/ProductFilterBar';
+import { InventoryDiscrepancyPanel } from '../../components/admin/InventoryDiscrepancyPanel';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/design-system/Card';
 import { Badge } from '../../components/design-system/Badge';
-import { useDashboardStats, useSalesChart, useOrders } from '../../hooks/useData';
+import { useDashboardStats, useSalesChart, useOrders, useInventoryDiscrepancy } from '../../hooks/useData';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
-import type { Order, OrderItem } from '../../lib/api';
 
 type DatePreset = 'today' | 'week' | 'month' | 'custom';
 
@@ -57,24 +58,35 @@ export default function DashboardPage() {
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
 
   const range = datePreset === 'custom'
     ? { start: customStart, end: customEnd }
     : getDateRange(datePreset);
 
-  const { data: stats, isLoading: statsLoading } = useDashboardStats(range.start, range.end, { enabled: isAuthenticated });
+  const productIdsParam = selectedProductIds.length > 0 ? selectedProductIds : undefined;
+
+  const { data: stats, isLoading: statsLoading } = useDashboardStats(
+    range.start,
+    range.end,
+    productIdsParam,
+    { enabled: isAuthenticated }
+  );
   const { data: chartData, isLoading: chartLoading } = useSalesChart(
     datePreset === 'today' ? 1 : datePreset === 'week' ? 7 : 30,
+    productIdsParam,
     { enabled: isAuthenticated }
   );
   const { data: ordersData, isLoading: ordersLoading } = useOrders(
-    { startDate: range.start, endDate: range.end, limit: 100 },
+    { startDate: range.start, endDate: range.end, limit: 100, productIds: productIdsParam },
     { enabled: isAuthenticated }
   );
+  const { data: inventoryData, error: inventoryError } = useInventoryDiscrepancy(selectedProductIds, {
+    enabled: isAuthenticated && selectedProductIds.length > 0,
+  });
 
   const allOrders = ordersData?.orders || [];
 
-  // Derive KPIs from orders (client-side fallback until backend supports new fields)
   const kpis = useMemo(() => {
     if (stats?.totalSales !== undefined) {
       return {
@@ -85,13 +97,15 @@ export default function DashboardPage() {
         count: stats.orderCount ?? allOrders.length,
       };
     }
-    // Fallback: calculate from orders client-side
-    const validOrders = allOrders.filter(o => o.status !== 'CANCELLED' && o.status !== 'REFUNDED');
-    const sales = validOrders.reduce((s, o) => s + o.total, 0);
-    const cost = validOrders.reduce((s, o) =>
-      s + (o.items || []).reduce((ic, item) => ic + (item.cost || 0) * item.quantity, 0), 0
+
+    const validOrders = allOrders.filter((o) => o.status !== 'CANCELLED' && o.status !== 'REFUNDED');
+    const sales = validOrders.reduce((sum, order) => sum + order.total, 0);
+    const cost = validOrders.reduce(
+      (sum, order) => sum + (order.items || []).reduce((itemCost, item) => itemCost + (item.cost || 0) * item.quantity, 0),
+      0
     );
     const margin = sales - cost;
+
     return {
       sales,
       cost,
@@ -101,12 +115,16 @@ export default function DashboardPage() {
     };
   }, [stats, allOrders]);
 
-  // SKU summary table
   const skuSummary = useMemo(() => {
-    const validOrders = allOrders.filter(o => o.status !== 'CANCELLED' && o.status !== 'REFUNDED');
+    const validOrders = allOrders.filter((o) => o.status !== 'CANCELLED' && o.status !== 'REFUNDED');
     const map = new Map<string, { sku: string; name: string; qty: number; revenue: number; cost: number }>();
+
     for (const order of validOrders) {
       for (const item of order.items || []) {
+        if (selectedProductIds.length > 0 && !selectedProductIds.includes(item.productId)) {
+          continue;
+        }
+
         const key = item.sku || item.productId;
         const existing = map.get(key);
         if (existing) {
@@ -124,8 +142,9 @@ export default function DashboardPage() {
         }
       }
     }
+
     return Array.from(map.values()).sort((a, b) => b.revenue - a.revenue);
-  }, [allOrders]);
+  }, [allOrders, selectedProductIds]);
 
   if (statsLoading || chartLoading || ordersLoading) {
     return (
@@ -139,46 +158,52 @@ export default function DashboardPage() {
 
   return (
     <AdminLayout>
-      {/* Header + Date Filter */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-3xl text-foreground mb-1">Panel de Ventas</h1>
-          <p className="text-muted-foreground text-sm">
-            {kpis.count} {kpis.count === 1 ? 'venta' : 'ventas'} en el período seleccionado
-          </p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1 bg-secondary rounded-lg p-1">
-            {(['today', 'week', 'month'] as DatePreset[]).map((p) => (
-              <button
-                key={p}
-                onClick={() => setDatePreset(p)}
-                className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
-                  datePreset === p
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {p === 'today' ? 'Hoy' : p === 'week' ? '7 días' : '30 días'}
-              </button>
-            ))}
+      <div className="flex flex-col gap-4 mb-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-3xl text-foreground mb-1">Panel de Ventas</h1>
+            <p className="text-muted-foreground text-sm">
+              {kpis.count} {kpis.count === 1 ? 'venta' : 'ventas'} en el período seleccionado
+            </p>
           </div>
-          <button
-            onClick={() => setDatePreset('custom')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors ${
-              datePreset === 'custom'
-                ? 'border-primary text-primary bg-primary/10'
-                : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/30'
-            }`}
-          >
-            <Calendar className="w-3.5 h-3.5" />
-            Rango
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1 bg-secondary rounded-lg p-1">
+              {(['today', 'week', 'month'] as DatePreset[]).map((preset) => (
+                <button
+                  key={preset}
+                  onClick={() => setDatePreset(preset)}
+                  className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+                    datePreset === preset
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {preset === 'today' ? 'Hoy' : preset === 'week' ? '7 días' : '30 días'}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setDatePreset('custom')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors ${
+                datePreset === 'custom'
+                  ? 'border-primary text-primary bg-primary/10'
+                  : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/30'
+              }`}
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              Rango
+            </button>
+          </div>
         </div>
+
+        <ProductFilterBar
+          selectedProductIds={selectedProductIds}
+          onFilterChange={setSelectedProductIds}
+        />
       </div>
 
       {datePreset === 'custom' && (
-        <div className="flex items-center gap-3 mb-6 p-3 bg-secondary rounded-lg">
+        <div className="flex items-center gap-3 mb-6 p-3 bg-secondary rounded-lg flex-wrap">
           <label className="text-xs text-muted-foreground">Desde</label>
           <input
             type="date"
@@ -196,7 +221,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <DashboardWidget
           title="Ventas"
@@ -220,12 +244,19 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Chart */}
       <div className="mb-8">
         <SalesChart data={chartData || []} />
       </div>
 
-      {/* SKU Summary */}
+      {selectedProductIds.length > 0 && (
+        <div className="mb-8">
+          <InventoryDiscrepancyPanel
+            data={inventoryData?.products ?? []}
+            error={inventoryError}
+          />
+        </div>
+      )}
+
       {skuSummary.length > 0 && (
         <Card className="mb-8">
           <CardHeader>
@@ -262,20 +293,26 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {/* Order Detail */}
       <Card>
         <CardHeader>
-          <CardTitle>Detalle de Ventas</CardTitle>
+          <CardTitle>
+            {selectedProductIds.length > 0 ? 'Pedidos con el producto seleccionado' : 'Detalle de Ventas'}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {allOrders.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">No hay ventas en este período</p>
+            <p className="text-sm text-muted-foreground text-center py-8">
+              {selectedProductIds.length > 0
+                ? 'No hay pedidos que incluyan los productos seleccionados en este período'
+                : 'No hay ventas en este período'}
+            </p>
           ) : (
             <div className="space-y-2">
               {allOrders.map((order) => {
                 const isExpanded = expandedOrder === order.id;
-                const itemCost = (order.items || []).reduce((s, i) => s + (i.cost || 0) * i.quantity, 0);
+                const itemCost = (order.items || []).reduce((sum, item) => sum + (item.cost || 0) * item.quantity, 0);
                 const orderMargin = order.total - itemCost;
+
                 return (
                   <div key={order.id} className="border border-border/50 rounded-lg overflow-hidden">
                     <button
@@ -288,11 +325,15 @@ export default function DashboardPage() {
                             <span className="text-sm text-foreground font-mono">{order.orderNumber}</span>
                             <Badge
                               variant={
-                                order.status === 'DELIVERED' ? 'success'
-                                : order.status === 'CANCELLED' || order.status === 'REFUNDED' ? 'destructive'
-                                : order.status === 'SHIPPED' ? 'info'
-                                : order.status === 'PROCESSING' ? 'warning'
-                                : 'default'
+                                order.status === 'DELIVERED'
+                                  ? 'success'
+                                  : order.status === 'CANCELLED' || order.status === 'REFUNDED'
+                                    ? 'danger'
+                                    : order.status === 'SHIPPED'
+                                      ? 'info'
+                                      : order.status === 'PROCESSING'
+                                        ? 'warning'
+                                        : 'default'
                               }
                               size="sm"
                             >

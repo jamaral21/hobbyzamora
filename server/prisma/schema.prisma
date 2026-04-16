@@ -18,10 +18,11 @@ model User {
   password  String
   name      String
   role      String   @default("CUSTOMER")
-  phone     String?
-  avatarUrl String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  phone         String?
+  avatarUrl     String?
+  presaleBanned Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   resetToken        String?
   resetTokenExpires DateTime?
@@ -327,12 +328,16 @@ model PresaleReservation {
   productId String
 
   // PENDING → arriving stock is notified → NOTIFIED → user pays → PAID
-  // If 24h pass after NOTIFIED without payment → EXPIRED
+  // If admin cancels the reservation → CANCELLED
+  // If payment window expires after NOTIFIED without payment → EXPIRED
   status    String   @default("PENDING")
 
-  notifiedAt DateTime?  // when the arrival email was sent
-  expiresAt  DateTime?  // notifiedAt + 24h
-  paidAt     DateTime?
+  notifiedAt         DateTime?  // when the arrival email was sent
+  expiresAt          DateTime?  // notifiedAt + configured payment window
+  paidAt             DateTime?
+  cancelledAt        DateTime?
+  cancellationReason String?
+  cancelledBy        String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

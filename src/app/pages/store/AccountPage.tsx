@@ -38,21 +38,40 @@ function AccountContent() {
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    setForm({ name: user?.name || '', phone: user?.phone || '' });
+
+    if (!user?.id) {
+      setOrders([]);
+      setWishlist([]);
+      setPresales([]);
+      setLoadingOrders(false);
+      setLoadingWishlist(false);
+      setLoadingPresales(false);
+      return;
+    }
+
+    setLoadingOrders(true);
+    setLoadingWishlist(true);
+    setLoadingPresales(true);
+    setOrders([]);
+    setWishlist([]);
+    setPresales([]);
+
     ordersAPI.getMyOrders()
       .then(setOrders)
-      .catch(() => {})
+      .catch(() => setOrders([]))
       .finally(() => setLoadingOrders(false));
 
     wishlistAPI.getAll()
       .then(setWishlist)
-      .catch(() => {})
+      .catch(() => setWishlist([]))
       .finally(() => setLoadingWishlist(false));
 
     presaleAPI.getMyReservations()
       .then((data) => setPresales(data.reservations))
-      .catch(() => {})
+      .catch(() => setPresales([]))
       .finally(() => setLoadingPresales(false));
-  }, []);
+  }, [user?.id]);
 
   const handleRemoveWishlist = async (productId: string) => {
     setRemovingId(productId);
@@ -357,8 +376,9 @@ function AccountContent() {
                 const statusMap: Record<string, { label: string; icon: any; color: string }> = {
                   PENDING:  { label: 'Reservado',        icon: Clock,         color: 'text-blue-500' },
                   NOTIFIED: { label: '¡Llegó! Pagar ya', icon: AlertCircle,   color: 'text-amber-500' },
-                  PAID:     { label: 'Pagado',            icon: CheckCircle,   color: 'text-emerald-500' },
-                  EXPIRED:  { label: 'Expirado',          icon: XCircle,       color: 'text-muted-foreground' },
+                  PAID:     { label: 'Pagado',           icon: CheckCircle,   color: 'text-emerald-500' },
+                  EXPIRED:  { label: 'Expirado',         icon: XCircle,       color: 'text-muted-foreground' },
+                  CANCELLED:{ label: 'Cancelado',        icon: XCircle,       color: 'text-red-500' },
                 };
                 const s = statusMap[r.status] ?? statusMap.PENDING;
                 const StatusIcon = s.icon;

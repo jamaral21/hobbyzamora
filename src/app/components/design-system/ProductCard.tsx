@@ -1,7 +1,7 @@
 import { Link } from 'react-router';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import { ShoppingCart, Eye, Flame } from 'lucide-react';
+import { ShoppingCart, Eye, Flame, Clock3 } from 'lucide-react';
 import { ImageWithFallback } from '../figma/ImageWithFallback';
 
 interface ProductCardProps {
@@ -14,6 +14,21 @@ interface ProductCardProps {
   isPresale?: boolean;
   presaleEndDate?: string;
   maxPurchase?: number;
+}
+
+function getPresaleEndLabel(presaleEndDate?: string) {
+  if (!presaleEndDate) return null;
+
+  const diff = new Date(presaleEndDate).getTime() - Date.now();
+  if (diff <= 0) return 'Expirado';
+
+  const days = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  const minutes = Math.max(1, Math.floor((diff % 3600000) / 60000));
+
+  if (days > 0) return `Expira en ${days}d ${hours}h`;
+  if (hours > 0) return `Expira en ${hours}h ${minutes}m`;
+  return `Expira en ${minutes}m`;
 }
 
 export function ProductCard({
@@ -29,6 +44,7 @@ export function ProductCard({
 }: ProductCardProps) {
   const isLowStock = stock > 0 && stock <= 5;
   const isOutOfStock = stock === 0;
+  const presaleEndLabel = isPresale ? getPresaleEndLabel(presaleEndDate) : null;
 
   return (
     <div className="group relative bg-card rounded-xl border border-border overflow-hidden transition-all duration-300 hover:border-primary/25 hover:shadow-[0_0_24px_rgba(255,214,10,0.08)]">
@@ -85,6 +101,12 @@ export function ProductCard({
             <p className="text-lg font-bold text-primary font-[family-name:var(--font-mono)]">
               ${price.toLocaleString('es-CL')}
             </p>
+            {presaleEndLabel && (
+              <p className={`text-xs font-semibold mt-1 inline-flex items-center gap-1 ${presaleEndLabel === 'Expirado' ? 'text-red-500' : 'text-amber-500'}`}>
+                <Clock3 className="w-3 h-3" />
+                {presaleEndLabel}
+              </p>
+            )}
             {isPresale && maxPurchase && (
               <p className="text-xs text-muted-foreground">Máx {maxPurchase} por orden</p>
             )}

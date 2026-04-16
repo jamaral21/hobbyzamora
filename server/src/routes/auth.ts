@@ -83,6 +83,7 @@ router.post('/register', async (req, res) => {
         phone: true,
         avatarUrl: true,
         role: true,
+        presaleBanned: true,
       },
     });
 
@@ -135,6 +136,7 @@ router.post('/login', async (req, res) => {
         phone: user.phone,
         avatarUrl: user.avatarUrl,
         role: user.role,
+        presaleBanned: (user as any).presaleBanned ?? false,
       },
       token,
     });
@@ -156,6 +158,7 @@ router.get('/me', authenticate, async (req: AuthRequest, res) => {
         phone: true,
         avatarUrl: true,
         role: true,
+        presaleBanned: true,
         createdAt: true,
       },
     });
@@ -182,6 +185,7 @@ router.patch('/me', authenticate, async (req: AuthRequest, res) => {
         phone: true,
         avatarUrl: true,
         role: true,
+        presaleBanned: true,
       },
     });
 
@@ -246,6 +250,7 @@ router.post('/me/avatar', authenticate, avatarUpload.single('avatar'), async (re
         phone: true,
         avatarUrl: true,
         role: true,
+        presaleBanned: true,
       },
     });
 
@@ -313,6 +318,7 @@ router.post('/google', async (req, res) => {
         phone: user.phone,
         avatarUrl: user.avatarUrl,
         role: user.role,
+        presaleBanned: (user as any).presaleBanned ?? false,
       },
       token,
     });

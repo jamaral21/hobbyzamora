@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import { prisma } from '../index.js';
+import { getPresaleUnavailableReason } from '../lib/presaleUtils.js';
 
 const parseImages = (images: string): string[] => {
   try { return JSON.parse(images); } catch { return images ? [images] : []; }
@@ -173,6 +174,13 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
       return res.status(400).json({ error: 'No items in sale' });
     }
 
+    const presaleCustomer = customerId
+      ? await prisma.user.findUnique({
+          where: { id: customerId },
+          select: { id: true, presaleBanned: true },
+        })
+      : null;
+
     // Validate items and prepare order items
     const orderItems: any[] = [];
     let subtotal = 0;
@@ -187,9 +195,41 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
       }
 
       if (product.stock < item.quantity && !product.isPresale) {
-        return res.status(400).json({ 
-          error: `Insufficient stock for ${product.name}. Available: ${product.stock}` 
+        return res.status(400).json({
+          error: `Insufficient stock for ${product.name}. Available: ${product.stock}`
         });
+      }
+
+      if (product.isPresale) {
+        if (!customerId) {
+          return res.status(400).json({ error: 'Las preventas en POS requieren un cliente asociado' });
+        }
+
+        if (!presaleCustomer) {
+          return res.status(404).json({ error: 'Cliente no encontrado para la preventa' });
+        }
+
+        if (presaleCustomer.presaleBanned) {
+          return res.status(403).json({ error: 'Este cliente está bloqueado para futuras preventas' });
+        }
+
+        const existingReservation = await prisma.presaleReservation.findUnique({
+          where: { userId_productId: { userId: customerId, productId: product.id } },
+          select: { status: true },
+        });
+
+        const hasActiveReservation = Boolean(
+          existingReservation && ['PENDING', 'NOTIFIED', 'PAID'].includes(existingReservation.status)
+        );
+
+        const unavailableReason = getPresaleUnavailableReason(product);
+        if (unavailableReason && !(hasActiveReservation && unavailableReason === 'No hay cupos disponibles para esta preventa')) {
+          return res.status(400).json({ error: `${product.name}: ${unavailableReason}` });
+        }
+
+        if (product.presaleMaxQty && item.quantity > product.presaleMaxQty) {
+          return res.status(400).json({ error: `Max quantity for presale is ${product.presaleMaxQty}` });
+        }
       }
 
       const itemPrice = item.price || parseFloat(product.price.toString());
@@ -291,17 +331,34 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
       for (const item of orderItems) {
         const product = await prisma.product.findUnique({ where: { id: item.productId }, select: { isPresale: true } });
         if (product?.isPresale) {
+          let shouldDecrementQuota = true;
+
           if (customerId) {
+            const existingReservation = await prisma.presaleReservation.findUnique({
+              where: { userId_productId: { userId: customerId, productId: item.productId } },
+            });
+
+            shouldDecrementQuota = !existingReservation || !['PENDING', 'NOTIFIED'].includes(existingReservation.status);
+
             await prisma.presaleReservation.upsert({
               where: { userId_productId: { userId: customerId, productId: item.productId } },
-              update: { status: 'PAID', paidAt: new Date() },
+              update: {
+                status: 'PAID',
+                paidAt: new Date(),
+                cancelledAt: null,
+                cancellationReason: null,
+                cancelledBy: null,
+              },
               create: { userId: customerId, productId: item.productId, status: 'PAID', paidAt: new Date() },
             });
           }
-          await prisma.product.update({
-            where: { id: item.productId },
-            data: { presaleAvailQty: { decrement: item.quantity } },
-          });
+
+          if (shouldDecrementQuota) {
+            await prisma.product.update({
+              where: { id: item.productId },
+              data: { presaleAvailQty: { decrement: item.quantity } },
+            });
+          }
         } else {
           await prisma.product.update({
             where: { id: item.productId },
@@ -364,17 +421,34 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
     for (const item of orderItems) {
       const product = await prisma.product.findUnique({ where: { id: item.productId }, select: { isPresale: true } });
       if (product?.isPresale) {
+        let shouldDecrementQuota = true;
+
         if (customerId) {
+          const existingReservation = await prisma.presaleReservation.findUnique({
+            where: { userId_productId: { userId: customerId, productId: item.productId } },
+          });
+
+          shouldDecrementQuota = !existingReservation || !['PENDING', 'NOTIFIED'].includes(existingReservation.status);
+
           await prisma.presaleReservation.upsert({
             where: { userId_productId: { userId: customerId, productId: item.productId } },
-            update: { status: 'PAID', paidAt: new Date() },
+            update: {
+              status: 'PAID',
+              paidAt: new Date(),
+              cancelledAt: null,
+              cancellationReason: null,
+              cancelledBy: null,
+            },
             create: { userId: customerId, productId: item.productId, status: 'PAID', paidAt: new Date() },
           });
         }
-        await prisma.product.update({
-          where: { id: item.productId },
-          data: { presaleAvailQty: { decrement: item.quantity } },
-        });
+
+        if (shouldDecrementQuota) {
+          await prisma.product.update({
+            where: { id: item.productId },
+            data: { presaleAvailQty: { decrement: item.quantity } },
+          });
+        }
       } else {
         await prisma.product.update({
           where: { id: item.productId },

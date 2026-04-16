@@ -90,10 +90,10 @@ const parseOptions = (options: string): string[] => {
 // Get all products (public)
 router.get('/', optionalAuth, async (req: AuthRequest, res) => {
   try {
-    const { 
-      category, 
-      status, 
-      search, 
+    const {
+      category,
+      status,
+      search,
       presale,
       minPrice,
       maxPrice,
@@ -103,6 +103,7 @@ router.get('/', optionalAuth, async (req: AuthRequest, res) => {
 
     const where: any = {};
     const canSeeHiddenProducts = req.user?.email?.toLowerCase() === HIDDEN_PRODUCTS_ALLOWED_EMAIL;
+    const isAdminOrStaff = req.user?.role === 'ADMIN' || req.user?.role === 'STAFF';
 
     if (category) {
       where.category = category as string;
@@ -111,12 +112,12 @@ router.get('/', optionalAuth, async (req: AuthRequest, res) => {
     if (status && status !== 'ALL') {
       const requestedStatus = status as string;
 
-      if (requestedStatus === 'HIDDEN' && !canSeeHiddenProducts) {
+      if (requestedStatus === 'HIDDEN' && !canSeeHiddenProducts && req.user?.role !== 'ADMIN' && req.user?.role !== 'STAFF') {
         where.status = 'ACTIVE';
       } else {
         where.status = requestedStatus;
       }
-    } else {
+    } else if (req.user?.role !== 'ADMIN' && req.user?.role !== 'STAFF') {
       // Por defecto, solo productos activos.
       // El usuario permitido puede ver además los HIDDEN en storefront.
       where.status = canSeeHiddenProducts
@@ -128,10 +129,16 @@ router.get('/', optionalAuth, async (req: AuthRequest, res) => {
       where.isPresale = true;
     }
 
+    // Usuarios no autenticados no pueden ver productos de preventa
+    if (!req.user) {
+      where.isPresale = false;
+    }
+
     if (search) {
       where.OR = [
         { name: { contains: search as string } },
         { sku: { contains: search as string } },
+        { ean: { contains: search as string } },
         { description: { contains: search as string } },
       ];
     }
@@ -140,6 +147,33 @@ router.get('/', optionalAuth, async (req: AuthRequest, res) => {
       where.price = {};
       if (minPrice) where.price.gte = parseFloat(minPrice as string);
       if (maxPrice) where.price.lte = parseFloat(maxPrice as string);
+    }
+
+    if (!isAdminOrStaff) {
+      const now = new Date();
+      where.AND = where.AND ?? [];
+      where.AND.push({
+        OR: [
+          { isPresale: false },
+          {
+            isPresale: true,
+            AND: [
+              {
+                OR: [
+                  { presaleEndDate: null },
+                  { presaleEndDate: { gt: now } },
+                ],
+              },
+              {
+                OR: [
+                  { presaleAvailQty: null },
+                  { presaleAvailQty: { gt: 0 } },
+                ],
+              },
+            ],
+          },
+        ],
+      });
     }
 
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
@@ -302,7 +336,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
         isPresale: isPresale || false,
         presaleMaxQty,
         presaleAvailQty,
-        presaleEndDate: presaleEndDate ? new Date(presaleEndDate) : null,
+        presaleEndDate: isPresale ? null : (presaleEndDate ? new Date(presaleEndDate) : null),
         variants: variants ? {
           create: variants.map((v: any) => ({
             name: v.name,
@@ -332,14 +366,15 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
 router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
   try {
     const id = req.params.id as string;
-    const { 
-      name, 
-      description, 
-      category, 
-      price, 
-      cost, 
+    const {
+      sku,
+      name,
+      description,
+      category,
+      price,
+      cost,
       stock,
-      images, 
+      images,
       status,
       ean,
       barcode,
@@ -349,13 +384,68 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
       presaleEndDate,
     } = req.body;
 
+    const existing = await prisma.product.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
     const parsedEan: string | undefined = ean !== undefined
       ? String(ean)
       : (barcode !== undefined ? String(barcode) : undefined);
 
+    const nextSku = sku ?? existing.sku;
+    if (nextSku !== existing.sku) {
+      const duplicateSku = await prisma.product.findUnique({ where: { sku: nextSku } });
+      if (duplicateSku && duplicateSku.id !== id) {
+        return res.status(400).json({ error: 'SKU already exists' });
+      }
+    }
+
+    const isConvertingFromPresale = existing.isPresale && isPresale === false;
+    if (isConvertingFromPresale) {
+      const now = new Date();
+      const alreadyClosed =
+        existing.status === 'HIDDEN' ||
+        (existing.presaleEndDate ? existing.presaleEndDate <= now : false) ||
+        ((existing.presaleAvailQty ?? 1) <= 0);
+
+      if (!alreadyClosed) {
+        return res.status(400).json({ error: 'Solo puedes convertir a producto una preventa que ya terminó su tiempo activo o agotó sus cupos' });
+      }
+
+      const validation = {
+        sku: nextSku,
+        ean: parsedEan ?? existing.ean,
+        name: name ?? existing.name,
+        category: category ?? existing.category,
+        price: price ?? Number(existing.price),
+        cost: cost ?? Number(existing.cost),
+        stock: stock ?? existing.stock,
+      };
+
+      const missingFields = [
+        !validation.sku && 'SKU',
+        !validation.ean && 'EAN',
+        !validation.name && 'nombre',
+        !validation.category && 'categoría',
+        (!Number.isFinite(Number(validation.price)) || Number(validation.price) <= 0) && 'precio',
+        (!Number.isFinite(Number(validation.cost)) || Number(validation.cost) < 0) && 'costo',
+        (!Number.isFinite(Number(validation.stock)) || Number(validation.stock) < 0) && 'stock',
+      ].filter(Boolean);
+
+      if (missingFields.length > 0) {
+        return res.status(400).json({
+          error: `Verifica los datos antes de convertir la preventa. Faltan o son inválidos: ${missingFields.join(', ')}`,
+        });
+      }
+    }
+
+    const nextIsPresale = isPresale ?? existing.isPresale;
+
     const product = await prisma.product.update({
       where: { id },
       data: {
+        sku,
         name,
         description,
         category,
@@ -363,12 +453,15 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
         cost,
         stock,
         images: images !== undefined ? JSON.stringify(images) : undefined,
-        status,
+        status: isConvertingFromPresale ? 'ACTIVE' : status,
         ean: parsedEan,
         isPresale,
-        presaleMaxQty,
-        presaleAvailQty,
-        presaleEndDate: presaleEndDate ? new Date(presaleEndDate) : null,
+        presaleMaxQty: isConvertingFromPresale ? null : presaleMaxQty,
+        presaleAvailQty: isConvertingFromPresale ? null : presaleAvailQty,
+        presaleEndDate: isConvertingFromPresale
+          ? null
+          : (nextIsPresale ? existing.presaleEndDate : (presaleEndDate ? new Date(presaleEndDate) : null)),
+        presaleArrivedAt: isConvertingFromPresale ? null : undefined,
       },
       include: {
         variants: true,
@@ -490,7 +583,6 @@ router.post('/import', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
       const isPresale = forcePresale;
       const presaleMaxQty = row.presaleMaxQty ? parseInt(row.presaleMaxQty) : null;
       const presaleAvailQty = row.presaleAvailQty ? parseInt(row.presaleAvailQty) : null;
-      const presaleEndDate = row.presaleEndDate ? new Date(row.presaleEndDate) : null;
 
       const productData = {
         name: row.name,
@@ -507,7 +599,7 @@ router.post('/import', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
         isPresale,
         presaleMaxQty,
         presaleAvailQty,
-        presaleEndDate,
+        presaleEndDate: null,
       };
 
       try {

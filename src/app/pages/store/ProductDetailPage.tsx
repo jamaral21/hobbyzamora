@@ -11,6 +11,21 @@ import { useCartStore } from '../../lib/store';
 import { useAuth } from '../../contexts/AuthContext';
 import { AuthModal } from '../../components/auth/AuthModal';
 
+function getPresaleExpiryLabel(presaleEndDate?: string | null) {
+  if (!presaleEndDate) return null;
+
+  const diff = new Date(presaleEndDate).getTime() - Date.now();
+  if (diff <= 0) return 'Expirado';
+
+  const days = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  const minutes = Math.max(1, Math.floor((diff % 3600000) / 60000));
+
+  if (days > 0) return `Expira en ${days}d ${hours}h`;
+  if (hours > 0) return `Expira en ${hours}h ${minutes}m`;
+  return `Expira en ${minutes}m`;
+}
+
 export default function ProductDetailPage() {
   const { id } = useParams();
   const [product, setProduct] = useState<any>(null);
@@ -26,7 +41,7 @@ export default function ProductDetailPage() {
   const [reserveError, setReserveError] = useState('');
   const [myReservation, setMyReservation] = useState<PresaleReservation | null>(null);
   const { addItem } = useCartStore();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
 
   useEffect(() => {
     async function loadProduct() {
@@ -44,21 +59,27 @@ export default function ProductDetailPage() {
   }, [id]);
 
   useEffect(() => {
-    if (!id || !isAuthenticated) return;
+    if (!id || !isAuthenticated || !user?.id) {
+      setIsFavorite(false);
+      return;
+    }
     wishlistAPI.check(id)
       .then(({ isFavorite }) => setIsFavorite(isFavorite))
-      .catch(() => {});
-  }, [id, isAuthenticated]);
+      .catch(() => setIsFavorite(false));
+  }, [id, isAuthenticated, user?.id]);
 
   useEffect(() => {
-    if (!id || !isAuthenticated) return;
+    if (!id || !isAuthenticated || !user?.id) {
+      setMyReservation(null);
+      return;
+    }
     presaleAPI.getMyReservations()
       .then(({ reservations }) => {
         const existing = reservations.find(r => r.product.id === id) ?? null;
         setMyReservation(existing);
       })
-      .catch(() => {});
-  }, [id, isAuthenticated]);
+      .catch(() => setMyReservation(null));
+  }, [id, isAuthenticated, user?.id]);
 
   const handleReserve = async () => {
     if (!id) return;
@@ -155,6 +176,14 @@ export default function ProductDetailPage() {
   }
 
   const isLowStock = !product.isPresale && product.stock < 10;
+  const isPresaleClosed = Boolean(
+    product?.isPresale && (
+      ((product.presaleAvailQty ?? 1) <= 0) ||
+      (product.presaleEndDate && new Date(product.presaleEndDate) <= new Date())
+    )
+  );
+  const isPresaleBlocked = Boolean(user?.presaleBanned);
+  const presaleExpiryLabel = product?.isPresale ? getPresaleExpiryLabel(product.presaleEndDate ?? null) : null;
 
   return (
     <StoreLayout>
@@ -279,6 +308,11 @@ export default function ProductDetailPage() {
                     ) : (
                       <p className="text-sm text-muted-foreground">Cupos disponibles</p>
                     )}
+                    {presaleExpiryLabel && (
+                      <p className={`text-sm font-semibold mt-1 ${presaleExpiryLabel === 'Expirado' ? 'text-red-500' : 'text-amber-500'}`}>
+                        {presaleExpiryLabel}
+                      </p>
+                    )}
                   </div>
                 </div>
               </Card>
@@ -333,9 +367,13 @@ export default function ProductDetailPage() {
                     <Bookmark className="w-5 h-5" />
                     {myReservation.status === 'PENDING' ? 'Ya reservado' : 'Pago pendiente'}
                   </Button>
-                ) : (product.presaleAvailQty ?? 0) <= 0 ? (
+                ) : isPresaleBlocked ? (
+                  <Button fullWidth size="lg" disabled variant="outline">
+                    Cuenta bloqueada para preventas
+                  </Button>
+                ) : isPresaleClosed ? (
                   <Button fullWidth size="lg" disabled>
-                    Sin disponibilidad
+                    Preventa cerrada
                   </Button>
                 ) : (
                   <Button
@@ -405,8 +443,7 @@ export default function ProductDetailPage() {
               ${product.price.toLocaleString('es-CL')}
             </p>
             <p className="text-zinc-500 text-xs mb-6 leading-relaxed">
-              Al confirmar, reservas este producto. Cuando llegue recibirás un correo con{' '}
-              <span className="text-amber-400">24 horas</span> para completar el pago.
+              Al confirmar, reservas este producto. Cuando llegue recibirás un correo con un plazo límite para completar el pago.
             </p>
             {reserveError && (
               <p className="text-red-400 text-xs mb-4 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">

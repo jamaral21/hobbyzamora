@@ -35,6 +35,18 @@ function timeLeft(expiresAt: string | null): string {
   return `${h}h ${m}m restantes`;
 }
 
+function presaleEndLabel(presaleEndDate?: string | null): string {
+  if (!presaleEndDate) return '';
+  const diff = new Date(presaleEndDate).getTime() - Date.now();
+  if (diff <= 0) return 'Expirado';
+  const days = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  const minutes = Math.max(1, Math.floor((diff % 3600000) / 60000));
+  if (days > 0) return `Expira en ${days}d ${hours}h`;
+  if (hours > 0) return `Expira en ${hours}h ${minutes}m`;
+  return `Expira en ${minutes}m`;
+}
+
 const STATUS_CONFIG: Record<string, { label: string; color: string; Icon: any }> = {
   PENDING: {
     label: 'Reservado',
@@ -54,6 +66,11 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; Icon: any }>
   EXPIRED: {
     label: 'Expirado',
     color: 'bg-zinc-700/40 text-zinc-500 border-zinc-600/30',
+    Icon: XCircle,
+  },
+  CANCELLED: {
+    label: 'Cancelado por admin',
+    color: 'bg-red-500/15 text-red-300 border-red-500/30',
     Icon: XCircle,
   },
 };
@@ -122,7 +139,7 @@ function ConfirmReserveDialog({
         </div>
 
         <p className="text-zinc-500 text-xs mb-5">
-          Solo 1 reserva por cuenta. Se te notificará por correo cuando el producto llegue y tendrás 24 horas para pagar.
+          Solo 1 reserva por cuenta. Se te notificará por correo cuando el producto llegue y tendrás un plazo limitado para completar el pago.
         </p>
 
         <div className="flex gap-3">
@@ -167,10 +184,12 @@ function AvailablePresales({
   reservedProductIds,
   onReserved,
   isAuthenticated,
+  isBanned,
 }: {
   reservedProductIds: Set<string>;
   onReserved: (reservation: PresaleReservation) => void;
   isAuthenticated: boolean;
+  isBanned?: boolean;
 }) {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
@@ -181,17 +200,24 @@ function AvailablePresales({
 
   const loadProducts = useCallback(() => {
     productsAPI
-      .getAll({ presale: true })
+      .getAll({ presale: true }, isAuthenticated ? 'customer' : 'public')
       .then((data) => setProducts(data.products))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => { loadProducts(); }, [loadProducts]);
 
   const handleReserveClick = (product: Product) => {
     if (!isAuthenticated) {
       setShowAuthModal(true);
+      return;
+    }
+    if (isBanned) {
+      setErrors((prev) => ({
+        ...prev,
+        [product.id]: 'Tu cuenta está bloqueada para futuras preventas. Contacta al administrador.',
+      }));
       return;
     }
     setErrors((prev) => ({ ...prev, [product.id]: '' }));
@@ -217,7 +243,8 @@ function AvailablePresales({
   const available = products.filter(
     (p) =>
       !reservedProductIds.has(p.id) &&
-      (p.presaleAvailQty == null || p.presaleAvailQty > 0)
+      (p.presaleAvailQty == null || p.presaleAvailQty > 0) &&
+      (!p.presaleEndDate || new Date(p.presaleEndDate) > new Date())
   );
 
   if (loading) return null;
@@ -255,6 +282,7 @@ function AvailablePresales({
               product.presaleAvailQty !== undefined &&
               product.presaleAvailQty !== null &&
               product.presaleAvailQty <= 0;
+            const endLabel = presaleEndLabel(product.presaleEndDate ?? null);
 
             return (
               <div
@@ -288,7 +316,7 @@ function AvailablePresales({
                   </Link>
 
                   {/* Price + qty */}
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center justify-between mb-2">
                     <span className="text-amber-400 font-bold text-lg">{formatCLP(product.price)}</span>
                     {typeof product.presaleAvailQty === 'number' && (
                       <span className="text-xs text-zinc-500">
@@ -296,6 +324,12 @@ function AvailablePresales({
                       </span>
                     )}
                   </div>
+
+                  {endLabel && (
+                    <p className={`text-xs mb-4 font-semibold ${endLabel === 'Expirado' ? 'text-red-400' : 'text-amber-300'}`}>
+                      {endLabel}
+                    </p>
+                  )}
 
                   {errors[product.id] && (
                     <p className="text-red-400 text-xs mb-3">{errors[product.id]}</p>
@@ -305,6 +339,11 @@ function AvailablePresales({
                     <div className="flex items-center gap-2 text-emerald-400 text-sm font-semibold">
                       <CheckCircle className="w-4 h-4" />
                       Reservado
+                    </div>
+                  ) : isBanned ? (
+                    <div className="flex items-center gap-2 text-red-400 text-sm font-semibold">
+                      <XCircle className="w-4 h-4" />
+                      Cuenta bloqueada
                     </div>
                   ) : soldOut ? (
                     <div className="flex items-center gap-2 text-zinc-500 text-sm">
@@ -335,16 +374,24 @@ function AvailablePresales({
 function PresalesContent() {
   const [reservations, setReservations] = useState<PresaleReservation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [cancelling, setCancelling] = useState<string | null>(null);
   const { addItem, items: cartItems } = useCartStore();
+  const { user } = useAuth();
 
   const load = useCallback(() => {
+    if (!user?.id) {
+      setReservations([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setReservations([]);
     presaleAPI
       .getMyReservations()
       .then((data) => setReservations(data.reservations))
-      .catch(() => {})
+      .catch(() => setReservations([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -353,17 +400,11 @@ function PresalesContent() {
     setReservations((prev) => [newReservation, ...prev]);
   }, []);
 
-  const handleCancel = async (productId: string) => {
-    setCancelling(productId);
-    try {
-      await presaleAPI.cancelReservation(productId);
-      setReservations((prev) => prev.filter((r) => r.productId !== productId));
-    } catch { /* noop */ } finally {
-      setCancelling(null);
-    }
-  };
-
-  const reservedProductIds = new Set(reservations.map((r) => r.productId));
+  const reservedProductIds = new Set(
+    reservations
+      .filter((r) => r.status === 'PENDING' || r.status === 'NOTIFIED' || r.status === 'PAID')
+      .map((r) => r.productId)
+  );
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] py-12 px-4">
@@ -397,6 +438,12 @@ function PresalesContent() {
           </div>
         )}
 
+        {user?.presaleBanned && (
+          <div className="mb-6 rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            Tu cuenta está bloqueada para nuevas preventas. Si necesitas revisar una cancelación, contacta al administrador.
+          </div>
+        )}
+
         {/* My reservations list */}
         {loading ? (
           <div className="flex items-center justify-center py-24">
@@ -415,6 +462,7 @@ function PresalesContent() {
               const img = r.product.images?.[0];
               const isNotified = r.status === 'NOTIFIED';
               const isPending = r.status === 'PENDING';
+              const isCancelled = r.status === 'CANCELLED';
 
               return (
                 <div
@@ -491,14 +539,14 @@ function PresalesContent() {
                       )}
 
                       {isPending && (
-                        <button
-                          onClick={() => handleCancel(r.productId)}
-                          disabled={cancelling === r.productId}
-                          className="text-xs text-red-500 hover:text-red-400 disabled:opacity-50 transition-colors"
-                        >
-                          {cancelling === r.productId ? 'Cancelando...' : 'Cancelar reserva'}
-                        </button>
+                        <p className="text-xs text-zinc-500 italic">Solo administración puede cancelar esta reserva.</p>
                       )}
+                    </div>
+                  )}
+
+                  {isCancelled && r.cancellationReason && (
+                    <div className="border-t border-white/8 px-5 py-3">
+                      <p className="text-xs text-red-300">Cancelada por administración: {r.cancellationReason}</p>
                     </div>
                   )}
                 </div>
@@ -508,7 +556,12 @@ function PresalesContent() {
         )}
 
         {/* Available presales below */}
-        <AvailablePresales reservedProductIds={reservedProductIds} onReserved={handleReserved} isAuthenticated={true} />
+        <AvailablePresales
+          reservedProductIds={reservedProductIds}
+          onReserved={handleReserved}
+          isAuthenticated={true}
+          isBanned={!!user?.presaleBanned}
+        />
       </div>
     </div>
   );

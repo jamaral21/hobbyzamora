@@ -6,6 +6,11 @@ import {
   sendPresaleArrivalEmail,
   sendPresaleExpiredEmail,
 } from '../lib/emailService.js';
+import {
+  getPresalePaymentExpiry,
+  getPresaleUnavailableReason,
+  PRESALE_EXPIRATION_SECONDS,
+} from '../lib/presaleUtils.js';
 
 const router = Router();
 
@@ -32,18 +37,29 @@ router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) =
     const productId = req.params.productId as string;
     const userId = req.user!.id;
 
-    const product = await prisma.product.findUnique({ where: { id: productId } });
+    const [product, user] = await Promise.all([
+      prisma.product.findUnique({ where: { id: productId } }),
+      prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, name: true, email: true, presaleBanned: true },
+      }),
+    ]);
 
     if (!product || product.status !== 'ACTIVE') {
       return res.status(404).json({ error: 'Producto no encontrado' });
     }
 
-    if (!product.isPresale) {
-      return res.status(400).json({ error: 'Este producto no es una preventa' });
+    if (!user) {
+      return res.status(404).json({ error: 'Usuario no encontrado' });
     }
 
-    if (product.presaleAvailQty !== null && product.presaleAvailQty <= 0) {
-      return res.status(400).json({ error: 'No hay cupos disponibles para esta preventa' });
+    if (user.presaleBanned) {
+      return res.status(403).json({ error: 'Tu cuenta está bloqueada para futuras preventas. Contacta al administrador.' });
+    }
+
+    const unavailableReason = getPresaleUnavailableReason(product);
+    if (unavailableReason) {
+      return res.status(400).json({ error: unavailableReason });
     }
 
     // Check if user already has a reservation for this product
@@ -51,16 +67,31 @@ router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) =
       where: { userId_productId: { userId, productId } },
     });
 
-    if (existing) {
+    if (existing && existing.status !== 'CANCELLED' && existing.status !== 'EXPIRED') {
       return res.status(400).json({ error: 'Ya tienes una reserva para este producto' });
     }
 
     // Create reservation & decrement available qty atomically
     const reservation = await prisma.$transaction(async (tx) => {
-      const r = await tx.presaleReservation.create({
-        data: { userId, productId, status: 'PENDING' },
-        include: { product: { select: { id: true, name: true, price: true, images: true } } },
-      });
+      const r = existing
+        ? await tx.presaleReservation.update({
+            where: { id: existing.id },
+            data: {
+              status: 'PENDING',
+              notifiedAt: null,
+              expiresAt: null,
+              paidAt: null,
+              cancelledAt: null,
+              cancellationReason: null,
+              cancelledBy: null,
+            },
+            include: { product: { select: { id: true, name: true, price: true, images: true } } },
+          })
+        : await tx.presaleReservation.create({
+            data: { userId, productId, status: 'PENDING' },
+            include: { product: { select: { id: true, name: true, price: true, images: true } } },
+          });
+
       if (product.presaleAvailQty !== null) {
         await tx.product.update({
           where: { id: productId },
@@ -71,18 +102,12 @@ router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) =
     });
 
     // Send confirmation email (non-blocking)
-    prisma.user.findUnique({ where: { id: req.user!.id }, select: { name: true, email: true } })
-      .then((u) => {
-        if (u) {
-          sendPresaleReservationEmail(
-            u.email,
-            u.name,
-            reservation.product.name,
-            parseFloat((reservation.product.price as any).toString()),
-          ).catch((err) => console.error('[presale] Error al enviar email de reserva:', err));
-        }
-      })
-      .catch(() => {});
+    sendPresaleReservationEmail(
+      user.email,
+      user.name,
+      reservation.product.name,
+      parseFloat((reservation.product.price as any).toString()),
+    ).catch((err) => console.error('[presale] Error al enviar email de reserva:', err));
 
     return res.status(201).json({
       reservation: {
@@ -104,38 +129,8 @@ router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) =
  * DELETE /api/presale/reserve/:productId
  * Authenticated: cancel own pending reservation.
  */
-router.delete('/reserve/:productId', authenticate, async (req: AuthRequest, res) => {
-  try {
-    const productId = req.params.productId as string;
-    const userId = req.user!.id;
-
-    const reservation = await prisma.presaleReservation.findUnique({
-      where: { userId_productId: { userId, productId } },
-    });
-
-    if (!reservation) {
-      return res.status(404).json({ error: 'Reserva no encontrada' });
-    }
-
-    if (reservation.status !== 'PENDING') {
-      return res.status(400).json({ error: 'Solo se pueden cancelar reservas pendientes' });
-    }
-
-    await prisma.$transaction(async (tx) => {
-      await tx.presaleReservation.delete({
-        where: { userId_productId: { userId, productId } },
-      });
-      await tx.product.update({
-        where: { id: productId },
-        data: { presaleAvailQty: { increment: 1 } },
-      });
-    });
-
-    return res.json({ message: 'Reserva cancelada' });
-  } catch (error) {
-    console.error('Presale cancel error:', error);
-    return res.status(500).json({ error: 'Error al cancelar la reserva' });
-  }
+router.delete('/reserve/:productId', authenticate, async (_req: AuthRequest, res) => {
+  return res.status(403).json({ error: 'Solo un administrador puede cancelar reservas de preventa' });
 });
 
 /**
@@ -204,7 +199,7 @@ router.get('/admin/list', authenticate, requireRole('ADMIN', 'STAFF'), async (re
       prisma.presaleReservation.findMany({
         where,
         include: {
-          user: { select: { id: true, name: true, email: true } },
+          user: { select: { id: true, name: true, email: true, presaleBanned: true } },
           product: {
             select: {
               id: true,
@@ -266,17 +261,20 @@ router.post(
         return res.status(404).json({ error: 'Producto preventa no encontrado' });
       }
 
+      if (product.presaleArrivedAt) {
+        return res.json({ message: 'La llegada de esta preventa ya fue confirmada', notified: 0, confirmed: true });
+      }
+
       const pendingReservations = await prisma.presaleReservation.findMany({
         where: { productId, status: 'PENDING' },
         include: { user: { select: { id: true, name: true, email: true } } },
       }) as Array<{ id: string; userId: string; productId: string; status: string; notifiedAt: Date | null; expiresAt: Date | null; paidAt: Date | null; createdAt: Date; updatedAt: Date; user: { id: string; name: string; email: string } }>;
 
-      if (pendingReservations.length === 0) {
-        return res.json({ message: 'No hay reservas pendientes para notificar', notified: 0 });
-      }
-
       const now = new Date();
-      const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000); // +24h
+      const expiresAt = getPresalePaymentExpiry(now);
+      const expiryLabel = PRESALE_EXPIRATION_SECONDS % 3600 === 0
+        ? `${PRESALE_EXPIRATION_SECONDS / 3600}h`
+        : `${PRESALE_EXPIRATION_SECONDS} segundos`;
 
       // Update all PENDING → NOTIFIED in one batch + mark product as arrived
       await Promise.all([
@@ -286,25 +284,29 @@ router.post(
         }),
         prisma.product.update({
           where: { id: productId },
-          data: { presaleArrivedAt: now },
+          data: { presaleArrivedAt: now, presaleEndDate: expiresAt },
         }),
       ]);
 
       // Send emails concurrently
-      const emailPromises = pendingReservations.map((r) =>
-        sendPresaleArrivalEmail(
-          r.user.email,
-          r.user.name,
-          product.name,
-          r.id,
-        ).catch((err) => {
-          console.error(`[presale] Error al enviar email a ${r.user.email}:`, err);
-        })
-      );
-      await Promise.all(emailPromises);
+      if (pendingReservations.length > 0) {
+        const emailPromises = pendingReservations.map((r) =>
+          sendPresaleArrivalEmail(
+            r.user.email,
+            r.user.name,
+            product.name,
+            r.id,
+          ).catch((err) => {
+            console.error(`[presale] Error al enviar email a ${r.user.email}:`, err);
+          })
+        );
+        await Promise.all(emailPromises);
+      }
 
       return res.json({
-        message: `Se notificó a ${pendingReservations.length} cliente(s). Tienen 24h para pagar.`,
+        message: pendingReservations.length > 0
+          ? `Se notificó a ${pendingReservations.length} cliente(s). Tienen ${expiryLabel} para pagar.`
+          : `Llegada confirmada. Esta preventa expirará en ${expiryLabel}.`,
         notified: pendingReservations.length,
       });
     } catch (error) {
@@ -407,6 +409,10 @@ router.patch(
         return res.status(400).json({ error: 'La reserva ya está pagada' });
       }
 
+      if (reservation.status === 'CANCELLED') {
+        return res.status(400).json({ error: 'La reserva ya fue cancelada por administración' });
+      }
+
       const updated = await prisma.presaleReservation.update({
         where: { id: reservationId },
         data: { status: 'PAID', paidAt: new Date() },
@@ -420,6 +426,198 @@ router.patch(
     } catch (error) {
       console.error('Presale mark-paid error:', error);
       return res.status(500).json({ error: 'Error al marcar la reserva como pagada' });
+    }
+  }
+);
+
+/**
+ * PATCH /api/presale/admin/cancel/:reservationId
+ * Admin: cancel a reservation, store the reason, and optionally ban the user.
+ */
+router.patch(
+  '/admin/cancel/:reservationId',
+  authenticate,
+  requireRole('ADMIN', 'STAFF'),
+  async (req: AuthRequest, res) => {
+    try {
+      const reservationId = req.params.reservationId as string;
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+      const banUser = Boolean(req.body?.banUser);
+
+      if (!reason) {
+        return res.status(400).json({ error: 'Debes indicar un motivo de cancelación' });
+      }
+
+      const reservation = await prisma.presaleReservation.findUnique({
+        where: { id: reservationId },
+        include: {
+          user: { select: { id: true, name: true, email: true, presaleBanned: true } },
+          product: {
+            select: { id: true, name: true, sku: true, price: true, images: true, presaleAvailQty: true, presaleMaxQty: true },
+          },
+        },
+      });
+
+      if (!reservation) {
+        return res.status(404).json({ error: 'Reserva no encontrada' });
+      }
+
+      if (reservation.status === 'PAID') {
+        return res.status(400).json({ error: 'No se puede cancelar una reserva ya pagada' });
+      }
+
+      if (reservation.status === 'CANCELLED') {
+        return res.status(400).json({ error: 'La reserva ya fue cancelada anteriormente' });
+      }
+
+      const shouldRestoreQuota = reservation.status === 'PENDING' || reservation.status === 'NOTIFIED';
+      const cancelledAt = new Date();
+
+      const updated = await prisma.$transaction(async (tx) => {
+        const reservationUpdated = await tx.presaleReservation.update({
+          where: { id: reservationId },
+          data: {
+            status: 'CANCELLED',
+            cancelledAt,
+            cancellationReason: reason,
+            cancelledBy: req.user?.email ?? req.user?.id ?? 'admin',
+            expiresAt: null,
+          },
+          include: {
+            user: { select: { id: true, name: true, email: true, presaleBanned: true } },
+            product: {
+              select: { id: true, name: true, sku: true, price: true, images: true, presaleAvailQty: true, presaleMaxQty: true },
+            },
+          },
+        });
+
+        if (shouldRestoreQuota && reservation.product.presaleAvailQty !== null) {
+          await tx.product.update({
+            where: { id: reservation.productId },
+            data: { presaleAvailQty: { increment: 1 } },
+          });
+        }
+
+        if (banUser) {
+          await tx.user.update({
+            where: { id: reservation.userId },
+            data: { presaleBanned: true },
+          });
+        }
+
+        return reservationUpdated;
+      });
+
+      return res.json({
+        message: banUser
+          ? 'Reserva cancelada y usuario bloqueado para futuras preventas'
+          : 'Reserva cancelada por administración',
+        reservation: {
+          ...updated,
+          user: {
+            ...updated.user,
+            presaleBanned: banUser ? true : updated.user.presaleBanned,
+          },
+          product: {
+            ...updated.product,
+            images: parseImages(updated.product.images),
+            price: parseFloat((updated.product.price as any).toString()),
+          },
+        },
+      });
+    } catch (error) {
+      console.error('Presale admin cancel error:', error);
+      return res.status(500).json({ error: 'Error al cancelar la reserva' });
+    }
+  }
+);
+
+/**
+ * PATCH /api/presale/admin/block-access/:userId
+ * Admin: block a user from future presales.
+ */
+router.patch(
+  '/admin/block-access/:userId',
+  authenticate,
+  requireRole('ADMIN', 'STAFF'),
+  async (req: AuthRequest, res) => {
+    try {
+      const userId = req.params.userId as string;
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, name: true, email: true, presaleBanned: true },
+      });
+
+      if (!user) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+
+      if (user.presaleBanned) {
+        return res.json({
+          message: 'El usuario ya está bloqueado para preventas',
+          user,
+        });
+      }
+
+      const updatedUser = await prisma.user.update({
+        where: { id: userId },
+        data: { presaleBanned: true },
+        select: { id: true, name: true, email: true, presaleBanned: true },
+      });
+
+      return res.json({
+        message: 'Usuario bloqueado para futuras preventas',
+        user: updatedUser,
+      });
+    } catch (error) {
+      console.error('Presale block access error:', error);
+      return res.status(500).json({ error: 'Error al bloquear el acceso a preventas' });
+    }
+  }
+);
+
+/**
+ * PATCH /api/presale/admin/restore-access/:userId
+ * Admin: restore presale access for a previously blocked user.
+ */
+router.patch(
+  '/admin/restore-access/:userId',
+  authenticate,
+  requireRole('ADMIN', 'STAFF'),
+  async (req: AuthRequest, res) => {
+    try {
+      const userId = req.params.userId as string;
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, name: true, email: true, presaleBanned: true },
+      });
+
+      if (!user) {
+        return res.status(404).json({ error: 'Usuario no encontrado' });
+      }
+
+      if (!user.presaleBanned) {
+        return res.json({
+          message: 'El usuario ya tiene acceso a preventas',
+          user,
+        });
+      }
+
+      const updatedUser = await prisma.user.update({
+        where: { id: userId },
+        data: { presaleBanned: false },
+        select: { id: true, name: true, email: true, presaleBanned: true },
+      });
+
+      return res.json({
+        message: 'Acceso a preventas restaurado correctamente',
+        user: updatedUser,
+      });
+    } catch (error) {
+      console.error('Presale restore access error:', error);
+      return res.status(500).json({ error: 'Error al restaurar el acceso a preventas' });
     }
   }
 );

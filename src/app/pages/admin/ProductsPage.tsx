@@ -35,7 +35,7 @@ export default function ProductsPage() {
     {
       status: statusFilter === 'ALL' ? 'ALL' : statusFilter,
     },
-    { enabled: isAuthenticated }
+    { enabled: isAuthenticated, authMode: 'admin' }
   );
   const createProduct = useMutation(productsAPI.create);
   const updateProduct = useMutation(productsAPI.update);
