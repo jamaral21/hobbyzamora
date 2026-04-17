@@ -160,12 +160,12 @@ export default function CosteoPage() {
             <span className="text-sm text-muted-foreground">Suma de porcentajes:</span>
             <span
               className={`text-sm font-bold font-[family-name:var(--font-mono)] ${
-                isValid ? 'text-[#00e676]' : 'text-destructive'
+                isValid ? 'text-emerald-600' : 'text-destructive'
               }`}
             >
               {pctSum.toFixed(2)}%
             </span>
-            {isValid && <CheckCircle className="w-4 h-4 text-[#00e676]" />}
+            {isValid && <CheckCircle className="w-4 h-4 text-emerald-600" />}
           </div>
 
           {/* Costing table */}

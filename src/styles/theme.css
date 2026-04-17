@@ -195,20 +195,72 @@
   }
 }
 
-/* Shipments ERP — light content area (sidebar stays dark) */
+/* Shipments ERP — readable font sizes for the entire module */
+.shipments-erp {
+  font-size: 20px !important;
+}
+
+.shipments-erp * {
+  font-size: inherit;
+}
+
+.shipments-erp .text-\[10px\] { font-size: 0.875rem !important; }
+.shipments-erp .text-xs { font-size: 1rem !important; line-height: 1.5 !important; }
+.shipments-erp .text-sm { font-size: 1.125rem !important; line-height: 1.5 !important; }
+.shipments-erp .text-base { font-size: 1.25rem !important; line-height: 1.5 !important; }
+.shipments-erp .text-lg { font-size: 1.375rem !important; }
+.shipments-erp .text-xl { font-size: 1.5rem !important; }
+.shipments-erp .text-2xl { font-size: 1.875rem !important; }
+.shipments-erp .text-3xl { font-size: 2.25rem !important; }
+.shipments-erp .text-4xl { font-size: 2.75rem !important; }
+
+/* Headings — use Outfit, not pixel font */
+.shipments-erp h1, .shipments-erp h2, .shipments-erp h3 {
+  font-family: var(--font-body) !important;
+}
+.shipments-erp h1 { font-size: 2rem !important; font-weight: 700 !important; }
+.shipments-erp h2 { font-size: 1.625rem !important; font-weight: 600 !important; }
+.shipments-erp h3 { font-size: 1.25rem !important; font-weight: 600 !important; }
+
+/* Table cells */
+.shipments-erp td, .shipments-erp th {
+  font-size: 1rem !important;
+  padding: 0.875rem 1rem !important;
+}
+
+/* All interactive elements */
+.shipments-erp button { font-size: 1rem !important; }
+.shipments-erp input, .shipments-erp select, .shipments-erp textarea {
+  font-size: 1rem !important;
+  padding: 0.625rem 0.75rem !important;
+}
+
+/* Sidebar — needs to be readable */
+.shipments-erp aside { font-size: 1rem !important; }
+.shipments-erp aside span { font-size: 1rem !important; }
+.shipments-erp aside label { font-size: 0.9375rem !important; }
+.shipments-erp aside select { font-size: 1rem !important; }
+
+/* Light content area tokens */
 .shipments-light {
   --background: #f0eef5;
   --card: #ffffff;
   --card-foreground: #1a1a2e;
-  --foreground: #1a1a2e;
-  --muted-foreground: #64618a;
-  --secondary: #ede9fe;
+  --foreground: #111027;
+  --muted-foreground: #3d3a50;
+  --secondary: #f0edf5;
   --secondary-foreground: #1a1a2e;
-  --border: rgba(0, 0, 0, 0.08);
+  --border: rgba(0, 0, 0, 0.1);
   --input-background: #f5f3fa;
   --popover: #ffffff;
   --popover-foreground: #1a1a2e;
-  --primary: #b8860b;
+  --primary: #0d6efd;
   --primary-foreground: #ffffff;
-  --ring: rgba(184, 134, 11, 0.3);
+  --accent: #0891b2;
+  --accent-foreground: #ffffff;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --success: #16a34a;
+  --warning: #d97706;
+  --ring: rgba(13, 110, 253, 0.3);
 }

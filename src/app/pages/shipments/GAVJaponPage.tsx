@@ -72,12 +72,12 @@ export default function GAVJaponPage() {
 
       {/* Warning alert */}
       {showWarning && (
-        <Card padding="sm" className="border-[#ffab00]/30 bg-[#ffab00]/10">
+        <Card padding="sm" className="border-amber-400 bg-amber-50">
           <div className="flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5 text-[#ffab00] shrink-0" />
+            <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
             <div>
-              <p className="text-sm font-medium text-[#ffab00]">Boleta GAV pendiente</p>
-              <p className="text-xs text-[#ffab00]/80">
+              <p className="text-sm font-medium text-amber-800">Boleta GAV pendiente</p>
+              <p className="text-xs text-amber-700">
                 No se ha generado la boleta de gastos fijos para {currentMonth}. Genera la boleta para mantener los registros al día.
               </p>
             </div>

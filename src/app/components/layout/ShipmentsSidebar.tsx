@@ -106,7 +106,7 @@ export function ShipmentsSidebar() {
     <aside
       className={clsx(
         'flex flex-col h-screen bg-card border-r border-border transition-all duration-300',
-        isCollapsed ? 'w-16' : 'w-64',
+        isCollapsed ? 'w-16' : 'w-72',
       )}
     >
       {/* Header */}
@@ -158,7 +158,7 @@ export function ShipmentsSidebar() {
                 {!isCollapsed && (
                   <button
                     onClick={() => toggleSection(section.label)}
-                    className="flex items-center justify-between w-full px-3 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
+                    className="flex items-center justify-between w-full px-3 py-1.5 text-xs font-semibold text-[#b0aec0] uppercase tracking-wider hover:text-white transition-colors"
                   >
                     {section.label}
                     {isOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}

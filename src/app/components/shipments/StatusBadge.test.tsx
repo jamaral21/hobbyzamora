@@ -11,15 +11,15 @@ import { StatusBadge } from './StatusBadge';
 
 describe('StatusBadge', () => {
   const stateExpectations: Array<{ status: string; label: string; variantClass: string }> = [
-    { status: 'por_pagar', label: 'Por Pagar', variantClass: 'text-[#ffab00]' },
+    { status: 'por_pagar', label: 'Por Pagar', variantClass: 'text-amber-600' },
     { status: 'esp_pago', label: 'Esp. Pago', variantClass: 'text-accent' },
-    { status: 'pagado', label: 'Pagado', variantClass: 'text-[#00e676]' },
+    { status: 'pagado', label: 'Pagado', variantClass: 'text-emerald-600' },
     { status: 'sin_pagar', label: 'Sin Pagar', variantClass: 'text-destructive' },
     { status: 'transito', label: '✈️ En Tránsito', variantClass: 'text-accent' },
-    { status: 'llegada', label: '📦 Llegada', variantClass: 'text-[#ffab00]' },
-    { status: 'costeada', label: '✅ Costeada', variantClass: 'text-[#00e676]' },
-    { status: 'pendiente', label: 'Pendiente', variantClass: 'text-[#ffab00]' },
-    { status: 'costeado', label: 'Costeado', variantClass: 'text-[#00e676]' },
+    { status: 'llegada', label: '📦 Llegada', variantClass: 'text-amber-600' },
+    { status: 'costeada', label: '✅ Costeada', variantClass: 'text-emerald-600' },
+    { status: 'pendiente', label: 'Pendiente', variantClass: 'text-amber-600' },
+    { status: 'costeado', label: 'Costeado', variantClass: 'text-emerald-600' },
   ];
 
   stateExpectations.forEach(({ status, label, variantClass }) => {

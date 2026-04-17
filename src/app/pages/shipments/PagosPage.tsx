@@ -39,8 +39,8 @@ export default function PagosPage() {
       <h2 className="text-xl font-semibold text-foreground">Confirmar Pagos</h2>
 
       {successMsg && (
-        <Card padding="sm" className="border-[#00e676]/30 bg-[#00e676]/10">
-          <div className="flex items-center gap-2 text-[#00e676]">
+        <Card padding="sm" className="border-emerald-300 bg-emerald-50">
+          <div className="flex items-center gap-2 text-emerald-600">
             <CheckCircle className="w-5 h-5" />
             <span className="text-sm font-medium">{successMsg}</span>
           </div>

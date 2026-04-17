@@ -89,7 +89,7 @@ export default function GAVChilePage() {
                     </TableCell>
                     <TableCell className="text-center">
                       {g.estado === 'pagado' ? (
-                        <span className="text-[#00e676] text-lg">✓</span>
+                        <span className="text-emerald-600 text-lg">✓</span>
                       ) : (
                         <button
                           type="button"
@@ -101,7 +101,7 @@ export default function GAVChilePage() {
                           }`}
                         >
                           {adjunto ? (
-                            <span className="text-[#00e676]">✓</span>
+                            <span className="text-emerald-600">✓</span>
                           ) : (
                             <span className="text-muted-foreground">✗</span>
                           )}

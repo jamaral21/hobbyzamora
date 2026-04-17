@@ -62,7 +62,7 @@ export default function ConfiguracionPage() {
 
       {/* Success toast */}
       {saved && (
-        <div className="fixed top-4 right-4 z-50 bg-[#00e676]/90 text-black px-4 py-3 rounded-lg shadow-lg text-sm flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+        <div className="fixed top-4 right-4 z-50 bg-emerald-500 text-black px-4 py-3 rounded-lg shadow-lg text-sm flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
           <CheckCircle className="w-4 h-4" /> Configuración guardada
         </div>
       )}

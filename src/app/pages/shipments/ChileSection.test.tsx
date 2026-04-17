@@ -110,7 +110,7 @@ describe('BodegaChilePage', () => {
     render(<BodegaChilePage />, { wrapper: Wrapper });
     // SC-001: precioVenta=14990, costoUnit=8500 → margin ≈ 43.3% → green
     const marginElements = screen.getAllByText(/%$/);
-    const greenMargins = marginElements.filter(el => el.className.includes('text-[#00e676]'));
+    const greenMargins = marginElements.filter(el => el.className.includes('text-emerald-600'));
     expect(greenMargins.length).toBeGreaterThan(0);
   });
 

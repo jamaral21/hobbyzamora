@@ -101,16 +101,16 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold text-foreground">Dashboard</h2>
+      <h2 className="text-2xl font-bold text-foreground">Dashboard</h2>
 
       {/* GAV Warning */}
       {showGAVWarning && (
-        <Card padding="sm" className="border-[#ffab00]/30 bg-[#ffab00]/10">
+        <Card padding="sm" className="border-[#d97706]/40 bg-[#fef3c7]">
           <div className="flex items-center gap-3">
-            <AlertTriangle className="w-5 h-5 text-[#ffab00] shrink-0" />
+            <AlertTriangle className="w-5 h-5 text-[#d97706] shrink-0" />
             <div>
-              <p className="text-sm font-medium text-[#ffab00]">Boleta GAV pendiente</p>
-              <p className="text-xs text-[#ffab00]/80">
+              <p className="text-sm font-medium text-[#92400e]">Boleta GAV pendiente</p>
+              <p className="text-xs text-[#a16207]">
                 No se ha generado la boleta de gastos fijos Japón para este mes.
               </p>
             </div>
@@ -119,13 +119,11 @@ export default function DashboardPage() {
       )}
 
       {/* KPI Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard title="Productos en Japón" value={productosJapon} icon={Package} />
         <KPICard title="Cajas en Tránsito" value={cajasTransito} icon={Plane} variant="warning" />
         <KPICard title="Cajas Llegadas" value={cajasLlegadas} icon={PackageCheck} variant="success" />
         <KPICard title="Unidades en Chile" value={unidadesChile} icon={Warehouse} />
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <KPICard
           title="Boletas Pendientes"
           value={boletasPendientes}
@@ -138,44 +136,35 @@ export default function DashboardPage() {
 
       {/* Visual Timeline */}
       <Card>
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
           Pipeline de Inventario
         </h3>
-        <div className="grid grid-cols-5 items-center gap-2">
-          {/* Japón */}
+        <div className="flex items-center justify-center gap-3">
           <TimelineStage
             label="Japón"
             count={unidadesJapon}
             sublabel="unidades"
             icon={Package}
-            color="text-primary"
-            bgColor="bg-primary/10"
+            color="text-blue-700"
+            bgColor="bg-blue-50"
           />
-          {/* Arrow */}
-          <div className="flex justify-center">
-            <ArrowRight className="w-6 h-6 text-muted-foreground" />
-          </div>
-          {/* Tránsito */}
+          <ArrowRight className="w-5 h-5 text-gray-400 shrink-0" />
           <TimelineStage
             label="Tránsito"
             count={unidadesTransito}
             sublabel="unidades"
             icon={Plane}
-            color="text-[#ffab00]"
-            bgColor="bg-[#ffab00]/10"
+            color="text-amber-700"
+            bgColor="bg-amber-50"
           />
-          {/* Arrow */}
-          <div className="flex justify-center">
-            <ArrowRight className="w-6 h-6 text-muted-foreground" />
-          </div>
-          {/* Chile */}
+          <ArrowRight className="w-5 h-5 text-gray-400 shrink-0" />
           <TimelineStage
             label="Chile"
             count={unidadesChile}
             sublabel="unidades"
             icon={Warehouse}
-            color="text-[#00e676]"
-            bgColor="bg-[#00e676]/10"
+            color="text-emerald-700"
+            bgColor="bg-emerald-50"
           />
         </div>
       </Card>
@@ -194,13 +183,13 @@ function TimelineStage({
   bgColor: string;
 }) {
   return (
-    <div className={`flex flex-col items-center p-4 rounded-xl ${bgColor}`}>
-      <Icon className={`w-6 h-6 ${color} mb-2`} />
-      <span className={`text-2xl font-bold font-[family-name:var(--font-mono)] ${color}`}>
+    <div className={`flex flex-col items-center px-8 py-4 rounded-xl ${bgColor} flex-1`}>
+      <Icon className={`w-5 h-5 ${color} mb-1`} />
+      <span className={`text-xl font-bold font-[family-name:var(--font-mono)] ${color}`}>
         {count}
       </span>
-      <span className="text-xs text-muted-foreground">{sublabel}</span>
-      <span className="text-sm font-medium text-foreground mt-1">{label}</span>
+      <span className="text-[10px] text-muted-foreground">{sublabel}</span>
+      <span className="text-xs font-medium text-foreground mt-0.5">{label}</span>
     </div>
   );
 }

@@ -137,7 +137,7 @@ describe('CosteoPage', () => {
     // Default: 2 products → 50% each = 100%
     const sumEl = screen.getByText('100.00%');
     expect(sumEl).toBeDefined();
-    expect(sumEl.className).toContain('text-[#00e676]');
+    expect(sumEl.className).toContain('text-emerald-600');
   });
 
   it('shows sum in red when percentages do not equal 100%', () => {

@@ -34,13 +34,13 @@ describe('KPICard', () => {
       <KPICard title="Cajas en Tránsito" value={2} icon={Plane} variant="warning" />,
     );
     const valueEl = screen.getByText('2');
-    expect(valueEl.className).toContain('text-[#ffab00]');
+    expect(valueEl.className).toContain('text-amber-600');
   });
 
   it('applies variant styling for success', () => {
     render(<KPICard title="Cajas Llegadas" value={1} icon={Warehouse} variant="success" />);
     const valueEl = screen.getByText('1');
-    expect(valueEl.className).toContain('text-[#00e676]');
+    expect(valueEl.className).toContain('text-emerald-600');
   });
 
   it('applies variant styling for danger', () => {

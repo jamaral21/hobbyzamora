@@ -21,10 +21,10 @@ export default function FlujoCajaPage() {
       <Card>
         <div className="flex justify-between items-center">
           <span className="text-foreground flex items-center gap-2">
-            <ArrowDownCircle className="w-5 h-5 text-[#00e676]" />
+            <ArrowDownCircle className="w-5 h-5 text-emerald-600" />
             Ingresos — Ventas totales
           </span>
-          <PriceDisplay amount={flow.ingresos} currency="CLP" className="font-bold text-[#00e676]" />
+          <PriceDisplay amount={flow.ingresos} currency="CLP" className="font-bold text-emerald-600" />
         </div>
       </Card>
 
@@ -56,7 +56,7 @@ export default function FlujoCajaPage() {
       </Card>
 
       {/* FLUJO NETO */}
-      <Card className={`border-2 ${flow.flujoNeto >= 0 ? 'border-[#00e676]/30 bg-[#00e676]/5' : 'border-destructive/30 bg-destructive/5'}`}>
+      <Card className={`border-2 ${flow.flujoNeto >= 0 ? 'border-emerald-300 bg-emerald-50' : 'border-destructive/30 bg-destructive/5'}`}>
         <div className="flex justify-between items-center">
           <span className="text-lg font-bold text-foreground flex items-center gap-2">
             <Activity className="w-5 h-5" />
@@ -65,7 +65,7 @@ export default function FlujoCajaPage() {
           <PriceDisplay
             amount={flow.flujoNeto}
             currency="CLP"
-            className={`text-xl font-bold ${flow.flujoNeto >= 0 ? 'text-[#00e676]' : 'text-destructive'}`}
+            className={`text-xl font-bold ${flow.flujoNeto >= 0 ? 'text-emerald-600' : 'text-destructive'}`}
           />
         </div>
         <p className="text-xs text-muted-foreground mt-2">

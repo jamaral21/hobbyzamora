@@ -20,7 +20,9 @@ export function ShipmentsApp() {
   return (
     <ShipmentsRoleProvider>
       <ShipmentsDataProvider>
-        <ShipmentsLayoutInner />
+        <div className="shipments-erp">
+          <ShipmentsLayoutInner />
+        </div>
       </ShipmentsDataProvider>
     </ShipmentsRoleProvider>
   );

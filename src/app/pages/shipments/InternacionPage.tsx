@@ -118,8 +118,8 @@ export default function InternacionPage() {
                   </div>
 
                   {selectedBox.internacion && (
-                    <div className="p-3 rounded-lg bg-[#00e676]/10 border border-[#00e676]/20">
-                      <p className="text-xs text-[#00e676] font-medium">Internación ya registrada</p>
+                    <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+                      <p className="text-xs text-emerald-600 font-medium">Internación ya registrada</p>
                     </div>
                   )}
 

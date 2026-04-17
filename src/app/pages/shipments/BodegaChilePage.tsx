@@ -41,8 +41,8 @@ export default function BodegaChilePage() {
   }
 
   const marginColorClass: Record<string, string> = {
-    green: 'text-[#00e676]',
-    orange: 'text-[#ffab00]',
+    green: 'text-emerald-600',
+    orange: 'text-amber-600',
     red: 'text-destructive',
   };
 
