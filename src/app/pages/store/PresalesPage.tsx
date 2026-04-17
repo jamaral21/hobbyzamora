@@ -346,7 +346,7 @@ function AvailablePresales({
 }
 
 function PresalesContent() {
-  const [activeTab, setActiveTab] = useState<PresaleTab>('reservas');
+  const [activeTab, setActiveTab] = useState<PresaleTab>('disponibles');
   const [reservations, setReservations] = useState<PresaleReservation[]>([]);
   const [loading, setLoading] = useState(true);
   const { addItem, items: cartItems } = useCartStore();
