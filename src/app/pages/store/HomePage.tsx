@@ -161,9 +161,14 @@ export default function HomePage() {
               </Link>
             </div>
             {isAuthenticated ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div
+                className="flex gap-5 overflow-x-auto scrollbar-hide pb-2"
+                style={{ scrollbarWidth: 'none' }}
+              >
                 {presaleProducts.map((product) => (
-                  <ProductCard key={product.id} product={product} />
+                  <div key={product.id} className="flex-shrink-0 w-[280px]">
+                    <ProductCard product={product} />
+                  </div>
                 ))}
               </div>
             ) : (
