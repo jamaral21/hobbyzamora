@@ -1,501 +1,464 @@
-# Tickets Backend — Shipments ERP
+# Tickets Backend — Shipments ERP (HobbyZamora)
 
-**Proyecto:** HobbyZamora Shipments ERP  
 **Stack:** Express + TypeScript + Prisma + SQLite/PostgreSQL  
-**Base path API:** `/api/shipments/`  
-**Referencia frontend:** `src/app/data/shipmentsMockData.ts` (tipos), `src/app/contexts/ShipmentsDataContext.tsx` (mutaciones)  
-**Referencia API:** `reference/shipments-api-spec.md`
+**Base path:** `/api/shipments/`  
+**Estado:** Frontend implementado con mock data, esperando backend real  
+**Referencia API completa:** `reference/shipments-api-spec.md`  
+**Referencia tipos:** `src/app/data/shipmentsMockData.ts`
 
 ---
 
-## Fase 1 — Base de datos y modelos
+## ¿Qué es el Shipments ERP?
 
-### TICKET-001: Crear schema Prisma para Shipments ERP
+Sistema de gestión de importaciones de Japón a Chile. Cubre el ciclo completo: compra en Japón → boleta → envío en caja → internación aduanera → costeo → bodega Chile → venta. Tiene 19 módulos organizados en 5 secciones, con 4 roles de acceso (admin, japón, chile, contador).
 
-**Prioridad:** Alta  
-**Dependencias:** Ninguna
-
-Crear las tablas en `server/prisma/schema.prisma`:
-
-| Tabla | Campos clave |
-|-------|-------------|
-| `shipments_purchases` | id (autoincrement), sku (unique, JP-XXXX), fecha, tipo, nombre, ean?, tarjeta, precioU, cant, total, estado (por_pagar/esp_pago/pagado), bodega (japon/transito/chile), tc? |
-| `shipments_invoices` | id (string, BOL-YYYY-NNN), fecha, productos, subtotalJPY, comision, totalJPY, tc, totalCLP, estado (sin_pagar/pagado) |
-| `shipments_invoice_items` | id, invoiceId (FK), fecha, tipo, nombre, ean, precioU, cant, comPct, tc |
-| `shipments_boxes` | id (string, nombre único), fecha, estado (transito/llegada/costeada), flete_jpy, mo_horas, mo_tarifa, mat_jpy, tc_envio, arancel?, iva?, internTotal? |
-| `shipments_box_products` | id, boxId (FK), compraId (FK), sku, nombre, ean, cant, precioU, tc |
-| `shipments_chile_stock` | id, sku, nombre, ean, cajaId (FK), cant, costoUnit, precioVenta? |
-| `shipments_web_orders` | id (WEB-NNN), fecha, portal, orden, estado, costoEnvioIntern, tc |
-| `shipments_web_order_products` | id, webOrderId (FK), nombre, ean, cant, precioUSD, precioCLP, pctCosteo, costoUnit |
-| `shipments_local_purchases` | id (CC-NNN), fecha, tipo, docTipo, proveedor, descripcion, monto, iva, ivaCredito, estado |
-| `shipments_sales` | id, fecha, producto, ean, cant, precioVenta, costo, total, canal |
-| `shipments_gav_chile` | id, concepto, monto, adjunto, estado, docTipo, ivaCredito, fechaPago? |
-| `shipments_config` | id (singleton), metodosPago (JSON), cuentas (JSON), arrBodegaJP, appBeyblade, comisionPct |
-
-**Criterios de aceptación:**
-- Migration generada y aplicable sin errores
-- Relaciones FK correctas entre tablas
-- Índices en: `sku` (purchases), `id` (invoices, boxes), `sku` (chile_stock)
-- Seed con datos iniciales de config (arriendo ¥25.000, app ¥550, comisión 13%, 3 cuentas bancarias, 10 métodos de pago)
+El frontend ya está construido en React con datos mock. Estos tickets implementan el backend real para reemplazar los mocks.
 
 ---
 
-### TICKET-002: Crear middleware de autorización por rol Shipments
+## Fase 1 — Base de datos (hacer primero)
 
-**Prioridad:** Alta  
-**Dependencias:** TICKET-001
+### TICKET-001: Crear las tablas del ERP en la base de datos
 
-Crear `server/src/middleware/shipmentsAuth.ts`:
+**¿Qué hace?** Crea 12 tablas nuevas en Prisma para almacenar todos los datos del ERP de importaciones.
 
-- Middleware `requireShipmentsRole(...roles: string[])` que valida `req.user.role` contra la matriz ROLE_PAGES
-- Mapeo de rutas a módulos para determinar acceso
-- Retorna 403 si el rol no tiene acceso
+**¿Por qué?** Sin estas tablas no se puede guardar nada — compras, boletas, cajas, stock, ventas, etc. Todo el backend depende de esto.
 
-**Matriz de roles:**
-```
-admin:    todos los módulos
-japon:    compras, boletas, pagos, gav-japon, cajas
-chile:    dashboard, bodega-japon, bodega-transito, bodega-chile, ventas, cajas, compras-web, internacion, costeo, compras-chile
-contador: dashboard, eerr, balance, flujo, gav-chile, gav-japon
-```
+**Tablas a crear:**
+
+| Tabla | Para qué sirve |
+|-------|----------------|
+| `shipments_purchases` | Registro de compras en Japón (SKU, precio ¥, cantidad, estado pago, ubicación) |
+| `shipments_invoices` | Boletas generadas (ID BOL-YYYY-NNN, totales ¥/CLP, estado pago) |
+| `shipments_invoice_items` | Líneas de cada boleta (producto, precio, cantidad, comisión) |
+| `shipments_boxes` | Cajas de envío (nombre, costos flete/MO/materiales, estado transito/llegada/costeada) |
+| `shipments_box_products` | Productos dentro de cada caja (SKU, cantidad, precio) |
+| `shipments_chile_stock` | Inventario en Chile después del costeo (SKU, costo unitario, precio venta) |
+| `shipments_web_orders` | Pedidos de portales web (Amazon, Rakuten, etc.) |
+| `shipments_web_order_products` | Productos de cada pedido web |
+| `shipments_local_purchases` | Compras y gastos locales en Chile |
+| `shipments_sales` | Ventas realizadas (producto, cantidad, precio, canal) |
+| `shipments_gav_chile` | Gastos fijos mensuales de Chile (arriendo, contador, POS, etc.) |
+| `shipments_config` | Configuración del sistema (métodos pago, cuentas bancarias, parámetros) |
+
+**Prioridad:** Alta — bloquea todo lo demás
 
 ---
 
-## Fase 2 — Sección Japón (5 endpoints)
+### TICKET-002: Middleware de autorización por rol
 
-### TICKET-003: CRUD Compras (Registro de Compras)
+**¿Qué hace?** Crea un middleware que verifica si el usuario tiene permiso para acceder a cada módulo del ERP según su rol.
 
-**Prioridad:** Alta  
-**Dependencias:** TICKET-001, TICKET-002
+**¿Por qué?** El operador de Japón no debería ver los módulos de Chile, y el contador no debería poder registrar compras. Cada rol ve solo lo que le corresponde.
 
-Crear `server/src/routes/shipmentsCompras.ts`:
+**Roles y acceso:**
+- **admin** — ve todo (19 módulos)
+- **japon** — compras, boletas, pagos, GAV Japón, cajas
+- **chile** — dashboard, bodegas, ventas, cajas, compras web, internación, costeo, compras locales
+- **contador** — dashboard, estado resultados, balance, flujo de caja, GAV Chile, GAV Japón
 
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/shipments/compras` | GET | Listar con filtros `?estado=X&bodega=Y` |
-| `/api/shipments/compras` | POST | Crear compra, auto-asignar SKU `JP-XXXX` |
-| `/api/shipments/compras/:id` | PUT | Editar compra |
-| `/api/shipments/compras/:id` | DELETE | Eliminar (solo si SKU no está en cajas activas) |
+**Prioridad:** Alta
 
-**Lógica de SKU:**
-- Consultar max SKU existente: `SELECT MAX(CAST(REPLACE(sku, 'JP-', '') AS INTEGER)) FROM shipments_purchases`
-- Nuevo SKU = `JP-` + `(max + 1).padStart(4, '0')`
+---
 
-**Validaciones:**
+## Fase 2 — Sección Japón
+
+### TICKET-003: Registro de Compras (CRUD)
+
+**¿Qué hace?** Permite registrar, editar, listar y eliminar compras realizadas en Japón. Al crear una compra, el sistema asigna automáticamente un SKU correlativo (JP-0001, JP-0002, etc.).
+
+**¿Por qué?** Es el punto de entrada de todo el flujo — cada producto que se importa empieza como una compra registrada aquí.
+
+**Endpoints:**
+- `GET /compras` — listar con filtros por estado de pago y ubicación
+- `POST /compras` — crear compra (auto-asigna SKU)
+- `PUT /compras/:id` — editar
+- `DELETE /compras/:id` — eliminar (solo si el SKU no está en cajas activas)
+
+**Reglas importantes:**
+- SKU formato `JP-XXXX`, siempre correlativo
 - `precioU > 0`, `cant > 0`, `nombre` requerido
-- DELETE: verificar que no existan `shipments_box_products` con ese SKU en cajas con estado `transito` o `llegada`
+- No se puede eliminar si el producto ya está en una caja en tránsito o llegada
+
+**Prioridad:** Alta
 
 ---
 
-### TICKET-004: Bodega Japón (lectura)
+### TICKET-004: Bodega Japón (solo lectura)
 
-**Prioridad:** Alta  
-**Dependencias:** TICKET-003
+**¿Qué hace?** Muestra los productos disponibles en Japón — es decir, los que aún no se han enviado en cajas ni están en Chile.
 
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/shipments/bodega-japon` | GET | Productos con disponible > 0, KPIs |
+**¿Por qué?** El operador necesita saber qué productos puede empacar en la siguiente caja de envío.
 
-**Lógica `calcDisponibleBySku(sku)`:**
-```sql
-disponible = compra.cant 
-  - SUM(box_products.cant WHERE box.estado IN ('transito', 'llegada'))
-  - SUM(chile_stock.cant WHERE chile_stock.sku = compra.sku)
+**Endpoint:** `GET /bodega-japon`
+
+**Lógica clave — calcular disponible por SKU:**
 ```
+disponible = compra.cant - unidades_en_cajas_activas - unidades_en_chile_stock
+```
+Solo muestra productos con disponible > 0. Incluye KPIs: SKUs disponibles, unidades, total ¥, total CLP estimado.
 
-**KPIs:** SKUs disponibles, unidades disponibles, total ¥, total CLP estimado
+**Prioridad:** Alta
 
 ---
 
-### TICKET-005: CRUD Boletas
+### TICKET-005: Boletas (CRUD)
 
-**Prioridad:** Alta  
-**Dependencias:** TICKET-003
+**¿Qué hace?** Permite generar boletas a partir de productos seleccionados, con comisión configurable. También listar, ver detalle y eliminar boletas.
 
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/shipments/boletas` | GET | Listar todas |
-| `/api/shipments/boletas/:id` | GET | Detalle con line items |
-| `/api/shipments/boletas` | POST | Generar boleta desde productos seleccionados |
-| `/api/shipments/boletas/:id` | DELETE | Eliminar (solo si `sin_pagar`) |
+**¿Por qué?** Las boletas son el documento que registra la obligación de pago con el proveedor en Japón.
+
+**Endpoints:**
+- `GET /boletas` — listar todas
+- `GET /boletas/:id` — detalle con líneas
+- `POST /boletas` — generar desde productos seleccionados
+- `DELETE /boletas/:id` — eliminar (solo si `sin_pagar`)
 
 **Fórmulas:**
 - `subtotalJPY = Σ(precioU × cant)`
 - `totalJPY = subtotalJPY × (1 + comision/100)`
 - `totalCLP = totalJPY / tc`
-- ID: `BOL-YYYY-NNN` (correlativo por año)
+- ID formato: `BOL-YYYY-NNN`
+
+**Prioridad:** Alta
 
 ---
 
 ### TICKET-006: Confirmar Pagos
 
-**Prioridad:** Alta  
-**Dependencias:** TICKET-005
+**¿Qué hace?** Permite confirmar el pago de una boleta, lo que actualiza el estado de la boleta y de todas las compras relacionadas a "pagado".
 
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/shipments/pagos/:boletaId/confirmar` | POST | Confirmar pago |
+**¿Por qué?** Necesitamos saber qué boletas ya se pagaron para los estados financieros y para que el operador sepa qué falta por pagar.
 
-**Lógica:**
-- Validar boleta con estado `sin_pagar`
-- Actualizar `boleta.estado → 'pagado'`
-- Actualizar todas las compras relacionadas (via invoice_items): `compra.estado → 'pagado'`
+**Endpoint:** `POST /pagos/:boletaId/confirmar`
+
+**Lógica (transacción atómica):**
+1. Validar que la boleta está `sin_pagar`
+2. `boleta.estado → 'pagado'`
+3. Todas las compras de esa boleta: `compra.estado → 'pagado'`
+
+**Prioridad:** Alta
+
+---
+
+### TICKET-007: Gastos Fijos Japón (GAV)
+
+**¿Qué hace?** Muestra los gastos fijos mensuales de Japón (arriendo bodega ¥25.000 + app Beyblade ¥550) y permite generar la boleta GAV del mes.
+
+**¿Por qué?** Estos gastos recurrentes deben registrarse cada mes para que aparezcan en el estado de resultados. Si no se genera la boleta antes del día 3, aparece una alerta.
+
+**Endpoints:**
+- `GET /gav-japon/historial` — últimos 6 meses + alerta
+- `POST /gav-japon/generar` — generar boleta GAV del mes actual
+
+**Reglas:** Solo una boleta GAV por mes. ID formato: `BOL-YYYY-GAV-NNN`.
+
+**Prioridad:** Media
+
+---
+
+## Fase 3 — Sección Envíos
+
+### TICKET-008: Cajas / Envíos (CRUD)
+
+**¿Qué hace?** Permite crear cajas de envío seleccionando productos de la bodega Japón, con costos de flete, mano de obra y materiales. También editar y eliminar cajas.
+
+**¿Por qué?** Las cajas son el vehículo que mueve productos de Japón a Chile. Cada caja tiene costos asociados que luego se distribuyen en el costeo.
+
+**Endpoints:**
+- `GET /cajas` — listar todas
+- `POST /cajas` — crear caja con productos
+- `PUT /cajas/:id` — editar (solo en estado `transito`)
+- `DELETE /cajas/:id` — eliminar (solo `transito` o `llegada`)
+
+**Reglas importantes:**
+- Nombre de caja debe ser único
+- Cantidad por producto ≤ disponible en bodega Japón
+- Al crear: productos con disponible = 0 pasan a `bodega = 'transito'`
+- Al eliminar: restaurar `compra.bodega` si corresponde
 - Transacción atómica
 
----
-
-### TICKET-007: GAV Japón
-
-**Prioridad:** Media  
-**Dependencias:** TICKET-005
-
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/shipments/gav-japon/historial` | GET | Últimos 6 meses + alerta |
-| `/api/shipments/gav-japon/generar` | POST | Generar boleta GAV del mes |
-
-**Lógica:**
-- Solo una boleta GAV por mes (verificar duplicado)
-- Gastos: arriendo bodega + app Beyblade (desde config)
-- ID: `BOL-YYYY-GAV-NNN`
-- Alerta: `true` si día ≥ 3 y no existe boleta GAV del mes actual
+**Prioridad:** Alta
 
 ---
 
-## Fase 3 — Sección Envíos (5 endpoints)
+### TICKET-009: Bodega Tránsito (solo lectura)
 
-### TICKET-008: CRUD Cajas / Envíos
+**¿Qué hace?** Muestra las cajas agrupadas por estado (tránsito, llegada, costeada) con KPIs.
 
-**Prioridad:** Alta  
-**Dependencias:** TICKET-004
+**¿Por qué?** El operador de Chile necesita ver qué cajas vienen en camino y cuáles ya llegaron para hacer el costeo.
 
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/shipments/cajas` | GET | Listar todas |
-| `/api/shipments/cajas` | POST | Crear caja con productos |
-| `/api/shipments/cajas/:id` | PUT | Editar (solo `transito`) |
-| `/api/shipments/cajas/:id` | DELETE | Eliminar (solo `transito`/`llegada`) |
+**Endpoint:** `GET /bodega-transito`
 
-**Lógica POST:**
-- Validar nombre único (409 si duplicado)
-- Validar `cant ≤ disponible` por producto
-- Estado inicial: `transito`
-- Si un producto queda con disponible = 0 → `compra.bodega = 'transito'`
-- Transacción atómica
-
-**Lógica DELETE:**
-- Restaurar `compra.bodega` si corresponde
-- Eliminar `box_products` asociados
+**Prioridad:** Media
 
 ---
 
-### TICKET-009: Bodega Tránsito (lectura)
+### TICKET-010: Compras Web (CRUD)
 
-**Prioridad:** Media  
-**Dependencias:** TICKET-008
+**¿Qué hace?** Permite registrar pedidos de portales web (Amazon Japan, Amazon USA, Rakuten, etc.) con soporte multi-moneda.
 
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/shipments/bodega-transito` | GET | Cajas agrupadas por estado + KPIs |
+**¿Por qué?** No todas las compras se hacen en tienda física — algunas vienen de portales online y necesitan tracking separado.
 
----
+**Endpoints:**
+- `GET /compras-web` — listar
+- `POST /compras-web` — registrar pedido
 
-### TICKET-010: CRUD Compras Web
+**ID formato:** `WEB-NNN`
 
-**Prioridad:** Media  
-**Dependencias:** TICKET-001
-
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/shipments/compras-web` | GET | Listar pedidos web |
-| `/api/shipments/compras-web` | POST | Registrar pedido web |
-
-**ID:** `WEB-NNN` (correlativo)
+**Prioridad:** Media
 
 ---
 
-### TICKET-011: Internación
+### TICKET-011: Internación (aduanas)
 
-**Prioridad:** Alta  
-**Dependencias:** TICKET-008
+**¿Qué hace?** Permite registrar el arancel CIF y el IVA pagado en aduana para cada caja que llega a Chile.
 
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/shipments/internacion` | GET | Cajas con estado de internación |
-| `/api/shipments/internacion/:cajaId` | PUT | Guardar arancel + IVA |
+**¿Por qué?** Los costos de internación se necesitan para el costeo de productos y el IVA es crédito fiscal que aparece en el estado de resultados.
 
-**Lógica:**
-- `total = arancel + iva`
-- IVA se marca como crédito fiscal (usado en EE.RR.)
+**Endpoints:**
+- `GET /internacion` — cajas con estado de internación
+- `PUT /internacion/:cajaId` — guardar arancel + IVA
+
+**Prioridad:** Alta
 
 ---
 
 ### TICKET-012: Costeo de Cajas
 
-**Prioridad:** Alta  
-**Dependencias:** TICKET-008, TICKET-011
+**¿Qué hace?** Distribuye todos los costos de una caja (flete, MO, materiales, internación) entre sus productos para calcular el costo unitario en CLP de cada uno. Al confirmar, crea el stock en Chile.
 
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/shipments/costeo/cajas-disponibles` | GET | Cajas en estado `llegada` |
-| `/api/shipments/costeo/:cajaId/confirmar` | POST | Confirmar costeo |
+**¿Por qué?** Sin costeo no sabemos cuánto nos costó cada producto en CLP, y no podemos calcular márgenes ni precios de venta.
+
+**Endpoints:**
+- `GET /costeo/cajas-disponibles` — cajas en estado `llegada`
+- `POST /costeo/:cajaId/confirmar` — confirmar costeo
 
 **Lógica de confirmación (transacción atómica):**
-1. Validar `Σ(pct) = 100`
-2. Calcular `costoUnit` por producto: `(subtotalCLP × pct/100 + fleteCLP × pct/100 + moCLP × pct/100 + matCLP × pct/100 + internCLP × pct/100) / cant`
-3. Crear entradas en `shipments_chile_stock`
-4. `caja.estado → 'costeada'`
-5. Para cada compra: si `calcDisponibleBySku(sku) = 0` → `compra.bodega = 'chile'`
+1. Validar que los porcentajes suman exactamente 100%
+2. Calcular costo unitario por producto
+3. Crear entradas en `chile_stock` con el costo calculado
+4. Marcar caja como `costeada`
+5. Actualizar `compra.bodega → 'chile'` si disponible = 0
+
+**Fórmula costo unitario:**
+```
+costoUnit = (subtotalCLP × pct/100 + fleteCLP × pct/100 + moCLP × pct/100 + matCLP × pct/100 + internCLP × pct/100) / cant
+```
+
+**Prioridad:** Alta
 
 ---
 
-## Fase 4 — Sección Chile (4 endpoints)
+## Fase 4 — Sección Chile
 
-### TICKET-013: Bodega Chile + actualizar precio
+### TICKET-013: Bodega Chile + precio de venta
 
-**Prioridad:** Alta  
-**Dependencias:** TICKET-012
+**¿Qué hace?** Muestra el inventario disponible para venta en Chile con costo unitario, precio de venta editable, y margen calculado.
 
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/shipments/bodega-chile` | GET | Stock Chile + KPIs |
-| `/api/shipments/bodega-chile/:id/precio` | PUT | Actualizar precio de venta |
+**¿Por qué?** El operador de Chile necesita ver qué tiene para vender, a qué costo, y poder fijar precios con visibilidad del margen.
 
-**KPIs:** Unidades totales, valor inventario (Σ cant × costoUnit), productos sin precio
+**Endpoints:**
+- `GET /bodega-chile` — stock + KPIs (unidades, valor inventario, sin precio)
+- `PUT /bodega-chile/:id/precio` — actualizar precio de venta
+
+**Prioridad:** Alta
 
 ---
 
 ### TICKET-014: Ventas
 
-**Prioridad:** Alta  
-**Dependencias:** TICKET-013
+**¿Qué hace?** Permite registrar ventas desde múltiples canales (Instagram, TikTok, Mercado Libre, Web, Local) y descuenta automáticamente del stock.
 
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/shipments/ventas` | GET | Listar ventas |
-| `/api/shipments/ventas` | POST | Registrar venta |
+**¿Por qué?** Cada venta reduce el inventario y alimenta los estados financieros.
 
-**Lógica POST:**
-- Validar `cant ≤ stockEntry.cant`
-- Descontar `cant` del stock
-- `total = precioVenta × cant`
-- `costo = stockEntry.costoUnit`
-- Canales: Instagram, TikTok, Mercado Libre, Web, Local
+**Endpoints:**
+- `GET /ventas` — listar
+- `POST /ventas` — registrar venta
+
+**Reglas:** `cant ≤ stock disponible`, `total = precioVenta × cant`, `costo` se toma del stock.
+
+**Prioridad:** Alta
 
 ---
 
 ### TICKET-015: Compras Locales
 
-**Prioridad:** Media  
-**Dependencias:** TICKET-001
+**¿Qué hace?** Registra compras y gastos operacionales en Chile (productos locales, gastos varios). Si es factura, el IVA se marca como crédito fiscal.
 
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/shipments/compras-chile` | GET | Listar |
-| `/api/shipments/compras-chile` | POST | Registrar compra local |
+**¿Por qué?** Los gastos locales afectan el flujo de caja y el estado de resultados.
 
-**ID:** `CC-NNN` (correlativo)  
-**Lógica:** Si `docTipo = 'factura'` → `ivaCredito = true`
+**Endpoints:**
+- `GET /compras-chile` — listar
+- `POST /compras-chile` — registrar
 
----
+**ID formato:** `CC-NNN`. Si `docTipo = 'factura'` → `ivaCredito = true`.
 
-### TICKET-016: GAV Chile
-
-**Prioridad:** Media  
-**Dependencias:** TICKET-001
-
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/shipments/gav-chile` | GET | Listar gastos fijos |
-| `/api/shipments/gav-chile/:id/confirmar` | PUT | Confirmar con comprobante |
-
-**Lógica:**
-- Validar `adjunto = true` antes de confirmar
-- `estado → 'pagado'`, `fechaPago → now()`
+**Prioridad:** Media
 
 ---
 
-## Fase 5 — Finanzas (3 endpoints, solo lectura)
+### TICKET-016: Gastos Fijos Chile (GAV)
+
+**¿Qué hace?** Gestiona los gastos fijos mensuales de Chile (arriendo, contador, POS, etc.) con comprobante obligatorio antes de confirmar.
+
+**¿Por qué?** Solo los gastos confirmados (con comprobante) aparecen en el estado de resultados.
+
+**Endpoints:**
+- `GET /gav-chile` — listar
+- `PUT /gav-chile/:id/confirmar` — confirmar (requiere `adjunto = true`)
+
+**Prioridad:** Media
+
+---
+
+## Fase 5 — Finanzas (solo lectura, cálculos)
 
 ### TICKET-017: Estado de Resultados
 
-**Prioridad:** Media  
-**Dependencias:** TICKET-014, TICKET-016
+**¿Qué hace?** Calcula y retorna el estado de resultados: ingresos por canal, costo de venta, margen bruto, GAV, EBIT, IVA crédito, resultado neto.
 
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/shipments/eerr` | GET | Estado de resultados calculado |
+**¿Por qué?** El contador necesita ver la rentabilidad del negocio de importación.
 
-**Fórmulas:**
+**Endpoint:** `GET /eerr`
+
+**Fórmula:**
 ```
-Ingresos = Σ(venta.total)
-CostoVenta = Σ(venta.costo × venta.cant)
-MargenBruto = Ingresos - CostoVenta
-GAVJapon = Σ(boletas GAV con estado 'pagado').totalCLP
-GAVChile = Σ(gav_chile con estado 'pagado').monto
-EBIT = MargenBruto - GAVJapon - GAVChile
-IVACredito = Σ(internacion.iva) + Σ(compras_chile WHERE ivaCredito=true).iva
-ResultadoNeto = EBIT + IVACredito
+Ingresos = Σ ventas
+- Costo de Venta = Σ (costo × cant vendida)
+= Margen Bruto
+- GAV Japón (solo pagado) - GAV Chile (solo pagado)
+= EBIT
++ IVA Crédito (internación + facturas locales)
+= Resultado Neto
 ```
 
-**Importante:** Solo GAV con estado `pagado` se incluye.
+**Prioridad:** Media
 
 ---
 
 ### TICKET-018: Balance General
 
-**Prioridad:** Media  
-**Dependencias:** TICKET-017
+**¿Qué hace?** Calcula activos (caja + inventarios + IVA crédito), pasivos (boletas sin pagar), y patrimonio.
 
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/shipments/balance` | GET | Balance general calculado |
+**Endpoint:** `GET /balance`
 
-**Fórmulas:**
-```
-InvChile = Σ(chile_stock.cant × chile_stock.costoUnit)
-InvJapon = Σ(compra.precioU × compra.cant / compra.tc) WHERE bodega='japon'
-IVACredito = Σ(internacion.iva) + Σ(compras_chile WHERE ivaCredito).iva
-Activos = CajaEstimada + InvChile + InvJapon + IVACredito
-Pasivos = Σ(boletas WHERE estado='sin_pagar').totalCLP
-Patrimonio = Activos - Pasivos
-```
+**Prioridad:** Media
 
 ---
 
 ### TICKET-019: Flujo de Caja
 
-**Prioridad:** Media  
-**Dependencias:** TICKET-017
+**¿Qué hace?** Calcula ingresos (ventas), egresos Japón (boletas pagadas), egresos Chile (GAV + compras locales pagadas), y flujo neto.
 
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/shipments/flujo` | GET | Flujo de caja calculado |
+**Endpoint:** `GET /flujo`
 
-**Fórmulas:**
-```
-Ingresos = Σ(ventas.total)
-EgresosJP = Σ(boletas WHERE estado='pagado').totalCLP
-EgresosCL = Σ(gav_chile WHERE estado='pagado').monto + Σ(compras_chile WHERE estado='pagado').monto
-FlujoNeto = Ingresos - EgresosJP - EgresosCL
-```
+**Prioridad:** Media
 
 ---
 
-## Fase 6 — Principal (2 endpoints)
+## Fase 6 — Principal
 
 ### TICKET-020: Dashboard
 
-**Prioridad:** Media  
-**Dependencias:** TICKET-014
+**¿Qué hace?** Retorna KPIs del negocio (productos en Japón, cajas en tránsito, unidades en Chile, boletas pendientes, ventas del mes, margen promedio) + alerta de GAV pendiente.
 
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/shipments/dashboard` | GET | KPIs + timeline + alerta GAV |
+**Endpoint:** `GET /dashboard`
 
-**KPIs:**
-- Productos en Japón (disponible > 0)
-- Cajas en tránsito / llegadas
-- Unidades en Chile
-- Boletas pendientes (sin_pagar)
-- Ventas del mes actual
-- Margen promedio
-
-**Alerta GAV:** `true` si día ≥ 3 y no existe boleta GAV del mes actual
+**Prioridad:** Media
 
 ---
 
 ### TICKET-021: Configuración
 
-**Prioridad:** Baja  
-**Dependencias:** TICKET-001
+**¿Qué hace?** Permite leer y actualizar la configuración del sistema: métodos de pago, cuentas bancarias, y parámetros (arriendo, app, comisión).
 
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/api/shipments/config` | GET | Obtener config |
-| `/api/shipments/config` | PUT | Actualizar config |
+**Endpoints:**
+- `GET /config` — obtener
+- `PUT /config` — actualizar
 
-**Campos:** métodos de pago (10 slots), cuentas bancarias (3), arriendo bodega JP, app Beyblade, comisión %
+**Prioridad:** Baja
 
 ---
 
-## Fase 7 — Integración y migración
+## Fase 7 — Integración
 
-### TICKET-022: Registrar rutas en Express
+### TICKET-022: Montar todas las rutas en Express
 
-**Prioridad:** Alta  
-**Dependencias:** Todos los tickets de rutas
+**¿Qué hace?** Crea el router principal que monta los 19 sub-routers bajo `/api/shipments/`.
 
-Crear `server/src/routes/shipments.ts` como router principal que monta todos los sub-routers:
-
-```typescript
-router.use('/compras', comprasRouter);
-router.use('/boletas', boletasRouter);
-router.use('/pagos', pagosRouter);
-router.use('/gav-japon', gavJaponRouter);
-router.use('/cajas', cajasRouter);
-router.use('/bodega-japon', bodegaJaponRouter);
-router.use('/bodega-transito', bodegaTransitoRouter);
-router.use('/compras-web', comprasWebRouter);
-router.use('/internacion', internacionRouter);
-router.use('/costeo', costeoRouter);
-router.use('/bodega-chile', bodegaChileRouter);
-router.use('/ventas', ventasRouter);
-router.use('/compras-chile', comprasChileRouter);
-router.use('/gav-chile', gavChileRouter);
-router.use('/eerr', eerrRouter);
-router.use('/balance', balanceRouter);
-router.use('/flujo', flujoRouter);
-router.use('/dashboard', dashboardRouter);
-router.use('/config', configRouter);
-```
-
-Montar en `server/src/index.ts`: `app.use('/api/shipments', shipmentsRouter);`
+**Prioridad:** Alta (hacer cuando los endpoints estén listos)
 
 ---
 
 ### TICKET-023: Conectar frontend a API real
 
-**Prioridad:** Alta  
-**Dependencias:** TICKET-022
+**¿Qué hace?** Reemplaza el mock data del frontend por llamadas reales al backend.
 
-Reemplazar `ShipmentsDataContext.tsx` para que use fetch al backend en vez de mock data:
-- Crear `src/app/lib/shipmentsApi.ts` con funciones para cada endpoint
-- Crear hooks `useShipmentsData()` que llamen a la API
-- Mantener mock data como fallback si el backend no responde
-- Migrar mutaciones de estado local a llamadas API + refetch
+**¿Por qué?** Hoy el frontend funciona con datos ficticios en memoria. Este ticket lo conecta al backend real.
+
+**Prioridad:** Alta (hacer al final)
 
 ---
 
 ### TICKET-024: Seed de datos iniciales
 
-**Prioridad:** Baja  
-**Dependencias:** TICKET-001
+**¿Qué hace?** Carga datos iniciales en la base de datos: configuración por defecto, cuentas bancarias, métodos de pago, conceptos GAV Chile.
 
-Agregar seed en `server/prisma/seed.ts`:
-- Config por defecto (arriendo ¥25.000, app ¥550, comisión 13%)
-- 3 cuentas bancarias
-- 10 métodos de pago
-- 5 conceptos GAV Chile (Arriendo, Contador, Cuenta corriente, POS, Comisión web)
+**Prioridad:** Baja
 
 ---
 
-## Resumen de prioridades
+## Resumen
 
-| Prioridad | Tickets |
-|-----------|---------|
-| **Alta** | 001, 002, 003, 004, 005, 006, 008, 011, 012, 013, 014, 022, 023 |
-| **Media** | 007, 009, 010, 015, 016, 017, 018, 019, 020 |
-| **Baja** | 021, 024 |
+| # | Título | Fase | Prioridad |
+|---|--------|------|-----------|
+| 1 | Crear tablas Prisma | BD | Alta |
+| 2 | Middleware de roles | BD | Alta |
+| 3 | CRUD Compras (auto-SKU) | Japón | Alta |
+| 4 | Bodega Japón (disponible) | Japón | Alta |
+| 5 | CRUD Boletas (comisión) | Japón | Alta |
+| 6 | Confirmar Pagos | Japón | Alta |
+| 7 | GAV Japón (mensual) | Japón | Media |
+| 8 | CRUD Cajas/Envíos | Envíos | Alta |
+| 9 | Bodega Tránsito | Envíos | Media |
+| 10 | Compras Web | Envíos | Media |
+| 11 | Internación (aduanas) | Envíos | Alta |
+| 12 | Costeo de Cajas | Envíos | Alta |
+| 13 | Bodega Chile + precio | Chile | Alta |
+| 14 | Ventas (multi-canal) | Chile | Alta |
+| 15 | Compras Locales | Chile | Media |
+| 16 | GAV Chile (comprobante) | Chile | Media |
+| 17 | Estado de Resultados | Finanzas | Media |
+| 18 | Balance General | Finanzas | Media |
+| 19 | Flujo de Caja | Finanzas | Media |
+| 20 | Dashboard (KPIs) | Principal | Media |
+| 21 | Configuración | Principal | Baja |
+| 22 | Montar rutas Express | Integración | Alta |
+| 23 | Conectar frontend | Integración | Alta |
+| 24 | Seed datos iniciales | Integración | Baja |
 
-## Orden de implementación sugerido
+**Total: 24 tickets (13 alta + 9 media + 2 baja)**
+
+---
+
+## Orden sugerido
 
 ```
-Fase 1: TICKET-001 → TICKET-002
-Fase 2: TICKET-003 → TICKET-004 → TICKET-005 → TICKET-006 → TICKET-007
-Fase 3: TICKET-008 → TICKET-009 → TICKET-010 → TICKET-011 → TICKET-012
-Fase 4: TICKET-013 → TICKET-014 → TICKET-015 → TICKET-016
-Fase 5: TICKET-017 → TICKET-018 → TICKET-019
-Fase 6: TICKET-020 → TICKET-021
-Fase 7: TICKET-022 → TICKET-023 → TICKET-024
+1. Tablas + Roles (TICKET 1-2)
+2. Japón: Compras → Bodega → Boletas → Pagos → GAV (TICKET 3-7)
+3. Envíos: Cajas → Tránsito → Web → Internación → Costeo (TICKET 8-12)
+4. Chile: Bodega → Ventas → Compras Locales → GAV (TICKET 13-16)
+5. Finanzas: EERR → Balance → Flujo (TICKET 17-19)
+6. Principal: Dashboard → Config (TICKET 20-21)
+7. Integración: Rutas → Frontend → Seed (TICKET 22-24)
 ```
+
+---
+
+## Para el dev backend
+
+El frontend ya está implementado y usa mock data. Para ver exactamente qué datos espera cada módulo:
+- **Tipos TypeScript:** `src/app/data/shipmentsMockData.ts`
+- **Mutaciones/funciones:** `src/app/contexts/ShipmentsDataContext.tsx`
+- **Spec API completa:** `reference/shipments-api-spec.md` (endpoints, request/response schemas, reglas de negocio)
