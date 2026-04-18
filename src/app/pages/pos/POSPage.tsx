@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Search, Barcode, Loader2, UserPlus, X, CheckCircle2, ExternalLink } from 'lucide-react';
 import { Card, CardContent } from '../../components/design-system/Card';
 import { Button } from '../../components/design-system/Button';
@@ -14,6 +14,8 @@ interface Product {
   name: string;
   price: number;
   sku: string;
+  category?: string;
+  ean?: string | number | null;
   images: string[];
   stock: number;
   isPresale?: boolean;
@@ -31,6 +33,9 @@ export default function POSPage() {
   const [newCustomerForm, setNewCustomerForm] = useState({ name: '', email: '', phone: '' });
   const [saleResult, setSaleResult] = useState<{ orderNumber: string; change: number; method: PaymentMethod } | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [scanMessage, setScanMessage] = useState<string | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [getnetPending, setGetnetPending] = useState<{
     orderNumber: string;
     paymentId: string;
@@ -44,6 +49,12 @@ export default function POSPage() {
     { enabled: isCustomerModalOpen }
   );
   const createSale = useMutation(posAPI.createSale);
+
+  useEffect(() => {
+    if (scanMessage) {
+      setScanMessage(null);
+    }
+  }, [searchQuery]);
 
   const handleAddToCart = (product: Product) => {
     // Presale validation: require customer
@@ -65,6 +76,34 @@ export default function POSPage() {
         ...cartItems,
         { id: product.id, name: product.name, price: product.price, quantity: 1 },
       ]);
+    }
+  };
+
+  const handleScanLookup = async () => {
+    const query = searchQuery.trim();
+
+    if (!query) {
+      searchInputRef.current?.focus();
+      return;
+    }
+
+    setIsScanning(true);
+    setScanMessage(null);
+
+    try {
+      const matches = await posAPI.scanProduct(query);
+
+      if (matches.length === 1) {
+        handleAddToCart(matches[0] as Product);
+        setScanMessage(`Producto agregado: ${matches[0].name}`);
+        return;
+      }
+
+      setScanMessage(`Se encontraron ${matches.length} productos para este EAN/SKU. Selecciona el correcto en la lista.`);
+    } catch (error: any) {
+      setScanMessage(error?.message || 'No se encontraron productos para ese EAN/SKU.');
+    } finally {
+      setIsScanning(false);
     }
   };
 
@@ -255,20 +294,33 @@ export default function POSPage() {
                 <div className="flex-1 relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                   <input
+                    ref={searchInputRef}
                     type="text"
                     placeholder="Buscar o escanear producto..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleScanLookup();
+                      }
+                    }}
                     className="w-full pl-10 pr-4 py-3 rounded-lg border border-border bg-input-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 text-lg"
                     autoFocus
                   />
                 </div>
-                <Button variant="outline" size="lg">
-                  <Barcode className="w-5 h-5" />
-                  Escanear
+                <Button variant="outline" size="lg" onClick={handleScanLookup} disabled={isScanning}>
+                  {isScanning ? <Loader2 className="w-5 h-5 animate-spin" /> : <Barcode className="w-5 h-5" />}
+                  {isScanning ? 'Buscando...' : 'Escanear'}
                 </Button>
               </CardContent>
             </Card>
+
+            {scanMessage && (
+              <div className="rounded-xl border border-primary/20 bg-primary/10 px-4 py-3 text-sm text-foreground">
+                {scanMessage}
+              </div>
+            )}
 
             {/* Products Grid */}
             <div className="flex-1 overflow-auto">

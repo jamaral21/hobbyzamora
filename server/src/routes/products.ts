@@ -6,6 +6,8 @@ import { fileURLToPath } from 'url';
 import multer from 'multer';
 import AdmZip from 'adm-zip';
 import { prisma } from '../index.js';
+import { syncHistoricalCostForProduct } from '../lib/costSync.js';
+import { generateUniqueSku, getSkuPrefix, isOfficialStoreCategory, normalizeStoreCategory } from '../lib/sku.js';
 import { authenticate, optionalAuth, requireRole, AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
@@ -311,22 +313,34 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
       initialStock,
     } = req.body;
 
+    const normalizedCategory = normalizeStoreCategory(String(category || ''));
+
+    if (!String(name || '').trim() || !String(normalizedCategory || '').trim()) {
+      return res.status(400).json({ error: 'Nombre y categoría son requeridos' });
+    }
+
+    if (!isOfficialStoreCategory(normalizedCategory)) {
+      return res.status(400).json({ error: 'La categoría debe ser una de las disponibles en el menú oficial de la tienda' });
+    }
+
     const parsedEan: string | null = ean !== undefined
       ? String(ean)
       : (barcode !== undefined ? String(barcode) : null);
 
+    const resolvedSku = String(sku || '').trim() || await generateUniqueSku(prisma, normalizedCategory);
+
     // Check SKU uniqueness
-    const existingBySku = await prisma.product.findUnique({ where: { sku } });
+    const existingBySku = await prisma.product.findUnique({ where: { sku: resolvedSku } });
     if (existingBySku) {
       return res.status(400).json({ error: 'SKU already exists' });
     }
 
     const product = await prisma.product.create({
       data: {
-        sku,
+        sku: resolvedSku,
         name,
         description,
-        category,
+        category: normalizedCategory,
         price,
         cost,
         stock: initialStock || 0,
@@ -393,6 +407,11 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
       ? String(ean)
       : (barcode !== undefined ? String(barcode) : undefined);
 
+    const nextCategory = normalizeStoreCategory(String(category ?? existing.category));
+    if (!String(nextCategory).trim() || !isOfficialStoreCategory(nextCategory)) {
+      return res.status(400).json({ error: 'La categoría debe ser una de las disponibles en el menú oficial de la tienda' });
+    }
+
     const nextSku = sku ?? existing.sku;
     if (nextSku !== existing.sku) {
       const duplicateSku = await prisma.product.findUnique({ where: { sku: nextSku } });
@@ -417,7 +436,7 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
         sku: nextSku,
         ean: parsedEan ?? existing.ean,
         name: name ?? existing.name,
-        category: category ?? existing.category,
+        category: nextCategory,
         price: price ?? Number(existing.price),
         cost: cost ?? Number(existing.cost),
         stock: stock ?? existing.stock,
@@ -441,31 +460,45 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
     }
 
     const nextIsPresale = isPresale ?? existing.isPresale;
+    const nextCost = cost ?? Number(existing.cost);
+    const shouldSyncHistoricalCost = cost !== undefined && Number(nextCost) !== Number(existing.cost);
 
-    const product = await prisma.product.update({
-      where: { id },
-      data: {
-        sku,
-        name,
-        description,
-        category,
-        price,
-        cost,
-        stock,
-        images: images !== undefined ? JSON.stringify(images) : undefined,
-        status: isConvertingFromPresale ? 'ACTIVE' : status,
-        ean: parsedEan,
-        isPresale,
-        presaleMaxQty: isConvertingFromPresale ? null : presaleMaxQty,
-        presaleAvailQty: isConvertingFromPresale ? null : presaleAvailQty,
-        presaleEndDate: isConvertingFromPresale
-          ? null
-          : (nextIsPresale ? existing.presaleEndDate : (presaleEndDate ? new Date(presaleEndDate) : null)),
-        presaleArrivedAt: isConvertingFromPresale ? null : undefined,
-      },
-      include: {
-        variants: true,
-      },
+    const product = await prisma.$transaction(async (tx) => {
+      const updatedProduct = await tx.product.update({
+        where: { id },
+        data: {
+          sku,
+          name,
+          description,
+          category: nextCategory,
+          price,
+          cost,
+          stock,
+          images: images !== undefined ? JSON.stringify(images) : undefined,
+          status: isConvertingFromPresale ? 'ACTIVE' : status,
+          ean: parsedEan,
+          isPresale,
+          presaleMaxQty: isConvertingFromPresale ? null : presaleMaxQty,
+          presaleAvailQty: isConvertingFromPresale ? null : presaleAvailQty,
+          presaleEndDate: isConvertingFromPresale
+            ? null
+            : (nextIsPresale ? existing.presaleEndDate : (presaleEndDate ? new Date(presaleEndDate) : null)),
+          presaleArrivedAt: isConvertingFromPresale ? null : undefined,
+        },
+        include: {
+          variants: true,
+        },
+      });
+
+      if (shouldSyncHistoricalCost) {
+        await syncHistoricalCostForProduct(tx, {
+          productId: updatedProduct.id,
+          sku: updatedProduct.sku,
+          cost: Number(nextCost),
+        });
+      }
+
+      return updatedProduct;
     });
 
     res.json({
@@ -564,18 +597,27 @@ router.post('/import', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
       const lineNum = i + 2; // +2 for header row + 0-index
 
       // Validate required fields
-      if (!row.sku || !row.name || !row.category || row.price == null || row.cost == null) {
-        results.errors.push(`Línea ${lineNum}: faltan campos requeridos (sku, name, category, price, cost)`);
+      if (!row.name || !row.category || row.price == null || row.cost == null) {
+        results.errors.push(`Línea ${lineNum}: faltan campos requeridos (name, category, price, cost)`);
         results.skipped++;
         continue;
       }
 
+      const normalizedCategory = normalizeStoreCategory(String(row.category || ''));
+      if (!isOfficialStoreCategory(normalizedCategory)) {
+        results.errors.push(`Línea ${lineNum}: la categoría debe existir en el menú oficial de la tienda`);
+        results.skipped++;
+        continue;
+      }
+
+      const requestedSku = String(row.sku || '').trim();
+      const resolvedSku = requestedSku || await generateUniqueSku(prisma, normalizedCategory);
       const price = parseFloat(row.price);
       const cost = parseFloat(row.cost);
       const stock = parseInt(row.stock) || 0;
 
       if (isNaN(price) || isNaN(cost) || price < 0 || cost < 0) {
-        results.errors.push(`Línea ${lineNum} (${row.sku}): precio o costo inválido`);
+        results.errors.push(`Línea ${lineNum} (${resolvedSku}): precio o costo inválido`);
         results.skipped++;
         continue;
       }
@@ -587,7 +629,7 @@ router.post('/import', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
       const productData = {
         name: row.name,
         description: row.description || null,
-        category: row.category,
+        category: normalizedCategory,
         price,
         cost,
         stock,
@@ -603,21 +645,34 @@ router.post('/import', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
       };
 
       try {
-        const existing = await prisma.product.findUnique({ where: { sku: row.sku } });
+        const existing = requestedSku
+          ? await prisma.product.findUnique({ where: { sku: requestedSku } })
+          : null;
+
         if (existing) {
-          await prisma.product.update({
-            where: { sku: row.sku },
-            data: productData,
+          await prisma.$transaction(async (tx) => {
+            const updatedProduct = await tx.product.update({
+              where: { sku: requestedSku },
+              data: productData,
+            });
+
+            if (Number(existing.cost) !== Number(cost)) {
+              await syncHistoricalCostForProduct(tx, {
+                productId: updatedProduct.id,
+                sku: updatedProduct.sku,
+                cost,
+              });
+            }
           });
           results.updated++;
         } else {
           await prisma.product.create({
-            data: { sku: row.sku, ...productData },
+            data: { sku: resolvedSku, ...productData },
           });
           results.created++;
         }
       } catch (err) {
-        results.errors.push(`Línea ${lineNum} (${row.sku}): error al procesar producto`);
+        results.errors.push(`Línea ${lineNum} (${resolvedSku}): error al procesar producto`);
         results.skipped++;
       }
     }
@@ -626,6 +681,22 @@ router.post('/import', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
   } catch (error) {
     console.error('Import products error:', error);
     res.status(500).json({ error: 'Failed to import products' });
+  }
+});
+
+router.get('/meta/sku-preview', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
+  try {
+    const category = String(req.query.category || '').trim();
+
+    if (!category) {
+      return res.status(400).json({ error: 'Category is required' });
+    }
+
+    const sku = await generateUniqueSku(prisma, category);
+    res.json({ sku, prefix: getSkuPrefix(category) });
+  } catch (error) {
+    console.error('Get SKU preview error:', error);
+    res.status(500).json({ error: 'Failed to get SKU preview' });
   }
 });
 

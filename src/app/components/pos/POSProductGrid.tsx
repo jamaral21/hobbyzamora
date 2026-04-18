@@ -6,6 +6,8 @@ interface Product {
   name: string;
   price: number;
   sku: string;
+  category?: string;
+  ean?: string | number | null;
   images: string[];
   stock: number;
   isPresale?: boolean;
@@ -66,6 +68,15 @@ export function POSProductGrid({ products, onSelect }: POSProductGridProps) {
             <h3 className="text-xs text-foreground mb-1 line-clamp-2 leading-tight">
               {product.name}
             </h3>
+            <div className="mb-2 space-y-0.5">
+              <p className="text-[10px] text-muted-foreground font-medium">SKU: {product.sku}</p>
+              {product.ean && (
+                <p className="text-[10px] text-muted-foreground">EAN: {String(product.ean)}</p>
+              )}
+              {product.category && (
+                <Badge variant="info" size="sm">{product.category}</Badge>
+              )}
+            </div>
             <div className="flex items-center justify-between gap-1">
               <span className="text-sm text-foreground font-medium tabular-nums">
                 ${product.price.toLocaleString('es-CL')}

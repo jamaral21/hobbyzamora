@@ -68,7 +68,7 @@ router.get('/dashboard', authenticate, requireRole('ADMIN', 'STAFF'), async (req
     };
 
     // Get orders for different periods
-    const [todayOrders, weekOrders, monthOrders, rangeOrders, rangeOrderItems] = await Promise.all([
+    const [todayOrders, weekOrders, monthOrders, rangeOrders, rangeOrderItems, monthOrderItems] = await Promise.all([
       prisma.order.findMany({
         where: {
           createdAt: { gte: today },
@@ -115,6 +115,18 @@ router.get('/dashboard', authenticate, requireRole('ADMIN', 'STAFF'), async (req
         select: {
           orderId: true,
           price: true,
+          cost: true,
+          quantity: true,
+        },
+      }),
+      prisma.orderItem.findMany({
+        where: {
+          order: {
+            createdAt: { gte: monthAgo },
+            status: { notIn: ['CANCELLED', 'REFUNDED'] },
+          },
+        },
+        select: {
           cost: true,
           quantity: true,
         },
@@ -167,9 +179,12 @@ router.get('/dashboard', authenticate, requireRole('ADMIN', 'STAFF'), async (req
       sum + b.remaining * parseFloat(b.unitCost.toString()), 0
     );
 
-    // Calculate profit (simplified - revenue minus costs from orders)
     const monthlyRevenue = monthOrders.reduce((sum, o) => sum + parseFloat(o.subtotal.toString()), 0);
-    const profit = monthlyRevenue * 0.4; // Estimated 40% margin
+    const monthlyCost = monthOrderItems.reduce(
+      (sum, item) => sum + parseFloat(item.cost.toString()) * item.quantity,
+      0
+    );
+    const profit = monthlyRevenue - monthlyCost;
 
     res.json({
       dailySales: Math.round(dailySales * 100) / 100,

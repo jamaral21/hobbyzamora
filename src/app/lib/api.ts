@@ -355,6 +355,9 @@ export const productsAPI = {
 
   getCategories: () => fetchAPI<string[]>('/products/meta/categories'),
 
+  getSuggestedSku: (category: string) =>
+    fetchAPI<{ sku: string; prefix: string }>(`/products/meta/sku-preview?category=${encodeURIComponent(category)}`, undefined, 'admin'),
+
   search: async (query: string, limit = 8) => {
     const response = await productsAPI.getAll({ search: query, limit }, 'admin');
     return response.products.map((product) => ({
@@ -589,7 +592,7 @@ export const posAPI = {
     return fetchAPI<Product[]>(`/pos/products${query ? `?${query}` : ''}`, undefined, 'admin');
   },
 
-  scanProduct: (code: string) => fetchAPI<Product>(`/pos/scan/${code}`, undefined, 'admin'),
+  scanProduct: (code: string) => fetchAPI<Product[]>(`/pos/scan/${code}`, undefined, 'admin'),
 
   createSale: (data: {
     items: Array<{ productId: string; quantity: number; price?: number; variantName?: string }>;

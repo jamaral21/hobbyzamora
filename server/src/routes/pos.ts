@@ -2,11 +2,35 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import { prisma } from '../index.js';
 import { getPresaleUnavailableReason } from '../lib/presaleUtils.js';
+import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
 
 const parseImages = (images: string): string[] => {
   try { return JSON.parse(images); } catch { return images ? [images] : []; }
 };
-import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
+
+const formatPOSProduct = (product: any) => {
+  const batchStock = product.inventoryBatches.reduce((sum: number, batch: { remaining: number }) => sum + batch.remaining, 0);
+
+  return {
+    id: product.id,
+    sku: product.sku,
+    name: product.name,
+    category: product.category,
+    ean: product.ean ?? null,
+    price: parseFloat(product.price.toString()),
+    cost: parseFloat(product.cost.toString()),
+    images: parseImages(product.images),
+    isPresale: product.isPresale,
+    stock: product.inventoryBatches.length > 0 ? batchStock : product.stock,
+    variants: product.variants.map((variant: any) => ({
+      id: variant.id,
+      name: variant.name,
+      options: variant.options,
+      price: variant.price ? parseFloat(variant.price.toString()) : null,
+      stock: variant.stock,
+    })),
+  };
+};
 
 // Getnet Chile (PlacetoPay) configuration
 const GETNET_ENDPOINT = process.env.GETNET_ENDPOINT || 'https://checkout.test.getnet.cl';
@@ -44,15 +68,19 @@ function generatePOSOrderNumber(): string {
 router.get('/products', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) => {
   try {
     const { search, category, ean, barcode } = req.query;
+    const searchValue = String(search || '').trim();
+    const rawCode = String((ean as string) || (barcode as string) || '').trim();
+    const effectiveQuery = rawCode || searchValue;
 
     const where: any = {
       status: 'ACTIVE',
     };
 
-    if (search) {
+    if (searchValue) {
       where.OR = [
-        { name: { contains: search as string } },
-        { sku: { contains: search as string } },
+        { name: { contains: searchValue } },
+        { sku: { contains: searchValue } },
+        { ean: { contains: searchValue } },
       ];
     }
 
@@ -60,7 +88,6 @@ router.get('/products', authenticate, requireRole('ADMIN', 'STAFF'), async (req,
       where.category = category as string;
     }
 
-    const rawCode = (ean as string) || (barcode as string);
     if (rawCode) {
       where.OR = [
         { sku: rawCode },
@@ -81,39 +108,35 @@ router.get('/products', authenticate, requireRole('ADMIN', 'STAFF'), async (req,
       orderBy: { name: 'asc' },
     });
 
-    res.json(products.map(p => {
-      const batchStock = p.inventoryBatches.reduce((sum, b) => sum + b.remaining, 0);
-      return {
-      id: p.id,
-      sku: p.sku,
-      name: p.name,
-      category: p.category,
-      price: parseFloat(p.price.toString()),
-      cost: parseFloat(p.cost.toString()),
-      images: parseImages(p.images),
-      isPresale: p.isPresale,
-      // Use batch stock if batches exist, otherwise fall back to the product's stock field
-      stock: p.inventoryBatches.length > 0 ? batchStock : p.stock,
-      variants: p.variants.map(v => ({
-        id: v.id,
-        name: v.name,
-        options: v.options,
-        price: v.price ? parseFloat(v.price.toString()) : null,
-        stock: v.stock,
-      })),
-      };
-    }));
+    const normalizedQuery = effectiveQuery.toLowerCase();
+    const rankedProducts = products
+      .map(formatPOSProduct)
+      .sort((a, b) => {
+        const score = (product: ReturnType<typeof formatPOSProduct>) => {
+          if (!normalizedQuery) return 0;
+          let total = 0;
+          if (String(product.ean || '').toLowerCase() === normalizedQuery) total += 6;
+          if (product.sku.toLowerCase() === normalizedQuery) total += 5;
+          if (product.sku.toLowerCase().includes(normalizedQuery)) total += 2;
+          if (product.name.toLowerCase().includes(normalizedQuery)) total += 1;
+          return total;
+        };
+
+        return score(b) - score(a) || a.name.localeCompare(b.name, 'es');
+      });
+
+    res.json(rankedProducts);
   } catch (error) {
     console.error('Get POS products error:', error);
     res.status(500).json({ error: 'Failed to get products' });
   }
 });
 
-// Get product by EAN/SKU
+// Get products by EAN/SKU scan
 router.get('/scan/:code', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) => {
   try {
-    const code = req.params.code as string;
-    const product = await prisma.product.findFirst({
+    const code = (req.params.code as string).trim();
+    const products = await prisma.product.findMany({
       where: {
         OR: [
           { sku: code },
@@ -129,27 +152,23 @@ router.get('/scan/:code', authenticate, requireRole('ADMIN', 'STAFF'), async (re
           select: { remaining: true },
         },
       },
+      orderBy: { name: 'asc' },
+      take: 20,
     });
 
-    if (!product) {
+    if (products.length === 0) {
       return res.status(404).json({ error: 'Product not found' });
     }
 
-    res.json({
-      id: product.id,
-      sku: product.sku,
-      name: product.name,
-      price: parseFloat(product.price.toString()),
-      cost: parseFloat(product.cost.toString()),
-      images: parseImages(product.images),
-      stock: product.inventoryBatches.reduce((sum, b) => sum + b.remaining, 0),
-      variants: product.variants.map(v => ({
-        id: v.id,
-        name: v.name,
-        options: v.options,
-        price: v.price ? parseFloat(v.price.toString()) : null,
-      })),
-    });
+    const rankedProducts = products
+      .map(formatPOSProduct)
+      .sort((a, b) => {
+        const exactA = Number(String(a.ean || '') === code) + Number(a.sku === code);
+        const exactB = Number(String(b.ean || '') === code) + Number(b.sku === code);
+        return exactB - exactA || a.name.localeCompare(b.name, 'es');
+      });
+
+    res.json(rankedProducts);
   } catch (error) {
     console.error('Scan product error:', error);
     res.status(500).json({ error: 'Failed to scan product' });
