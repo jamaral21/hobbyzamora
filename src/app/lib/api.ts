@@ -903,6 +903,12 @@ export const presaleAPI = {
       method: 'POST',
     }, 'admin'),
 
+  /** Convert presale into regular product and enable immediate sale */
+  releaseForSale: (productId: string) =>
+    fetchAPI<{ message: string; product: Product; releasedReservations: number }>(`/presale/admin/release-for-sale/${productId}`, {
+      method: 'PATCH',
+    }, 'admin'),
+
   /** Release expired NOTIFIED reservations → restore stock */
   releaseExpired: () =>
     fetchAPI<{ message: string; released: number }>('/presale/admin/release-expired', {

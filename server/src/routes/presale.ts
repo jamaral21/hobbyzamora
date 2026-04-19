@@ -317,6 +317,74 @@ router.post(
 );
 
 /**
+ * PATCH /api/presale/admin/release-for-sale/:productId
+ * Admin: convert a presale into a regular product so it can be sold immediately,
+ * even if it has no reservations or is already expired.
+ */
+router.patch(
+  '/admin/release-for-sale/:productId',
+  authenticate,
+  requireRole('ADMIN', 'STAFF'),
+  async (req, res) => {
+    try {
+      const productId = req.params.productId as string;
+
+      const product = await prisma.product.findUnique({ where: { id: productId } });
+      if (!product) {
+        return res.status(404).json({ error: 'Producto no encontrado' });
+      }
+
+      if (!product.isPresale) {
+        return res.status(400).json({ error: 'Este producto no está en preventa' });
+      }
+
+      const sellableStock = Math.max(
+        Number(product.stock ?? 0),
+        Number(product.presaleAvailQty ?? 0),
+        0,
+      );
+
+      const result = await prisma.$transaction(async (tx) => {
+        const convertedProduct = await tx.product.update({
+          where: { id: productId },
+          data: {
+            isPresale: false,
+            status: 'ACTIVE',
+            stock: sellableStock,
+            presaleMaxQty: null,
+            presaleAvailQty: null,
+            presaleEndDate: null,
+            presaleArrivedAt: null,
+          },
+        });
+
+        const releasedReservations = await tx.presaleReservation.updateMany({
+          where: {
+            productId,
+            status: { in: ['PENDING', 'NOTIFIED'] },
+          },
+          data: {
+            status: 'EXPIRED',
+            expiresAt: new Date(),
+          },
+        });
+
+        return { convertedProduct, releasedCount: releasedReservations.count };
+      });
+
+      return res.json({
+        message: 'Preventa liberada y convertida a producto normal para venta inmediata.',
+        product: result.convertedProduct,
+        releasedReservations: result.releasedCount,
+      });
+    } catch (error) {
+      console.error('Presale release-for-sale error:', error);
+      return res.status(500).json({ error: 'Error al liberar la preventa para venta' });
+    }
+  }
+);
+
+/**
  * POST /api/presale/admin/release-expired
  * Admin (or scheduled job): find NOTIFIED reservations past their expiresAt,
  * mark them EXPIRED, and restore stock on the (now regular) product.

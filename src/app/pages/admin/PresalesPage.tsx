@@ -61,14 +61,18 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; Icon: any }>
 function PresaleProductCard({
   product,
   onConfirmArrival,
+  onRelease,
   onEdit,
   onConvert,
+  releasingId,
   loadingId,
 }: {
   product: Product;
   onConfirmArrival: (productId: string) => void;
+  onRelease: (product: Product) => void;
   onEdit: (product: Product) => void;
   onConvert: (product: Product) => void;
+  releasingId: string | null;
   loadingId: string | null;
 }) {
   const img = product.images?.[0];
@@ -121,6 +125,19 @@ function PresaleProductCard({
       </div>
       <div className="flex flex-col gap-2">
         <button
+          onClick={() => onRelease(product)}
+          disabled={releasingId === product.id}
+          className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-emerald-300 text-emerald-700 text-xs font-semibold hover:bg-emerald-50 disabled:opacity-60 transition-colors"
+          title="Liberar preventa para venta inmediata"
+        >
+          {releasingId === product.id ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <PackageCheck className="w-3.5 h-3.5" />
+          )}
+          Liberar
+        </button>
+        <button
           onClick={() => onEdit(product)}
           className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-xs font-semibold hover:bg-secondary transition-colors"
           title="Editar preventa"
@@ -166,6 +183,8 @@ export function PresalesPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [releasingExpired, setReleasingExpired] = useState(false);
+  const [releasingProductId, setReleasingProductId] = useState<string | null>(null);
+  const [releaseProduct, setReleaseProduct] = useState<Product | null>(null);
   const [markingPaid, setMarkingPaid] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [blockingUserId, setBlockingUserId] = useState<string | null>(null);
@@ -285,6 +304,22 @@ export function PresalesPage() {
       showToast(err.message || 'Error al marcar como pagado', 'err');
     } finally {
       setMarkingPaid(null);
+    }
+  };
+
+  const handleReleaseForSale = async () => {
+    if (!releaseProduct) return;
+
+    setReleasingProductId(releaseProduct.id);
+    try {
+      const data = await presaleAPI.releaseForSale(releaseProduct.id);
+      showToast(data.message);
+      setReleaseProduct(null);
+      await Promise.all([loadProducts(), loadReservations()]);
+    } catch (err: any) {
+      showToast(err.message || 'Error al liberar la preventa', 'err');
+    } finally {
+      setReleasingProductId(null);
     }
   };
 
@@ -451,6 +486,7 @@ export function PresalesPage() {
                 key={p.id}
                 product={p}
                 onConfirmArrival={handleConfirmArrival}
+                onRelease={(prod) => setReleaseProduct(prod)}
                 onEdit={(prod) => {
                   setEditorMode('edit');
                   setEditingProduct({
@@ -466,6 +502,7 @@ export function PresalesPage() {
                     stock: prod.presaleAvailQty ?? prod.stock ?? 0,
                   });
                 }}
+                releasingId={releasingProductId}
                 loadingId={confirmingId}
               />
             ))}
@@ -701,6 +738,43 @@ export function PresalesPage() {
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
             </div>
           )}
+        </Modal>
+      )}
+
+      {releaseProduct && (
+        <Modal
+          isOpen={!!releaseProduct}
+          onClose={() => setReleaseProduct(null)}
+          title={`Liberar preventa: ${releaseProduct.name}`}
+          size="sm"
+        >
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Esta acción liberará la preventa para venderse como producto normal de inmediato,
+            aunque no tenga reservas o esté expirada.
+          </p>
+          <div className="mt-6 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setReleaseProduct(null)}
+              disabled={releasingProductId === releaseProduct.id}
+              className="px-3 py-2 text-sm rounded-lg border border-border hover:bg-secondary transition-colors disabled:opacity-60"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleReleaseForSale}
+              disabled={releasingProductId === releaseProduct.id}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500 disabled:opacity-60 transition-colors"
+            >
+              {releasingProductId === releaseProduct.id ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <PackageCheck className="w-4 h-4" />
+              )}
+              Liberar
+            </button>
+          </div>
         </Modal>
       )}
     </AdminLayout>
