@@ -296,26 +296,9 @@ export default function ProductDetailPage() {
                     <h3 className="text-sm text-foreground mb-1">
                       Información de Preventa
                     </h3>
-                    {product.presaleData && (
-                      <>
-                        <p className="text-sm text-muted-foreground">
-                          Limitado a {product.presaleData.maxQuantity} por cliente
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {product.presaleData.availableQuantity} disponibles
-                        </p>
-                      </>
-                    )}
-                    {product.presaleMaxQty && !product.presaleData && (
-                      <p className="text-sm text-muted-foreground">
-                        Limitado a {product.presaleMaxQty} por cliente
-                      </p>
-                    )}
-                    {product.presaleAvailQty != null && !product.presaleData && (
-                      <p className="text-sm text-muted-foreground">
-                        {product.presaleAvailQty} disponibles
-                      </p>
-                    )}
+                    <p className="text-sm text-muted-foreground">
+                      Recibirás una notificación cuando esta preventa llegue y esté lista para completar el pago.
+                    </p>
                     {product.presaleEndDate && (
                       <p className="text-sm text-muted-foreground">
                         Disponible hasta el {new Date(product.presaleEndDate).toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' })}

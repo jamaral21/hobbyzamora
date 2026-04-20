@@ -64,12 +64,11 @@ export default function ProductsPage() {
         initialStock: data.stock || 0,
         stock: data.stock || 0,
         ...(editingProduct ? {} : { isPresale: isPresalesView }),
-        // Para preventa nueva: mapear stock como cupo de preventa
         ...(isPresalesView && !editingProduct ? {
-          presaleMaxQty: data.stock || 0,
-          presaleAvailQty: data.stock || 0,
-          stock: 0,
-          initialStock: 0,
+          presaleMaxQty: data.presaleMaxQty ?? 0,
+          presaleAvailQty: data.presaleAvailQty ?? 0,
+          stock: data.stock || 0,
+          initialStock: data.stock || 0,
         } : {}),
       };
       if (editingProduct) {

@@ -193,19 +193,48 @@ router.get('/', optionalAuth, async (req: AuthRequest, res) => {
       prisma.product.count({ where }),
     ]);
 
+    const presaleIds = products.filter((product) => product.isPresale).map((product) => product.id);
+    const reservationGroups = presaleIds.length > 0
+      ? await prisma.presaleReservation.groupBy({
+          by: ['productId'],
+          where: {
+            productId: { in: presaleIds },
+            status: { in: ['PENDING', 'NOTIFIED', 'PAID'] },
+          },
+          _count: { _all: true },
+        })
+      : [];
+
+    const activeReservedByProduct = Object.fromEntries(
+      reservationGroups.map((row) => [row.productId, row._count._all])
+    ) as Record<string, number>;
+
     // Parse JSON fields
-    const productsWithStock = products.map(product => ({
-      ...product,
-      images: parseImages(product.images),
-      price: parseFloat(product.price.toString()),
-      cost: parseFloat(product.cost.toString()),
-      stock: product.stock,
-      variants: product.variants.map(v => ({
-        ...v,
-        options: parseOptions(v.options),
-        price: v.price ? parseFloat(v.price.toString()) : null,
-      })),
-    }));
+    const productsWithStock = products
+      .map(product => {
+        const activeReservedCount = activeReservedByProduct[product.id] ?? 0;
+        const remainingPresaleQty = product.presaleAvailQty == null
+          ? null
+          : Math.max(product.presaleAvailQty - activeReservedCount, 0);
+
+        return {
+          ...product,
+          images: parseImages(product.images),
+          price: parseFloat(product.price.toString()),
+          cost: parseFloat(product.cost.toString()),
+          stock: product.stock,
+          presaleAvailQty: isAdminOrStaff ? product.presaleAvailQty : remainingPresaleQty,
+          variants: product.variants.map(v => ({
+            ...v,
+            options: parseOptions(v.options),
+            price: v.price ? parseFloat(v.price.toString()) : null,
+          })),
+        };
+      })
+      .filter((product) => {
+        if (isAdminOrStaff || !product.isPresale) return true;
+        return product.presaleAvailQty == null || product.presaleAvailQty > 0;
+      });
 
     res.json({
       products: productsWithStock,

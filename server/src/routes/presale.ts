@@ -73,7 +73,19 @@ router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) =
 
     // Create reservation & decrement available qty atomically
     const reservation = await prisma.$transaction(async (tx) => {
-      const r = existing
+      const activeReservationCount = await tx.presaleReservation.count({
+        where: {
+          productId,
+          status: { in: ['PENDING', 'NOTIFIED', 'PAID'] },
+        },
+      });
+
+      const unavailableReason = getPresaleUnavailableReason(product, new Date(), activeReservationCount);
+      if (unavailableReason) {
+        throw new Error(unavailableReason);
+      }
+
+      return existing
         ? await tx.presaleReservation.update({
             where: { id: existing.id },
             data: {
@@ -91,14 +103,6 @@ router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) =
             data: { userId, productId, status: 'PENDING' },
             include: { product: { select: { id: true, name: true, price: true, images: true } } },
           });
-
-      if (product.presaleAvailQty !== null) {
-        await tx.product.update({
-          where: { id: productId },
-          data: { presaleAvailQty: { decrement: 1 } },
-        });
-      }
-      return r;
     });
 
     // Send confirmation email (non-blocking)
@@ -120,6 +124,9 @@ router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) =
       },
     });
   } catch (error) {
+    if (error instanceof Error && error.message === 'No hay cupos disponibles para esta preventa') {
+      return res.status(400).json({ error: error.message });
+    }
     console.error('Presale reserve error:', error);
     return res.status(500).json({ error: 'Error al crear la reserva' });
   }
@@ -338,9 +345,17 @@ router.patch(
         return res.status(400).json({ error: 'Este producto no está en preventa' });
       }
 
+      const paidReservationsCount = await prisma.presaleReservation.count({
+        where: {
+          productId,
+          status: 'PAID',
+        },
+      });
+
+      const configuredPresaleQty = Number(product.presaleAvailQty ?? 0);
       const sellableStock = Math.max(
         Number(product.stock ?? 0),
-        Number(product.presaleAvailQty ?? 0),
+        configuredPresaleQty - paidReservationsCount,
         0,
       );
 
@@ -426,7 +441,6 @@ router.post(
           await tx.product.update({
             where: { id: pid },
             data: {
-              presaleAvailQty: { increment: count },
               stock: { increment: count },
             },
           });
@@ -538,7 +552,6 @@ router.patch(
         return res.status(400).json({ error: 'La reserva ya fue cancelada anteriormente' });
       }
 
-      const shouldRestoreQuota = reservation.status === 'PENDING' || reservation.status === 'NOTIFIED';
       const cancelledAt = new Date();
 
       const updated = await prisma.$transaction(async (tx) => {
@@ -559,12 +572,6 @@ router.patch(
           },
         });
 
-        if (shouldRestoreQuota && reservation.product.presaleAvailQty !== null) {
-          await tx.product.update({
-            where: { id: reservation.productId },
-            data: { presaleAvailQty: { increment: 1 } },
-          });
-        }
 
         if (banUser) {
           await tx.user.update({
@@ -712,13 +719,6 @@ router.delete(
 
       await prisma.$transaction(async (tx) => {
         await tx.presaleReservation.delete({ where: { id: reservationId } });
-        // Restore quota only if it was an active reservation
-        if (reservation.status === 'PENDING' || reservation.status === 'NOTIFIED') {
-          await tx.product.update({
-            where: { id: reservation.productId },
-            data: { presaleAvailQty: { increment: 1 } },
-          });
-        }
       });
 
       return res.json({ message: 'Reserva eliminada' });

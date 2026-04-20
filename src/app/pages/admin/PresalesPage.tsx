@@ -60,6 +60,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; Icon: any }>
 
 function PresaleProductCard({
   product,
+  activeReservedCount,
   onConfirmArrival,
   onRelease,
   onEdit,
@@ -68,6 +69,7 @@ function PresaleProductCard({
   loadingId,
 }: {
   product: Product;
+  activeReservedCount: number;
   onConfirmArrival: (productId: string) => void;
   onRelease: (product: Product) => void;
   onEdit: (product: Product) => void;
@@ -76,14 +78,13 @@ function PresaleProductCard({
   loadingId: string | null;
 }) {
   const img = product.images?.[0];
-  const max = product.presaleMaxQty ?? 0;
-  const avail = product.presaleAvailQty ?? 0;
-  const reserved = Math.max(0, max - avail);
-  const pct = max > 0 ? Math.min((reserved / max) * 100, 100) : 0;
+  const total = Math.max(0, product.presaleAvailQty ?? 0);
+  const reserved = Math.max(0, activeReservedCount);
+  const pct = total > 0 ? Math.min((reserved / total) * 100, 100) : 0;
   const presaleEndLabel = getPresaleEndLabel(product.presaleEndDate ?? null);
   const isArrivalConfirmed = Boolean(product.presaleArrivedAt);
   const isExpiredByDate = Boolean(product.presaleEndDate && new Date(product.presaleEndDate) <= new Date());
-  const isSoldOut = typeof product.presaleAvailQty === 'number' && product.presaleAvailQty <= 0;
+  const isSoldOut = total > 0 && reserved >= total;
   const readyToConvert = Boolean(product.isPresale && (isExpiredByDate || isSoldOut || product.status === 'HIDDEN'));
 
   return (
@@ -101,7 +102,7 @@ function PresaleProductCard({
         <div className="flex items-center gap-3 mt-2">
           <span className="text-primary font-bold text-sm">{formatCLP(product.price)}</span>
           <span className="text-xs text-muted-foreground">
-            {reserved}/{max} reservados
+            {reserved}/{total} reservados
           </span>
         </div>
         {presaleEndLabel && (
@@ -116,7 +117,7 @@ function PresaleProductCard({
             style={{ width: `${pct}%` }}
           />
         </div>
-        {avail <= 0 && (
+        {total <= 0 && (
           <p className="text-xs text-red-500 mt-1 font-medium">Sin cupos disponibles</p>
         )}
         {readyToConvert && (
@@ -251,21 +252,12 @@ export function PresalesPage() {
         apiData.presaleMaxQty = null;
         apiData.presaleAvailQty = null;
         apiData.presaleEndDate = null;
-        await productsAPIFull.update(editingProduct.id, apiData);
+        const updated = await productsAPIFull.update(editingProduct.id, apiData);
+        setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
         showToast('Preventa verificada y convertida a producto');
       } else {
-        // Preservar reservas existentes al actualizar el cupo
-        if (data.stock != null && data.stock > 0) {
-          const oldMax = editingProduct.presaleMaxQty ?? 0;
-          const oldAvail = editingProduct.presaleAvailQty ?? oldMax;
-          const reservedCount = Math.max(0, oldMax - oldAvail);
-          const newMax = data.stock;
-          const newAvail = Math.max(0, newMax - reservedCount);
-          apiData.presaleMaxQty = newMax;
-          apiData.presaleAvailQty = newAvail;
-          apiData.stock = 0;
-        }
-        await productsAPIFull.update(editingProduct.id, apiData);
+        const updated = await productsAPIFull.update(editingProduct.id, apiData);
+        setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
         showToast('Preventa actualizada');
       }
 
@@ -481,17 +473,23 @@ export function PresalesPage() {
             <span className="text-xs text-muted-foreground">— Edita, confirma llegada o verifica los datos para convertir las preventas finalizadas en productos</span>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {products.map((p) => (
+            {products.map((p) => {
+              const activeReservedCount = reservations.filter((r) =>
+                r.product.id === p.id && ['PENDING', 'NOTIFIED', 'PAID'].includes(r.status)
+              ).length;
+
+              return (
               <PresaleProductCard
                 key={p.id}
                 product={p}
+                activeReservedCount={activeReservedCount}
                 onConfirmArrival={handleConfirmArrival}
                 onRelease={(prod) => setReleaseProduct(prod)}
                 onEdit={(prod) => {
                   setEditorMode('edit');
                   setEditingProduct({
                     ...prod,
-                    stock: prod.presaleMaxQty ?? prod.stock ?? 0,
+                    stock: prod.stock ?? 0,
                   });
                 }}
                 onConvert={(prod) => {
@@ -505,7 +503,8 @@ export function PresalesPage() {
                 releasingId={releasingProductId}
                 loadingId={confirmingId}
               />
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -730,6 +729,10 @@ export function PresalesPage() {
             product={editingProduct as any}
             onSave={handleEditProduct}
             onCancel={() => setEditingProduct(null)}
+            onUploadImage={async (file) => {
+              const result = await productsAPI.uploadImage(file);
+              return result.url;
+            }}
             verificationMode={editorMode === 'convert'}
             submitLabel={editorMode === 'convert' ? 'Verificar y convertir a producto' : 'Guardar preventa'}
           />

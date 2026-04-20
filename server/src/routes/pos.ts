@@ -241,7 +241,14 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
           existingReservation && ['PENDING', 'NOTIFIED', 'PAID'].includes(existingReservation.status)
         );
 
-        const unavailableReason = getPresaleUnavailableReason(product);
+        const activeReservedCount = await prisma.presaleReservation.count({
+          where: {
+            productId: product.id,
+            status: { in: ['PENDING', 'NOTIFIED', 'PAID'] },
+          },
+        });
+
+        const unavailableReason = getPresaleUnavailableReason(product, new Date(), activeReservedCount);
         if (unavailableReason && !(hasActiveReservation && unavailableReason === 'No hay cupos disponibles para esta preventa')) {
           return res.status(400).json({ error: `${product.name}: ${unavailableReason}` });
         }
@@ -350,15 +357,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
       for (const item of orderItems) {
         const product = await prisma.product.findUnique({ where: { id: item.productId }, select: { isPresale: true } });
         if (product?.isPresale) {
-          let shouldDecrementQuota = true;
-
           if (customerId) {
-            const existingReservation = await prisma.presaleReservation.findUnique({
-              where: { userId_productId: { userId: customerId, productId: item.productId } },
-            });
-
-            shouldDecrementQuota = !existingReservation || !['PENDING', 'NOTIFIED'].includes(existingReservation.status);
-
             await prisma.presaleReservation.upsert({
               where: { userId_productId: { userId: customerId, productId: item.productId } },
               update: {
@@ -369,13 +368,6 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
                 cancelledBy: null,
               },
               create: { userId: customerId, productId: item.productId, status: 'PAID', paidAt: new Date() },
-            });
-          }
-
-          if (shouldDecrementQuota) {
-            await prisma.product.update({
-              where: { id: item.productId },
-              data: { presaleAvailQty: { decrement: item.quantity } },
             });
           }
         } else {
@@ -440,15 +432,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
     for (const item of orderItems) {
       const product = await prisma.product.findUnique({ where: { id: item.productId }, select: { isPresale: true } });
       if (product?.isPresale) {
-        let shouldDecrementQuota = true;
-
         if (customerId) {
-          const existingReservation = await prisma.presaleReservation.findUnique({
-            where: { userId_productId: { userId: customerId, productId: item.productId } },
-          });
-
-          shouldDecrementQuota = !existingReservation || !['PENDING', 'NOTIFIED'].includes(existingReservation.status);
-
           await prisma.presaleReservation.upsert({
             where: { userId_productId: { userId: customerId, productId: item.productId } },
             update: {
@@ -459,13 +443,6 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
               cancelledBy: null,
             },
             create: { userId: customerId, productId: item.productId, status: 'PAID', paidAt: new Date() },
-          });
-        }
-
-        if (shouldDecrementQuota) {
-          await prisma.product.update({
-            where: { id: item.productId },
-            data: { presaleAvailQty: { decrement: item.quantity } },
           });
         }
       } else {

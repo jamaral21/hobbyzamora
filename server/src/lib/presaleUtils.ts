@@ -17,7 +17,11 @@ export function getPresalePaymentExpiry(from = new Date()) {
   return new Date(from.getTime() + PRESALE_EXPIRATION_SECONDS * 1000);
 }
 
-export function getPresaleUnavailableReason(product: PresaleCandidate, now = new Date()): string | null {
+export function getPresaleUnavailableReason(
+  product: PresaleCandidate,
+  now = new Date(),
+  activeReservedCount = 0,
+): string | null {
   if (!product.isPresale) {
     return 'Este producto no es una preventa';
   }
@@ -30,8 +34,14 @@ export function getPresaleUnavailableReason(product: PresaleCandidate, now = new
     return 'Esta preventa ya venció';
   }
 
-  if (product.presaleAvailQty !== null && product.presaleAvailQty !== undefined && product.presaleAvailQty <= 0) {
-    return 'No hay cupos disponibles para esta preventa';
+  if (product.presaleAvailQty !== null && product.presaleAvailQty !== undefined) {
+    if (product.presaleAvailQty <= 0) {
+      return 'No hay cupos disponibles para esta preventa';
+    }
+
+    if (activeReservedCount >= product.presaleAvailQty) {
+      return 'No hay cupos disponibles para esta preventa';
+    }
   }
 
   return null;

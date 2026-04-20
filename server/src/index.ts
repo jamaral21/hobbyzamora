@@ -97,7 +97,7 @@ app.listen(PORT, () => {
 
 // ─── Presale expiration job ──────────────────────────────────────────────────
 // Runs every 15 minutes. Marks NOTIFIED reservations past their expiresAt as
-// EXPIRED and restores the available quota on the product.
+// EXPIRED and restores the sellable stock on the product.
 async function expirePresaleReservations() {
   try {
     const now = new Date();
@@ -118,7 +118,7 @@ async function expirePresaleReservations() {
         data: { status: 'EXPIRED' },
       });
 
-      // Restore quota per product (group by productId)
+      // Restore sellable stock per product (group by productId)
       const countByProduct = expired.reduce<Record<string, number>>((acc, r) => {
         acc[r.productId] = (acc[r.productId] ?? 0) + 1;
         return acc;
@@ -127,12 +127,12 @@ async function expirePresaleReservations() {
       for (const [productId, count] of Object.entries(countByProduct)) {
         await tx.product.update({
           where: { id: productId },
-          data: { presaleAvailQty: { increment: count } },
+          data: { stock: { increment: count } },
         });
       }
     });
 
-    console.log(`[presale] Expiradas ${expired.length} reserva(s). Cupos restaurados.`);
+    console.log(`[presale] Expiradas ${expired.length} reserva(s). Stock restaurado.`);
   } catch (err) {
     console.error('[presale] Error en job de expiración:', err);
   }

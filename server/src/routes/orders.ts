@@ -302,7 +302,14 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
           existingReservation && ['PENDING', 'NOTIFIED', 'PAID'].includes(existingReservation.status)
         );
 
-        const unavailableReason = getPresaleUnavailableReason(product);
+        const activeReservedCount = await prisma.presaleReservation.count({
+          where: {
+            productId: product.id,
+            status: { in: ['PENDING', 'NOTIFIED', 'PAID'] },
+          },
+        });
+
+        const unavailableReason = getPresaleUnavailableReason(product, new Date(), activeReservedCount);
         if (unavailableReason && !(hasActiveReservation && unavailableReason === 'No hay cupos disponibles para esta preventa')) {
           return res.status(400).json({ error: `${product.name}: ${unavailableReason}` });
         }
@@ -396,15 +403,8 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
       const product = await prisma.product.findUnique({ where: { id: item.productId }, select: { isPresale: true } });
       if (product?.isPresale) {
         const userId = req.user?.id;
-        let shouldDecrementQuota = true;
 
         if (userId) {
-          const existingReservation = await prisma.presaleReservation.findUnique({
-            where: { userId_productId: { userId, productId: item.productId } },
-          });
-
-          shouldDecrementQuota = !existingReservation || !['PENDING', 'NOTIFIED'].includes(existingReservation.status);
-
           await prisma.presaleReservation.upsert({
             where: { userId_productId: { userId, productId: item.productId } },
             update: {
@@ -415,13 +415,6 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
               cancelledBy: null,
             },
             create: { userId, productId: item.productId, status: 'PAID', paidAt: new Date() },
-          });
-        }
-
-        if (shouldDecrementQuota) {
-          await prisma.product.update({
-            where: { id: item.productId },
-            data: { presaleAvailQty: { decrement: item.quantity } },
           });
         }
       } else {

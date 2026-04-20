@@ -140,14 +140,11 @@ function ConfirmReserveDialog({
           <div className="min-w-0">
             <p className="text-white text-sm font-semibold truncate">{product.name}</p>
             <p className="text-amber-400 font-bold">{formatCLP(product.price)}</p>
-            {typeof product.presaleAvailQty === 'number' && (
-              <p className="text-zinc-500 text-xs">{product.presaleAvailQty} cupos restantes</p>
-            )}
           </div>
         </div>
 
         <p className="text-zinc-500 text-xs mb-5">
-          Solo 1 reserva por cuenta. Se te notificará por correo cuando el producto llegue y tendrás un plazo limitado para completar el pago.
+          Se te notificará por correo cuando el producto llegue y tendrás un plazo limitado para completar el pago.
         </p>
 
         <div className="flex gap-3">
@@ -279,7 +276,7 @@ function AvailablePresales({
           <Card className="text-center py-12">
             <Package className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
             <h3 className="text-lg text-foreground mb-2">Sin preventas disponibles</h3>
-            <p className="text-sm text-muted-foreground">Por ahora no hay cupos activos para reservar.</p>
+            <p className="text-sm text-muted-foreground">Por ahora no hay preventas activas para reservar.</p>
           </Card>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -317,9 +314,6 @@ function AvailablePresales({
 
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-lg font-bold text-primary">{formatCLP(product.price)}</span>
-                      {typeof product.presaleAvailQty === 'number' && (
-                        <span className="text-xs text-muted-foreground">{product.presaleAvailQty} cupos</span>
-                      )}
                     </div>
 
                     {endLabel && (
