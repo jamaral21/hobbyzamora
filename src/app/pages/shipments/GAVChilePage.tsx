@@ -1,6 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FileText } from 'lucide-react';
-import { useShipmentsData } from '../../contexts/ShipmentsDataContext';
 import { Card } from '../../components/design-system/Card';
 import { Button } from '../../components/design-system/Button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/design-system/Table';
@@ -8,10 +7,68 @@ import { PriceDisplay } from '../../components/shipments/PriceDisplay';
 import { StatusBadge } from '../../components/shipments/StatusBadge';
 import { EmptyState } from '../../components/design-system/EmptyState';
 
+type GAVEntry = {
+  id: number;
+  concepto: string;
+  monto: number;
+  adjunto: boolean;
+  estado: 'pendiente' | 'pagado';
+  docTipo: 'factura' | 'boleta';
+  ivaCredito: boolean;
+  fechaPago: string | null;
+};
+
+type GavChileResponse = {
+  data: GAVEntry[];
+};
+
+type GavConfirmResponse = {
+  data: GAVEntry;
+};
+
+async function shipmentsFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const token = localStorage.getItem('adminToken') || localStorage.getItem('token');
+  const response = await fetch(`/api/shipments/gav-chile${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+      ...(options?.headers || {}),
+    },
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(data.error || response.statusText);
+  }
+
+  return response.json() as Promise<T>;
+}
+
 export default function GAVChilePage() {
-  const { gavChile, confirmGAV } = useShipmentsData();
+  const [gavChile, setGavChile] = useState<GAVEntry[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [errorId, setErrorId] = useState<number | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  async function loadGavChile() {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await shipmentsFetch<GavChileResponse>('');
+      setGavChile(response.data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo cargar GAV Chile');
+      setGavChile([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadGavChile();
+  }, []);
 
   function handleToggleAdjunto(id: number) {
     // We simulate toggling adjunto by directly mutating the gavChile state
@@ -34,15 +91,31 @@ export default function GAVChilePage() {
     return gavChile.find((g) => g.id === id)?.adjunto ?? false;
   }
 
-  function handleConfirm(id: number) {
+  async function handleConfirm(id: number) {
     if (!getAdjunto(id)) {
       setErrorId(id);
       setToastMsg('Debe adjuntar comprobante antes de confirmar');
       setTimeout(() => setToastMsg(null), 3000);
       return;
     }
+
     setErrorId(null);
-    confirmGAV(id);
+    try {
+      setError(null);
+      const response = await shipmentsFetch<GavConfirmResponse>(`/${id}/confirmar`, {
+        method: 'PUT',
+        body: JSON.stringify({ adjunto: getAdjunto(id) }),
+      });
+
+      setGavChile((prev) => prev.map((g) => (g.id === id ? response.data : g)));
+      setToastMsg('Gasto fijo confirmado');
+      setTimeout(() => setToastMsg(null), 2500);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'No se pudo confirmar el gasto fijo';
+      setError(message);
+      setToastMsg(message);
+      setTimeout(() => setToastMsg(null), 3000);
+    }
   }
 
   return (
@@ -56,9 +129,21 @@ export default function GAVChilePage() {
         </div>
       )}
 
+      {error && (
+        <Card>
+          <p className="text-sm text-destructive">{error}</p>
+        </Card>
+      )}
+
       {/* Table */}
       <Card padding="none">
-        {gavChile.length === 0 ? (
+        {isLoading ? (
+          <EmptyState
+            icon={FileText}
+            title="Cargando gastos fijos"
+            description="Obteniendo GAV Chile..."
+          />
+        ) : gavChile.length === 0 ? (
           <EmptyState
             icon={FileText}
             title="Sin gastos fijos"

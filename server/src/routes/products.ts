@@ -223,6 +223,7 @@ router.get('/', optionalAuth, async (req: AuthRequest, res) => {
           price: parseFloat(product.price.toString()),
           cost: parseFloat(product.cost.toString()),
           stock: product.stock,
+          activeReservedCount,
           presaleAvailQty: isAdminOrStaff ? product.presaleAvailQty : remainingPresaleQty,
           variants: product.variants.map(v => ({
             ...v,

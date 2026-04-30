@@ -1,6 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Receipt } from 'lucide-react';
-import { useShipmentsData } from '../../contexts/ShipmentsDataContext';
 import { Card } from '../../components/design-system/Card';
 import { Button } from '../../components/design-system/Button';
 import { Modal, ModalFooter } from '../../components/design-system/Modal';
@@ -21,6 +20,27 @@ interface FormData {
   estado: 'pagado' | 'pendiente';
 }
 
+type CompraChileEntry = {
+  id: string;
+  fecha: string;
+  tipo: 'producto' | 'gasto';
+  docTipo: 'factura' | 'boleta';
+  proveedor: string;
+  descripcion: string;
+  monto: number;
+  iva: number;
+  ivaCredito: boolean;
+  estado: 'pagado' | 'pendiente';
+};
+
+type ComprasChileResponse = {
+  data: CompraChileEntry[];
+};
+
+type CompraCreateResponse = {
+  data: CompraChileEntry;
+};
+
 const emptyForm: FormData = {
   fecha: new Date().toISOString().split('T')[0],
   tipo: 'producto',
@@ -32,11 +52,51 @@ const emptyForm: FormData = {
   estado: 'pendiente',
 };
 
+async function shipmentsFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const token = localStorage.getItem('adminToken') || localStorage.getItem('token');
+  const response = await fetch(`/api/shipments/compras-chile${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+      ...(options?.headers || {}),
+    },
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(data.error || response.statusText);
+  }
+
+  return response.json() as Promise<T>;
+}
+
 export default function ComprasLocalesPage() {
-  const { comprasChile, addCompraChile } = useShipmentsData();
+  const [comprasChile, setComprasChile] = useState<CompraChileEntry[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState<FormData>({ ...emptyForm });
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
+  const [saving, setSaving] = useState(false);
+
+  async function loadComprasChile() {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await shipmentsFetch<ComprasChileResponse>('');
+      setComprasChile(response.data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudieron cargar compras locales');
+      setComprasChile([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadComprasChile();
+  }, []);
 
   function validate(): boolean {
     const e: Partial<Record<keyof FormData, string>> = {};
@@ -53,23 +113,34 @@ export default function ComprasLocalesPage() {
     return Object.keys(e).length === 0;
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!validate()) return;
-    const isFactura = form.docTipo === 'factura';
-    addCompraChile({
-      fecha: form.fecha,
-      tipo: form.tipo,
-      docTipo: form.docTipo,
-      proveedor: form.proveedor.trim(),
-      descripcion: form.descripcion.trim(),
-      monto: Number(form.monto),
-      iva: isFactura ? Number(form.iva) : 0,
-      ivaCredito: isFactura,
-      estado: form.estado,
-    });
-    setShowModal(false);
-    setForm({ ...emptyForm });
-    setErrors({});
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await shipmentsFetch<CompraCreateResponse>('', {
+        method: 'POST',
+        body: JSON.stringify({
+          fecha: form.fecha,
+          tipo: form.tipo,
+          docTipo: form.docTipo,
+          proveedor: form.proveedor.trim(),
+          descripcion: form.descripcion.trim(),
+          monto: Number(form.monto),
+          iva: form.docTipo === 'factura' ? Number(form.iva) : 0,
+          estado: form.estado,
+        }),
+      });
+
+      setComprasChile((prev) => [response.data, ...prev]);
+      setShowModal(false);
+      setForm({ ...emptyForm });
+      setErrors({});
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo registrar la compra local');
+    } finally {
+      setSaving(false);
+    }
   }
 
   function openModal() {
@@ -87,9 +158,21 @@ export default function ComprasLocalesPage() {
         </Button>
       </div>
 
+      {error && (
+        <Card>
+          <p className="text-sm text-destructive">{error}</p>
+        </Card>
+      )}
+
       {/* Table */}
       <Card padding="none">
-        {comprasChile.length === 0 ? (
+        {isLoading ? (
+          <EmptyState
+            icon={Receipt}
+            title="Cargando compras locales"
+            description="Obteniendo historial de compras y gastos operacionales..."
+          />
+        ) : comprasChile.length === 0 ? (
           <EmptyState
             icon={Receipt}
             title="Sin compras locales"
@@ -252,7 +335,7 @@ export default function ComprasLocalesPage() {
         </div>
         <ModalFooter>
           <Button variant="ghost" onClick={() => setShowModal(false)}>Cancelar</Button>
-          <Button onClick={handleSubmit}>Registrar Compra</Button>
+          <Button onClick={handleSubmit} disabled={saving}>{saving ? 'Guardando...' : 'Registrar Compra'}</Button>
         </ModalFooter>
       </Modal>
     </div>

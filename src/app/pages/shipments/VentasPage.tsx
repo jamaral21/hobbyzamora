@@ -1,6 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, ShoppingBag } from 'lucide-react';
-import { useShipmentsData } from '../../contexts/ShipmentsDataContext';
 import { Card } from '../../components/design-system/Card';
 import { Button } from '../../components/design-system/Button';
 import { Modal, ModalFooter } from '../../components/design-system/Modal';
@@ -9,9 +8,37 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '.
 import { Badge } from '../../components/design-system/Badge';
 import { PriceDisplay } from '../../components/shipments/PriceDisplay';
 import { EmptyState } from '../../components/design-system/EmptyState';
-import type { SalesChannel } from '../../data/shipmentsMockData';
 
-const CANALES: SalesChannel[] = ['Instagram', 'TikTok', 'Mercado Libre', 'Web', 'Local'];
+const CANALES = ['Instagram', 'TikTok', 'Mercado Libre', 'Web', 'Local'] as const;
+type SalesChannel = (typeof CANALES)[number];
+
+type StockEntry = {
+  id: string;
+  sku: string;
+  name: string;
+  ean: string | null;
+  stock: number;
+  costUnit: number;
+  salePrice: number;
+};
+
+type SaleEntry = {
+  id: string;
+  fecha: string;
+  producto: string;
+  productId: string;
+  sku: string;
+  ean: string | null;
+  cant: number;
+  precioVenta: number;
+  costo: number;
+  total: number;
+  canal: SalesChannel;
+};
+
+type VentasResponse = { data: SaleEntry[] };
+type BodegaChileResponse = { data: { items: StockEntry[] } };
+type VentaCreateResponse = { data: SaleEntry };
 
 const canalVariant: Record<SalesChannel, 'info' | 'brand' | 'success' | 'warning' | 'danger'> = {
   Instagram: 'brand',
@@ -22,44 +49,87 @@ const canalVariant: Record<SalesChannel, 'info' | 'brand' | 'success' | 'warning
 };
 
 interface FormData {
-  stockId: string;
+  productId: string;
   cant: string;
   precioVenta: string;
   canal: SalesChannel;
 }
 
 const emptyForm: FormData = {
-  stockId: '',
+  productId: '',
   cant: '',
   precioVenta: '',
   canal: 'Instagram',
 };
 
+async function shipmentsFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const token = localStorage.getItem('adminToken') || localStorage.getItem('token');
+  const response = await fetch(`/api/shipments${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+      ...(options?.headers || {}),
+    },
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(data.error || response.statusText);
+  }
+
+  return response.json() as Promise<T>;
+}
+
 export default function VentasPage() {
-  const { ventas, stockChile, addVenta } = useShipmentsData();
+  const [ventas, setVentas] = useState<SaleEntry[]>([]);
+  const [stockChile, setStockChile] = useState<StockEntry[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState<FormData>({ ...emptyForm });
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
+  const [saving, setSaving] = useState(false);
 
-  // Available stock (cant > 0)
-  const availableStock = useMemo(
-    () => stockChile.filter((s) => s.cant > 0),
-    [stockChile],
-  );
+  const loadData = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const [ventasResp, stockResp] = await Promise.all([
+        shipmentsFetch<VentasResponse>('/ventas'),
+        shipmentsFetch<BodegaChileResponse>('/bodega-chile'),
+      ]);
+      setVentas(ventasResp.data);
+      setStockChile(stockResp.data.items);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo cargar ventas');
+      setVentas([]);
+      setStockChile([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const availableStock = useMemo(() => stockChile.filter((s) => s.stock > 0), [stockChile]);
 
   const selectedStock = useMemo(
-    () => stockChile.find((s) => s.id === form.stockId),
-    [stockChile, form.stockId],
+    () => stockChile.find((s) => s.id === form.productId),
+    [stockChile, form.productId],
   );
 
   function validate(): boolean {
     const e: Partial<Record<keyof FormData, string>> = {};
-    if (!form.stockId) e.stockId = 'Selecciona un producto';
+    if (!form.productId) e.productId = 'Selecciona un producto';
     const cant = Number(form.cant);
     if (!form.cant || cant <= 0 || !Number.isInteger(cant)) {
       e.cant = 'Debe ser entero mayor a 0';
-    } else if (selectedStock && cant > selectedStock.cant) {
-      e.cant = `Stock insuficiente (máx: ${selectedStock.cant})`;
+    } else if (selectedStock && cant > selectedStock.stock) {
+      e.cant = `Stock insuficiente (max: ${selectedStock.stock})`;
     }
     const precio = Number(form.precioVenta);
     if (!form.precioVenta || precio <= 0) e.precioVenta = 'Debe ser mayor a 0';
@@ -67,17 +137,38 @@ export default function VentasPage() {
     return Object.keys(e).length === 0;
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!validate()) return;
-    addVenta({
-      stockId: form.stockId,
-      cant: Number(form.cant),
-      precioVenta: Number(form.precioVenta),
-      canal: form.canal,
-    });
-    setShowModal(false);
-    setForm({ ...emptyForm });
-    setErrors({});
+    setSaving(true);
+    setError(null);
+    try {
+      const response = await shipmentsFetch<VentaCreateResponse>('/ventas', {
+        method: 'POST',
+        body: JSON.stringify({
+          productId: form.productId,
+          cant: Number(form.cant),
+          precioVenta: Number(form.precioVenta),
+          canal: form.canal,
+        }),
+      });
+
+      setVentas((prev) => [response.data, ...prev]);
+      setStockChile((prev) =>
+        prev.map((item) =>
+          item.id === form.productId
+            ? { ...item, stock: Math.max(0, item.stock - Number(form.cant)) }
+            : item
+        )
+      );
+
+      setShowModal(false);
+      setForm({ ...emptyForm });
+      setErrors({});
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo registrar la venta');
+    } finally {
+      setSaving(false);
+    }
   }
 
   function openModal() {
@@ -86,12 +177,12 @@ export default function VentasPage() {
     setShowModal(true);
   }
 
-  function handleStockChange(stockId: string) {
-    const stock = stockChile.find((s) => s.id === stockId);
+  function handleStockChange(productId: string) {
+    const stock = stockChile.find((s) => s.id === productId);
     setForm({
       ...form,
-      stockId,
-      precioVenta: stock?.precioVenta != null && stock.precioVenta > 0 ? String(stock.precioVenta) : '',
+      productId,
+      precioVenta: stock?.salePrice != null && stock.salePrice > 0 ? String(stock.salePrice) : '',
     });
   }
 
@@ -104,9 +195,20 @@ export default function VentasPage() {
         </Button>
       </div>
 
-      {/* Table */}
+      {error && (
+        <Card>
+          <p className="text-sm text-destructive">{error}</p>
+        </Card>
+      )}
+
       <Card padding="none">
-        {ventas.length === 0 ? (
+        {isLoading ? (
+          <EmptyState
+            icon={ShoppingBag}
+            title="Cargando ventas"
+            description="Obteniendo historial de ventas y stock disponible..."
+          />
+        ) : ventas.length === 0 ? (
           <EmptyState
             icon={ShoppingBag}
             title="Sin ventas"
@@ -131,8 +233,8 @@ export default function VentasPage() {
               {ventas.map((v) => (
                 <TableRow key={v.id}>
                   <TableCell className="font-[family-name:var(--font-mono)] text-xs">{v.id}</TableCell>
-                  <TableCell>{v.fecha}</TableCell>
-                  <TableCell className="max-w-[200px] truncate">{v.producto}</TableCell>
+                  <TableCell>{new Date(v.fecha).toLocaleDateString('es-CL')}</TableCell>
+                  <TableCell className="max-w-[220px] truncate">{v.producto}</TableCell>
                   <TableCell className="text-right">{v.cant}</TableCell>
                   <TableCell className="text-right"><PriceDisplay amount={v.precioVenta} currency="CLP" /></TableCell>
                   <TableCell className="text-right"><PriceDisplay amount={v.costo} currency="CLP" /></TableCell>
@@ -147,26 +249,25 @@ export default function VentasPage() {
         )}
       </Card>
 
-      {/* Modal Nueva Venta */}
       <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Nueva Venta" size="md">
         <div className="space-y-4">
           <Select
             label="Producto"
-            value={form.stockId}
+            value={form.productId}
             onChange={(e) => handleStockChange(e.target.value)}
-            error={errors.stockId}
+            error={errors.productId}
           >
             <option value="">Seleccionar producto...</option>
             {availableStock.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.nombre} — Stock: {s.cant} ({s._sku})
+                {s.name} — Stock: {s.stock} ({s.sku})
               </option>
             ))}
           </Select>
 
           {selectedStock && (
             <p className="text-xs text-muted-foreground">
-              Stock disponible: {selectedStock.cant} · Costo unit.: <PriceDisplay amount={selectedStock.costoUnit} currency="CLP" />
+              Stock disponible: {selectedStock.stock} · Costo unit.: <PriceDisplay amount={selectedStock.costUnit} currency="CLP" />
             </p>
           )}
 
@@ -175,7 +276,7 @@ export default function VentasPage() {
               label="Cantidad"
               type="number"
               min="1"
-              max={selectedStock?.cant ?? undefined}
+              max={selectedStock?.stock ?? undefined}
               step="1"
               value={form.cant}
               onChange={(e) => setForm({ ...form, cant: e.target.value })}
@@ -211,7 +312,7 @@ export default function VentasPage() {
         </div>
         <ModalFooter>
           <Button variant="ghost" onClick={() => setShowModal(false)}>Cancelar</Button>
-          <Button onClick={handleSubmit}>Registrar Venta</Button>
+          <Button onClick={handleSubmit} disabled={saving}>{saving ? 'Guardando...' : 'Registrar Venta'}</Button>
         </ModalFooter>
       </Modal>
     </div>

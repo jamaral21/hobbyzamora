@@ -474,9 +474,7 @@ export function PresalesPage() {
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {products.map((p) => {
-              const activeReservedCount = reservations.filter((r) =>
-                r.product.id === p.id && ['PENDING', 'NOTIFIED', 'PAID'].includes(r.status)
-              ).length;
+              const activeReservedCount = Number((p as any).activeReservedCount ?? 0);
 
               return (
               <PresaleProductCard
