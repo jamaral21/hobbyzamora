@@ -193,4 +193,14 @@
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
   }
+
+  select {
+    color: var(--foreground);
+    background-color: var(--input-background);
+  }
+
+  option {
+    color: var(--foreground);
+    background-color: var(--input-background);
+  }
 }

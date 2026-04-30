@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
-import { Link } from 'react-router';
+import { useState, useMemo, useEffect, useCallback, type Dispatch, type SetStateAction } from 'react';
+import { Link, useNavigate } from 'react-router';
 import {
   Lock,
   Star,
@@ -174,12 +174,17 @@ function AvailablePresales({
   onReserved,
   isAuthenticated,
   isBanned,
+  categoryFilter,
+  onCategoryOptionsChange,
 }: {
   reservedProductIds: Set<string>;
   onReserved: (reservation: PresaleReservation) => void;
   isAuthenticated: boolean;
   isBanned?: boolean;
+  categoryFilter: string;
+  onCategoryOptionsChange: Dispatch<SetStateAction<string[]>>;
 }) {
+  const navigate = useNavigate();
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -245,6 +250,29 @@ function AvailablePresales({
       (!product.presaleEndDate || new Date(product.presaleEndDate) > new Date())
   );
 
+  const categoryOptions = useMemo(() => {
+    const categories = new Set<string>();
+    available.forEach((product) => {
+      const category = String(product.category || '').trim();
+      if (category) categories.add(category);
+    });
+    return ['ALL', ...Array.from(categories).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))];
+  }, [available]);
+
+  const filteredAvailable = useMemo(() => {
+    if (categoryFilter === 'ALL') return available;
+    return available.filter((product) => product.category === categoryFilter);
+  }, [available, categoryFilter]);
+
+  useEffect(() => {
+    onCategoryOptionsChange((prev) => {
+      if (prev.length === categoryOptions.length && prev.every((value, index) => value === categoryOptions[index])) {
+        return prev;
+      }
+      return categoryOptions;
+    });
+  }, [categoryOptions, onCategoryOptionsChange]);
+
   return (
     <>
       <AuthModal
@@ -272,20 +300,24 @@ function AvailablePresales({
           <div className="flex items-center justify-center py-16">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
-        ) : available.length === 0 ? (
+        ) : filteredAvailable.length === 0 ? (
           <Card className="text-center py-12">
             <Package className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
-            <h3 className="text-lg text-foreground mb-2">Sin preventas disponibles</h3>
-            <p className="text-sm text-muted-foreground">Por ahora no hay preventas activas para reservar.</p>
+            <h3 className="text-lg text-foreground mb-2">Sin preventas para esta categoría</h3>
+            <p className="text-sm text-muted-foreground">Prueba con otra categoría o vuelve a "Todas las categorías".</p>
           </Card>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {available.map((product) => {
+            {filteredAvailable.map((product) => {
               const img = product.images?.[0];
               const endLabel = presaleEndLabel(product.presaleEndDate ?? null);
 
               return (
-                <Card key={product.id} className="overflow-hidden p-0">
+                <Card
+                  key={product.id}
+                  className="overflow-hidden p-0 cursor-pointer"
+                  onClick={() => navigate(`/store/product/${product.id}`)}
+                >
                   <Link to={`/store/product/${product.id}`} className="block">
                     <div className="aspect-[4/3] bg-secondary overflow-hidden">
                       {img ? (
@@ -324,7 +356,14 @@ function AvailablePresales({
 
                     {errors[product.id] && <p className="text-xs text-red-500">{errors[product.id]}</p>}
 
-                    <Button fullWidth onClick={() => handleReserveClick(product)}>
+                    <Button
+                      fullWidth
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleReserveClick(product);
+                      }}
+                    >
                       <Tag className="w-4 h-4" />
                       Reservar
                     </Button>
@@ -341,10 +380,18 @@ function AvailablePresales({
 
 function PresalesContent() {
   const [activeTab, setActiveTab] = useState<PresaleTab>('disponibles');
+  const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [categoryOptions, setCategoryOptions] = useState<string[]>(['ALL']);
   const [reservations, setReservations] = useState<PresaleReservation[]>([]);
   const [loading, setLoading] = useState(true);
   const { addItem, items: cartItems } = useCartStore();
   const { user } = useAuth();
+
+  useEffect(() => {
+    if (!categoryOptions.includes(categoryFilter)) {
+      setCategoryFilter('ALL');
+    }
+  }, [categoryOptions, categoryFilter]);
 
   const loadReservations = useCallback(() => {
     if (!user?.id) {
@@ -391,29 +438,50 @@ function PresalesContent() {
         <PresaleKPICard value={kpis.paid} label="Pagados" color="text-[#00e676]" />
       </div>
 
-      <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 w-fit">
-        <button
-          onClick={() => setActiveTab('reservas')}
-          className={`flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors ${
-            activeTab === 'reservas'
-              ? 'bg-primary text-primary-foreground'
-              : 'text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          <Star className="w-4 h-4" />
-          Mis Reservas
-        </button>
-        <button
-          onClick={() => setActiveTab('disponibles')}
-          className={`flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors ${
-            activeTab === 'disponibles'
-              ? 'bg-primary text-primary-foreground'
-              : 'text-muted-foreground hover:text-foreground'
-          }`}
-        >
-          <Package className="w-4 h-4" />
-          Disponibles
-        </button>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-1 bg-secondary rounded-lg p-1 w-fit">
+          <button
+            onClick={() => setActiveTab('reservas')}
+            className={`flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors ${
+              activeTab === 'reservas'
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Star className="w-4 h-4" />
+            Mis Reservas
+          </button>
+          <button
+            onClick={() => setActiveTab('disponibles')}
+            className={`flex items-center gap-2 px-4 py-2 text-sm rounded-md transition-colors ${
+              activeTab === 'disponibles'
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Package className="w-4 h-4" />
+            Disponibles
+          </button>
+        </div>
+
+        {activeTab === 'disponibles' && (
+          <div className="w-full lg:w-auto">
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="w-full lg:w-auto min-w-[240px] rounded-lg border border-primary/60 bg-primary text-primary-foreground px-4 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary/50"
+            >
+              <option value="ALL">Categoria: Todas</option>
+              {categoryOptions
+                .filter((category) => category !== 'ALL')
+                .map((category) => (
+                  <option key={category} value={category}>
+                    Categoria: {category}
+                  </option>
+                ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {activeTab === 'reservas' ? (
@@ -521,6 +589,8 @@ function PresalesContent() {
           onReserved={handleReserved}
           isAuthenticated={true}
           isBanned={!!user?.presaleBanned}
+          categoryFilter={categoryFilter}
+          onCategoryOptionsChange={setCategoryOptions}
         />
       )}
     </div>

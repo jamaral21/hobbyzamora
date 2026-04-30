@@ -192,6 +192,13 @@ export function PresalesPage() {
   const [restoringUserId, setRestoringUserId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
   const [pagination, setPagination] = useState({ total: 0, totalPages: 1, page: 1 });
+  const [globalStats, setGlobalStats] = useState({
+    total: 0,
+    pending: 0,
+    notified: 0,
+    paid: 0,
+    expired: 0,
+  });
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editorMode, setEditorMode] = useState<'edit' | 'convert'>('edit');
   const [savingProduct, setSavingProduct] = useState(false);
@@ -225,14 +232,36 @@ export function PresalesPage() {
     } catch { /* noop */ }
   };
 
-  useEffect(() => { loadReservations(); loadProducts(); }, [loadReservations]);
+  const loadGlobalStats = useCallback(async () => {
+    try {
+      const [totalRes, pendingRes, notifiedRes, paidRes, expiredRes] = await Promise.all([
+        presaleAPI.adminList({ page: 1, limit: 1 }),
+        presaleAPI.adminList({ status: 'PENDING', page: 1, limit: 1 }),
+        presaleAPI.adminList({ status: 'NOTIFIED', page: 1, limit: 1 }),
+        presaleAPI.adminList({ status: 'PAID', page: 1, limit: 1 }),
+        presaleAPI.adminList({ status: 'EXPIRED', page: 1, limit: 1 }),
+      ]);
+
+      setGlobalStats({
+        total: totalRes.pagination?.total || 0,
+        pending: pendingRes.pagination?.total || 0,
+        notified: notifiedRes.pagination?.total || 0,
+        paid: paidRes.pagination?.total || 0,
+        expired: expiredRes.pagination?.total || 0,
+      });
+    } catch {
+      // Keep previous stats if this refresh fails.
+    }
+  }, []);
+
+  useEffect(() => { loadReservations(); loadProducts(); loadGlobalStats(); }, [loadReservations, loadGlobalStats]);
 
   const handleConfirmArrival = async (productId: string) => {
     setConfirmingId(productId);
     try {
       const data = await presaleAPI.confirmArrival(productId);
       showToast(data.message);
-      await Promise.all([loadReservations(), loadProducts()]);
+      await Promise.all([loadReservations(), loadProducts(), loadGlobalStats()]);
     } catch (err: any) {
       showToast(err.message || 'Error al confirmar llegada', 'err');
     } finally {
@@ -275,8 +304,7 @@ export function PresalesPage() {
     try {
       const data = await presaleAPI.releaseExpired();
       showToast(data.message);
-      await loadReservations();
-      await loadProducts();
+      await Promise.all([loadReservations(), loadProducts(), loadGlobalStats()]);
     } catch (err: any) {
       showToast(err.message || 'Error al liberar reservas', 'err');
     } finally {
@@ -292,6 +320,7 @@ export function PresalesPage() {
       setReservations((prev) =>
         prev.map((r) => (r.id === reservationId ? { ...r, status: 'PAID' as any } : r))
       );
+      await loadGlobalStats();
     } catch (err: any) {
       showToast(err.message || 'Error al marcar como pagado', 'err');
     } finally {
@@ -307,7 +336,7 @@ export function PresalesPage() {
       const data = await presaleAPI.releaseForSale(releaseProduct.id);
       showToast(data.message);
       setReleaseProduct(null);
-      await Promise.all([loadProducts(), loadReservations()]);
+      await Promise.all([loadProducts(), loadReservations(), loadGlobalStats()]);
     } catch (err: any) {
       showToast(err.message || 'Error al liberar la preventa', 'err');
     } finally {
@@ -325,7 +354,7 @@ export function PresalesPage() {
     try {
       const data = await presaleAPI.adminCancelReservation(reservationId, reason.trim(), banUser);
       showToast(data.message);
-      await Promise.all([loadReservations(pagination.page), loadProducts()]);
+      await Promise.all([loadReservations(pagination.page), loadProducts(), loadGlobalStats()]);
     } catch (err: any) {
       showToast(err.message || 'Error al cancelar la reserva', 'err');
     } finally {
@@ -378,13 +407,7 @@ export function PresalesPage() {
   };
 
   // Stats
-  const stats = {
-    pending: reservations.filter((r) => r.status === 'PENDING').length,
-    notified: reservations.filter((r) => r.status === 'NOTIFIED').length,
-    paid: reservations.filter((r) => r.status === 'PAID').length,
-    expired: reservations.filter((r) => r.status === 'EXPIRED').length,
-    total: pagination.total,
-  };
+  const stats = globalStats;
 
   // Filtered by search
   const filtered = reservations.filter((r) => {

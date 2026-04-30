@@ -19,6 +19,7 @@ export default function ProductsPage() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ACTIVE' | 'ARCHIVED' | 'HIDDEN' | 'ALL'>('ACTIVE');
+  const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [isEditorOpen, setIsEditorOpen] = useState(
     (location.state as any)?.openEditor === true
   );
@@ -40,14 +41,28 @@ export default function ProductsPage() {
   const createProduct = useMutation(productsAPI.create);
   const updateProduct = useMutation(productsAPI.update);
 
+  const categoryOptions = useMemo(() => {
+    const categories = new Set<string>();
+
+    (products || [])
+      .filter((p: any) => isPresalesView ? p.isPresale : !p.isPresale)
+      .forEach((p: any) => {
+        const category = String(p.category || '').trim();
+        if (category) categories.add(category);
+      });
+
+    return ['ALL', ...Array.from(categories).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))];
+  }, [products, isPresalesView]);
+
   const filteredProducts = useMemo(() => {
     return (products || [])
       .filter((p: any) => isPresalesView ? p.isPresale : !p.isPresale)
+      .filter((p: any) => categoryFilter === 'ALL' || p.category === categoryFilter)
       .filter((p: any) =>
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.sku.toLowerCase().includes(searchQuery.toLowerCase())
+        String(p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        String(p.sku || '').toLowerCase().includes(searchQuery.toLowerCase())
       );
-  }, [products, searchQuery, isPresalesView]);
+  }, [products, searchQuery, isPresalesView, categoryFilter]);
 
   const handleDeactivate = async (id: string) => {
     if (confirm('¿Estás seguro de que quieres desactivar este producto?')) {
@@ -318,7 +333,7 @@ export default function ProductsPage() {
         )}
 
         {/* Filters */}
-        <div className="flex gap-4">
+        <div className="flex flex-col sm:flex-row gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
@@ -328,6 +343,23 @@ export default function ProductsPage() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 rounded-lg border border-border bg-input-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
+          </div>
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-input-background px-3 py-2">
+            <Filter className="w-4 h-4 text-muted-foreground" />
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="bg-transparent text-foreground focus:outline-none"
+            >
+              <option value="ALL">Todas las categorías</option>
+              {categoryOptions
+                .filter((category) => category !== 'ALL')
+                .map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+            </select>
           </div>
           <div className="flex items-center gap-2 rounded-lg border border-border bg-input-background px-3 py-2">
             <Filter className="w-4 h-4 text-muted-foreground" />

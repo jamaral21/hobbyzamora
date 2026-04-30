@@ -3,9 +3,10 @@ import { Search, User, Loader2 } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { Button } from '../../components/design-system/Button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/design-system/Table';
-import { Badge } from '../../components/design-system/Badge';
 import { customersAPI, type Customer } from '../../lib/api';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
+
+const formatAmount = (value: number) => `$${new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 }).format(value)}`;
 
 export default function CustomersPage() {
   const { isAuthenticated } = useAdminAuth();
@@ -68,11 +69,11 @@ export default function CustomersPage() {
           </div>
           <div className="bg-card border border-border rounded-lg p-6">
             <p className="text-sm text-muted-foreground mb-1">Gasto Total</p>
-            <p className="text-2xl font-bold text-primary">${totalSpentAll.toFixed(2)}</p>
+            <p className="text-2xl font-bold text-primary">{formatAmount(totalSpentAll)}</p>
           </div>
           <div className="bg-card border border-border rounded-lg p-6">
             <p className="text-sm text-muted-foreground mb-1">Gasto Promedio</p>
-            <p className="text-2xl font-bold text-foreground">${avgSpent.toFixed(2)}</p>
+            <p className="text-2xl font-bold text-foreground">{formatAmount(avgSpent)}</p>
           </div>
         </div>
 
@@ -106,6 +107,7 @@ export default function CustomersPage() {
                   <TableHead>Cliente</TableHead>
                   <TableHead>Pedidos</TableHead>
                   <TableHead>Total Gastado</TableHead>
+                  <TableHead>Ticket Promedio</TableHead>
                   <TableHead>Miembro Desde</TableHead>
                 </TableRow>
               </TableHeader>
@@ -128,7 +130,10 @@ export default function CustomersPage() {
                       <span className="text-muted-foreground text-sm ml-1">pedidos</span>
                     </TableCell>
                     <TableCell className="font-semibold text-primary">
-                      ${customer.totalSpent.toFixed(2)}
+                      {formatAmount(customer.totalSpent)}
+                    </TableCell>
+                    <TableCell className="font-semibold text-foreground">
+                      {formatAmount(customer.totalOrders > 0 ? customer.totalSpent / customer.totalOrders : 0)}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {new Date(customer.joinDate).toLocaleDateString()}

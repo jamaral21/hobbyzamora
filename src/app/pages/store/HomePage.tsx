@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { Link } from 'react-router';
 import {
   ArrowRight,
@@ -19,6 +19,14 @@ import { HeroSlider, type HeroSlide } from '../../components/design-system/HeroS
 import { useProducts } from '../../hooks/useData';
 import { useAuth } from '../../contexts/AuthContext';
 import { mockProducts } from '../../data/mockData';
+
+const slugify = (text: string) =>
+  String(text || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
 
 const heroSlides: HeroSlide[] = [
   {
@@ -66,9 +74,40 @@ export default function HomePage() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const allProducts = products && products.length > 0 ? products : mockProducts;
-  const featuredProducts = allProducts.slice(0, 8);
-  const presaleProducts = allProducts.filter((p: any) => p.isPresale);
-  const newProducts = allProducts.slice(0, 6);
+
+  const sortedByNewest = useMemo(() => {
+    return [...allProducts].sort((a: any, b: any) => {
+      const aDate = new Date(a.createdAt || a.updatedAt || 0).getTime();
+      const bDate = new Date(b.createdAt || b.updatedAt || 0).getTime();
+      return bDate - aDate;
+    });
+  }, [allProducts]);
+
+  const featuredProducts = useMemo(() => {
+    return sortedByNewest.slice(0, 8);
+  }, [sortedByNewest]);
+
+  const presaleProducts = useMemo(() => {
+    return allProducts.filter((p: any) => p.isPresale);
+  }, [allProducts]);
+
+  const beybladeBase = useMemo(() => {
+    return allProducts.filter((p: any) => slugify(p.category).includes('beyblade'));
+  }, [allProducts]);
+
+  const beybladeProducts = useMemo(() => beybladeBase.slice(0, 6), [beybladeBase]);
+
+  const pokemonTcgBase = useMemo(() => {
+    return allProducts.filter((p: any) => slugify(p.category).includes('pokemon-tcg'));
+  }, [allProducts]);
+
+  const pokemonTcgProducts = useMemo(() => pokemonTcgBase.slice(0, 6), [pokemonTcgBase]);
+
+  const novedadesEnStock = useMemo(() => {
+    return sortedByNewest
+      .filter((p: any) => !p.isPresale && Number(p.stock || 0) > 0)
+      .slice(0, 6);
+  }, [sortedByNewest]);
 
   const scroll = (direction: 'left' | 'right') => {
     if (scrollRef.current) {
@@ -102,7 +141,7 @@ export default function HomePage() {
           <div className="flex items-center justify-between mb-8">
             <div>
               <h2 className="text-primary mb-2">PRODUCTOS DESTACADOS</h2>
-              <p className="text-muted-foreground">Lo más popular de nuestra comunidad</p>
+              <p className="text-muted-foreground">Los mas nuevos del catalogo</p>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -137,6 +176,36 @@ export default function HomePage() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════
+          NOVEDADES EN STOCK
+      ═══════════════════════════════════════════ */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h2 className="text-primary mb-2">NOVEDADES EN STOCK</h2>
+            <p className="text-muted-foreground">Productos nuevos disponibles para compra inmediata</p>
+          </div>
+          <Link to="/store/products">
+            <Button variant="outline" size="sm">
+              Ver Todo
+              <ArrowRight className="w-4 h-4" />
+            </Button>
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {novedadesEnStock.map((product) => (
+            <ProductCard key={product.id} product={product} />
+          ))}
+        </div>
+
+        {novedadesEnStock.length === 0 && (
+          <Card className="text-center py-10 mt-6">
+            <p className="text-sm text-muted-foreground">Aun no hay novedades con stock disponible.</p>
+          </Card>
+        )}
       </section>
 
       {/* ═══════════════════════════════════════════
@@ -188,27 +257,42 @@ export default function HomePage() {
       )}
 
       {/* ═══════════════════════════════════════════
-          NOVEDADES — Grid de productos recientes
+          BEYBLADE
       ═══════════════════════════════════════════ */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h2 className="text-primary mb-2">NOVEDADES</h2>
-            <p className="text-muted-foreground">Recién agregados a la tienda</p>
+      {beybladeProducts.length > 0 && (
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h2 className="text-primary mb-2">BEYBLADE</h2>
+              <p className="text-muted-foreground">Productos de Beyblade disponibles</p>
+            </div>
           </div>
-          <Link to="/store/products">
-            <Button variant="outline" size="sm">
-              Ver Todo
-              <ArrowRight className="w-4 h-4" />
-            </Button>
-          </Link>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {newProducts.map((product) => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
-      </section>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {beybladeProducts.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ═══════════════════════════════════════════
+          POKEMON TCG
+      ═══════════════════════════════════════════ */}
+      {pokemonTcgProducts.length > 0 && (
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h2 className="text-primary mb-2">POKEMON TCG</h2>
+              <p className="text-muted-foreground">Sobres, cartas y colecciones TCG</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {pokemonTcgProducts.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ═══════════════════════════════════════════
           TRUST BADGES — Envío, Pago, Originales, Soporte

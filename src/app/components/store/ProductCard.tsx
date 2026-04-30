@@ -43,7 +43,7 @@ export function ProductCard({ product }: ProductCardProps) {
   };
 
   return (
-    <Card padding="none" hover className="group overflow-hidden flex flex-col">
+    <Card padding="none" hover className="group h-full overflow-hidden flex flex-col">
       <Link to={`/store/product/${product.id}`}>
         <div className="aspect-square overflow-hidden bg-secondary relative">
           <img
@@ -75,33 +75,37 @@ export function ProductCard({ product }: ProductCardProps) {
 
       <div className="p-4 flex flex-col flex-1">
         <div className="flex items-start justify-between gap-2 mb-2">
-          <Link to={`/store/product/${product.id}`}>
-            <h3 className="text-foreground group-hover:text-primary transition-colors font-semibold">
+          <Link to={`/store/product/${product.id}`} className="block">
+            <h3 className="min-h-[3rem] line-clamp-2 text-foreground group-hover:text-primary transition-colors font-semibold leading-6">
               {product.name}
             </h3>
           </Link>
         </div>
 
-        <p className="text-muted-foreground mb-3 uppercase tracking-wider text-xs">{product.category}</p>
+        <p className="text-muted-foreground mb-3 uppercase tracking-wider text-xs line-clamp-1 min-h-[1rem]">{product.category}</p>
 
-        {presaleExpiryLabel && (
-          <div className={`mb-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${presaleExpiryLabel === 'Expirado' ? 'bg-red-500/10 text-red-500' : 'bg-amber-500/10 text-amber-500'}`}>
-            <Clock3 className="w-3 h-3" />
-            {presaleExpiryLabel}
-          </div>
-        )}
+        <div className="mb-3 min-h-[24px]">
+          {presaleExpiryLabel && (
+            <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold ${presaleExpiryLabel === 'Expirado' ? 'bg-red-500/10 text-red-500' : 'bg-amber-500/10 text-amber-500'}`}>
+              <Clock3 className="w-3 h-3" />
+              {presaleExpiryLabel}
+            </div>
+          )}
+        </div>
 
         <div className="flex items-end justify-between mt-auto">
           <div>
             <span className="text-xl text-primary font-bold font-[family-name:var(--font-mono)]">
               ${product.price.toLocaleString('es-CL')}
             </span>
-            {isLowStock && (
-              <div className="flex items-center gap-1 mt-1.5">
-                <AlertCircle className="w-3 h-3 text-destructive" />
-                <span className="text-xs text-destructive">Quedan {product.stock}</span>
-              </div>
-            )}
+            <div className="mt-1.5 min-h-[18px]">
+              {isLowStock && (
+                <div className="flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3 text-destructive" />
+                  <span className="text-xs text-destructive">Quedan {product.stock}</span>
+                </div>
+              )}
+            </div>
           </div>
 
           <Button

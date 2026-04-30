@@ -8,6 +8,20 @@ import { Badge } from '../../components/design-system/Badge';
 import { useOrders } from '../../hooks/useData';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
 
+function getPaymentLabel(method?: string): string {
+  switch ((method || '').toUpperCase()) {
+    case 'CARD':
+    case 'GETNET':
+      return 'Tarjeta';
+    case 'CASH':
+      return 'Efectivo';
+    case 'TRANSFER':
+      return 'Transferencia';
+    default:
+      return '—';
+  }
+}
+
 export default function OrdersPage() {
   const { isAuthenticated } = useAdminAuth();
   const navigate = useNavigate();
@@ -41,7 +55,6 @@ export default function OrdersPage() {
       source: sourceFilter !== 'all' ? sourceFilter.toUpperCase() : undefined,
       startDate: dateFrom || undefined,
       endDate: dateTo || undefined,
-      search: searchQuery || undefined,
       page,
       limit: PAGE_SIZE,
     },
@@ -57,7 +70,15 @@ export default function OrdersPage() {
       : 0;
 
   const filteredOrders = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+
     return orders.filter((order: any) => {
+      const matchesText =
+        q === '' ||
+        String(order.orderNumber || '').toLowerCase().includes(q) ||
+        String(order.customerName || '').toLowerCase().includes(q) ||
+        String(order.customerEmail || '').toLowerCase().includes(q);
+
       const matchesEan =
         eanFilter === '' ||
         (Array.isArray(order.items) &&
@@ -74,9 +95,9 @@ export default function OrdersPage() {
               .toLowerCase()
               .includes(skuFilter.toLowerCase())
           ));
-      return matchesEan && matchesSku;
+      return matchesText && matchesEan && matchesSku;
     });
-  }, [orders, eanFilter, skuFilter]);
+  }, [orders, searchQuery, eanFilter, skuFilter]);
 
   const statusCounts = useMemo(() => {
     const counts = ordersData?.statusCounts ?? {};
@@ -110,13 +131,14 @@ export default function OrdersPage() {
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => {
-              const headers = ['Pedido', 'Cliente', 'Email', 'Fecha', 'Artículos', 'Total', 'Estado'];
+              const headers = ['Pedido', 'Cliente', 'Email', 'Fecha', 'Artículos', 'Método de pago', 'Total', 'Estado'];
               const rows = filteredOrders.map((o: any) => [
                 o.orderNumber,
                 o.customerName || '',
                 o.customerEmail || '',
                 new Date(o.createdAt).toLocaleDateString(),
                 getItemsCount(o),
+                getPaymentLabel(o.payments?.[0]?.method),
                 o.total.toLocaleString('es-CL', { maximumFractionDigits: 0 }),
                 o.status.toLowerCase(),
               ]);
@@ -145,7 +167,7 @@ export default function OrdersPage() {
               type="text"
               placeholder="Buscar pedidos..."
               value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); resetPage(); }}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 rounded-lg border border-border bg-input-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
@@ -279,6 +301,7 @@ export default function OrdersPage() {
             <TableHead>Cliente</TableHead>
             <TableHead>Fecha</TableHead>
             <TableHead>Artículos</TableHead>
+            <TableHead>Método de pago</TableHead>
             <TableHead>Total</TableHead>
             <TableHead>Estado</TableHead>
             <TableHead>Acciones</TableHead>
@@ -300,6 +323,7 @@ export default function OrdersPage() {
                 {new Date(order.createdAt).toLocaleDateString()}
               </TableCell>
               <TableCell>{getItemsCount(order)}</TableCell>
+              <TableCell>{getPaymentLabel(order.payments?.[0]?.method)}</TableCell>
               <TableCell>${order.total.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</TableCell>
               <TableCell>
                 <Badge
