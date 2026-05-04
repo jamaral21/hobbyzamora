@@ -40,6 +40,7 @@ export function ProductEditor({
       images: [],
       description: '',
       status: 'ACTIVE',
+      featured: false,
     })
   );
 
@@ -163,6 +164,16 @@ export function ProductEditor({
                   <option value="HIDDEN">Oculto (solo admin)</option>
                 </Select>
               </div>
+
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!formData.featured}
+                  onChange={(e) => setFormData({ ...formData, featured: e.target.checked })}
+                  className="w-4 h-4 rounded border-border text-primary focus:ring-primary/30"
+                />
+                <span className="text-sm text-foreground">Mostrar en productos destacados del home</span>
+              </label>
 
               <Input
                 label="EAN"

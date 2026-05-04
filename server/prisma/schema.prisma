@@ -69,6 +69,7 @@ model Product {
   status      String   @default("ACTIVE")
 
   ean               String?  @map("barcode")
+  featured          Boolean  @default(false)
 
   isPresale         Boolean   @default(false)
   presaleMaxQty     Int?

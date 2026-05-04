@@ -84,7 +84,9 @@ export default function HomePage() {
   }, [allProducts]);
 
   const featuredProducts = useMemo(() => {
-    return sortedByNewest.slice(0, 8);
+    return sortedByNewest
+      .filter((p: any) => p.featured)
+      .slice(0, 8);
   }, [sortedByNewest]);
 
   const presaleProducts = useMemo(() => {
@@ -136,47 +138,49 @@ export default function HomePage() {
       {/* ═══════════════════════════════════════════
           PRODUCTOS DESTACADOS — Carrusel horizontal
       ═══════════════════════════════════════════ */}
-      <section className="py-14">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h2 className="text-primary mb-2">PRODUCTOS DESTACADOS</h2>
-              <p className="text-muted-foreground">Los mas nuevos del catalogo</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => scroll('left')}
-                className="p-2 rounded-lg border border-border hover:border-primary hover:text-primary text-muted-foreground transition-colors"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <button
-                onClick={() => scroll('right')}
-                className="p-2 rounded-lg border border-border hover:border-primary hover:text-primary text-muted-foreground transition-colors"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
-              <Link to="/store/products" className="ml-2">
-                <Button variant="outline" size="sm">
-                  Ver Todo
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </Link>
+      {featuredProducts.length > 0 && (
+        <section className="py-14">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <h2 className="text-primary mb-2">PRODUCTOS DESTACADOS</h2>
+                <p className="text-muted-foreground">Seleccionados manualmente por el equipo</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => scroll('left')}
+                  className="p-2 rounded-lg border border-border hover:border-primary hover:text-primary text-muted-foreground transition-colors"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => scroll('right')}
+                  className="p-2 rounded-lg border border-border hover:border-primary hover:text-primary text-muted-foreground transition-colors"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+                <Link to="/store/products" className="ml-2">
+                  <Button variant="outline" size="sm">
+                    Ver Todo
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </Link>
+              </div>
             </div>
           </div>
-        </div>
-        <div
-          ref={scrollRef}
-          className="flex gap-5 overflow-x-auto scrollbar-hide pb-2 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
-          style={{ scrollbarWidth: 'none' }}
-        >
-          {featuredProducts.map((product) => (
-            <div key={product.id} className="flex-shrink-0 w-[280px]">
-              <ProductCard product={product} />
-            </div>
-          ))}
-        </div>
-      </section>
+          <div
+            ref={scrollRef}
+            className="flex gap-5 overflow-x-auto scrollbar-hide pb-2 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
+            style={{ scrollbarWidth: 'none' }}
+          >
+            {featuredProducts.map((product) => (
+              <div key={product.id} className="flex-shrink-0 w-[280px]">
+                <ProductCard product={product} />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ═══════════════════════════════════════════
           NOVEDADES EN STOCK
@@ -236,7 +240,7 @@ export default function HomePage() {
               >
                 {presaleProducts.map((product) => (
                   <div key={product.id} className="flex-shrink-0 w-[280px]">
-                    <ProductCard product={product} />
+                    <ProductCard product={product} hideStock />
                   </div>
                 ))}
               </div>

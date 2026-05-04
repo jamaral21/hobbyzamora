@@ -9,6 +9,7 @@ import { useCartStore } from '../../lib/store';
 
 export interface ProductCardProps {
   product: Product;
+  hideStock?: boolean;
 }
 
 function getPresaleExpiryLabel(presaleEndDate?: string | null) {
@@ -26,8 +27,8 @@ function getPresaleExpiryLabel(presaleEndDate?: string | null) {
   return `Expira en ${minutes}m`;
 }
 
-export function ProductCard({ product }: ProductCardProps) {
-  const isLowStock = product.stock < 10;
+export function ProductCard({ product, hideStock = false }: ProductCardProps) {
+  const isLowStock = !hideStock && !product.isPresale && product.stock < 10;
   const isExpiredPresale = product.isPresale && product.presaleEndDate && new Date(product.presaleEndDate) < new Date();
   const isSoldOutPresale = product.isPresale && product.presaleAvailQty != null && product.presaleAvailQty <= 0;
   const isDisabled = product.stock <= 0 || !!isExpiredPresale || !!isSoldOutPresale;

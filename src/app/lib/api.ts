@@ -16,6 +16,7 @@ export interface Product {
   images: string[];
   description: string | null;
   status: 'ACTIVE' | 'DRAFT' | 'ARCHIVED' | 'HIDDEN';
+  featured?: boolean;
   isPresale?: boolean;
   presaleMaxQty?: number;
   presaleAvailQty?: number;

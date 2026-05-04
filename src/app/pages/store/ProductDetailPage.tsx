@@ -430,12 +430,14 @@ export default function ProductDetailPage() {
                   <dt className="text-muted-foreground">Categoría</dt>
                   <dd className="text-foreground">{product.category}</dd>
                 </div>
-                <div className="flex justify-between">
-                  <dt className="text-muted-foreground">Disponibilidad</dt>
-                  <dd className="text-foreground">
-                    {product.stock > 0 ? `${product.stock} en stock` : 'Agotado'}
-                  </dd>
-                </div>
+                {!product.isPresale && (
+                  <div className="flex justify-between">
+                    <dt className="text-muted-foreground">Disponibilidad</dt>
+                    <dd className="text-foreground">
+                      {product.stock > 0 ? `${product.stock} en stock` : 'Agotado'}
+                    </dd>
+                  </div>
+                )}
               </dl>
             </div>
           </div>
