@@ -251,6 +251,34 @@ router.get('/admin/list', authenticate, requireRole('ADMIN', 'STAFF'), async (re
 });
 
 /**
+ * GET /api/presale/admin/product-reservation-counts
+ * Admin: global active reservation counts grouped by product (not paginated).
+ */
+router.get('/admin/product-reservation-counts', authenticate, requireRole('ADMIN', 'STAFF'), async (_req, res) => {
+  try {
+    const grouped = await prisma.presaleReservation.groupBy({
+      by: ['productId'],
+      where: {
+        status: { in: ['PENDING', 'NOTIFIED', 'PAID'] },
+      },
+      _count: {
+        _all: true,
+      },
+    });
+
+    const countsByProduct = grouped.reduce<Record<string, number>>((acc, row) => {
+      acc[row.productId] = row._count._all;
+      return acc;
+    }, {});
+
+    return res.json({ countsByProduct });
+  } catch (error) {
+    console.error('Presale product reservation counts error:', error);
+    return res.status(500).json({ error: 'Error al obtener conteos globales de reservas' });
+  }
+});
+
+/**
  * POST /api/presale/admin/confirm-arrival/:productId
  * Admin: mark a presale product as arrived, notify all PENDING reservers by email.
  * This transitions their status to NOTIFIED and sets expiresAt = now + 24h.

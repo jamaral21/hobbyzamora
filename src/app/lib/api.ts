@@ -899,6 +899,10 @@ export const presaleAPI = {
     );
   },
 
+  /** Admin: global active reservation counts grouped by product */
+  adminProductReservationCounts: () =>
+    fetchAPI<{ countsByProduct: Record<string, number> }>('/presale/admin/product-reservation-counts', undefined, 'admin'),
+
   /** Confirm product arrival → notify all PENDING reservers */
   confirmArrival: (productId: string) =>
     fetchAPI<{ message: string; notified: number }>(`/presale/admin/confirm-arrival/${productId}`, {

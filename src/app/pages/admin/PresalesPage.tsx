@@ -179,6 +179,7 @@ function PresaleProductCard({
 export function PresalesPage() {
   const [reservations, setReservations] = useState<AdminPresaleReservation[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [activeReservationCountsByProduct, setActiveReservationCountsByProduct] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -232,6 +233,15 @@ export function PresalesPage() {
     } catch { /* noop */ }
   };
 
+  const loadProductReservationCounts = useCallback(async () => {
+    try {
+      const data = await presaleAPI.adminProductReservationCounts();
+      setActiveReservationCountsByProduct(data.countsByProduct || {});
+    } catch {
+      // Keep previous counts if this refresh fails.
+    }
+  }, []);
+
   const loadGlobalStats = useCallback(async () => {
     try {
       const [totalRes, pendingRes, notifiedRes, paidRes, expiredRes] = await Promise.all([
@@ -254,14 +264,19 @@ export function PresalesPage() {
     }
   }, []);
 
-  useEffect(() => { loadReservations(); loadProducts(); loadGlobalStats(); }, [loadReservations, loadGlobalStats]);
+  useEffect(() => {
+    loadReservations();
+    loadProducts();
+    loadGlobalStats();
+    loadProductReservationCounts();
+  }, [loadReservations, loadGlobalStats, loadProductReservationCounts]);
 
   const handleConfirmArrival = async (productId: string) => {
     setConfirmingId(productId);
     try {
       const data = await presaleAPI.confirmArrival(productId);
       showToast(data.message);
-      await Promise.all([loadReservations(), loadProducts(), loadGlobalStats()]);
+      await Promise.all([loadReservations(), loadProducts(), loadGlobalStats(), loadProductReservationCounts()]);
     } catch (err: any) {
       showToast(err.message || 'Error al confirmar llegada', 'err');
     } finally {
@@ -304,7 +319,7 @@ export function PresalesPage() {
     try {
       const data = await presaleAPI.releaseExpired();
       showToast(data.message);
-      await Promise.all([loadReservations(), loadProducts(), loadGlobalStats()]);
+      await Promise.all([loadReservations(), loadProducts(), loadGlobalStats(), loadProductReservationCounts()]);
     } catch (err: any) {
       showToast(err.message || 'Error al liberar reservas', 'err');
     } finally {
@@ -320,7 +335,7 @@ export function PresalesPage() {
       setReservations((prev) =>
         prev.map((r) => (r.id === reservationId ? { ...r, status: 'PAID' as any } : r))
       );
-      await loadGlobalStats();
+      await Promise.all([loadGlobalStats(), loadProductReservationCounts()]);
     } catch (err: any) {
       showToast(err.message || 'Error al marcar como pagado', 'err');
     } finally {
@@ -336,7 +351,7 @@ export function PresalesPage() {
       const data = await presaleAPI.releaseForSale(releaseProduct.id);
       showToast(data.message);
       setReleaseProduct(null);
-      await Promise.all([loadProducts(), loadReservations(), loadGlobalStats()]);
+      await Promise.all([loadProducts(), loadReservations(), loadGlobalStats(), loadProductReservationCounts()]);
     } catch (err: any) {
       showToast(err.message || 'Error al liberar la preventa', 'err');
     } finally {
@@ -354,7 +369,7 @@ export function PresalesPage() {
     try {
       const data = await presaleAPI.adminCancelReservation(reservationId, reason.trim(), banUser);
       showToast(data.message);
-      await Promise.all([loadReservations(pagination.page), loadProducts(), loadGlobalStats()]);
+      await Promise.all([loadReservations(pagination.page), loadProducts(), loadGlobalStats(), loadProductReservationCounts()]);
     } catch (err: any) {
       showToast(err.message || 'Error al cancelar la reserva', 'err');
     } finally {
@@ -497,9 +512,7 @@ export function PresalesPage() {
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {products.map((p) => {
-              const activeReservedCount = reservations.filter((r) =>
-                r.product.id === p.id && ['PENDING', 'NOTIFIED', 'PAID'].includes(r.status)
-              ).length;
+              const activeReservedCount = activeReservationCountsByProduct[p.id] ?? 0;
 
               return (
               <PresaleProductCard
