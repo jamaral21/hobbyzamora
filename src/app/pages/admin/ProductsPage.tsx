@@ -73,17 +73,22 @@ export default function ProductsPage() {
 
   const handleSave = async (data: any) => {
     try {
+      const parsedStock = Number.isFinite(Number(data.stock)) ? Number(data.stock) : 0;
+      const parsedInitialStock = Number.isFinite(Number(data.initialStock))
+        ? Number(data.initialStock)
+        : parsedStock;
+
       const apiData = {
         ...data,
         status: data.status?.toUpperCase() || 'ACTIVE',
-        initialStock: data.stock || 0,
-        stock: data.stock || 0,
+        initialStock: parsedInitialStock,
+        stock: parsedStock,
         ...(editingProduct ? {} : { isPresale: isPresalesView }),
         ...(isPresalesView && !editingProduct ? {
           presaleMaxQty: data.presaleMaxQty ?? 0,
           presaleAvailQty: data.presaleAvailQty ?? 0,
-          stock: data.stock || 0,
-          initialStock: data.stock || 0,
+          stock: parsedStock,
+          initialStock: parsedInitialStock,
         } : {}),
       };
       if (editingProduct) {
@@ -386,6 +391,7 @@ export default function ProductsPage() {
             <TableHead>SKU</TableHead>
             <TableHead>Categoría</TableHead>
             <TableHead>Precio</TableHead>
+            <TableHead>Stock Inicial</TableHead>
             <TableHead>Stock</TableHead>
             {isPresalesView && <TableHead>Disponibles</TableHead>}
             {isPresalesView && <TableHead>Caducidad</TableHead>}
@@ -414,6 +420,7 @@ export default function ProductsPage() {
               <TableCell>{product.sku}</TableCell>
               <TableCell>{product.category}</TableCell>
               <TableCell>${product.price.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</TableCell>
+              <TableCell>{product.initialStock ?? 0}</TableCell>
               <TableCell>
                 <div className="flex items-center gap-2">
                   <span>{product.stock}</span>

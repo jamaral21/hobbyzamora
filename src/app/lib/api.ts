@@ -13,6 +13,7 @@ export interface Product {
   price: number;
   cost: number;
   stock: number;
+  initialStock: number;
   images: string[];
   description: string | null;
   status: 'ACTIVE' | 'DRAFT' | 'ARCHIVED' | 'HIDDEN';

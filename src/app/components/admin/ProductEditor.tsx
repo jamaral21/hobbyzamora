@@ -37,6 +37,7 @@ export function ProductEditor({
       price: 0,
       cost: 0,
       stock: 0,
+      initialStock: 0,
       images: [],
       description: '',
       status: 'ACTIVE',
@@ -233,7 +234,7 @@ export function ProductEditor({
               <CardTitle>Precios e Inventario</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-4 gap-4">
                 <Input
                   label="Precio ($)"
                   type="number"
@@ -256,6 +257,14 @@ export function ProductEditor({
                   type="number"
                   value={formData.stock}
                   onChange={(e) => setFormData({ ...formData, stock: parseInt(e.target.value) })}
+                  required
+                />
+                <Input
+                  label="Stock Inicial"
+                  type="number"
+                  min="0"
+                  value={formData.initialStock ?? 0}
+                  onChange={(e) => setFormData({ ...formData, initialStock: parseInt(e.target.value) || 0 })}
                   required
                 />
               </div>

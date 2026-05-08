@@ -330,6 +330,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
       category, 
       price, 
       cost, 
+      stock,
       images, 
       status,
       featured,
@@ -357,6 +358,11 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
       ? String(ean)
       : (barcode !== undefined ? String(barcode) : null);
 
+    const parsedStock = Number.isFinite(Number(stock)) ? Number(stock) : 0;
+    const parsedInitialStock = Number.isFinite(Number(initialStock))
+      ? Number(initialStock)
+      : parsedStock;
+
     const resolvedSku = String(sku || '').trim() || await generateUniqueSku(prisma, normalizedCategory);
 
     // Check SKU uniqueness
@@ -373,7 +379,8 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
         category: normalizedCategory,
         price,
         cost,
-        stock: initialStock || 0,
+        stock: parsedStock,
+        initialStock: parsedInitialStock,
         images: JSON.stringify(images || []),
         status: status || 'ACTIVE',
         featured: Boolean(featured),
@@ -419,6 +426,7 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
       price,
       cost,
       stock,
+      initialStock,
       images,
       status,
       featured,
@@ -472,6 +480,7 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
         price: price ?? Number(existing.price),
         cost: cost ?? Number(existing.cost),
         stock: stock ?? existing.stock,
+        initialStock: initialStock ?? existing.initialStock,
       };
 
       const missingFields = [
@@ -482,6 +491,7 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
         (!Number.isFinite(Number(validation.price)) || Number(validation.price) <= 0) && 'precio',
         (!Number.isFinite(Number(validation.cost)) || Number(validation.cost) < 0) && 'costo',
         (!Number.isFinite(Number(validation.stock)) || Number(validation.stock) < 0) && 'stock',
+        (!Number.isFinite(Number(validation.initialStock)) || Number(validation.initialStock) < 0) && 'stock inicial',
       ].filter(Boolean);
 
       if (missingFields.length > 0) {
@@ -506,6 +516,7 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
           price,
           cost,
           stock,
+          initialStock,
           images: images !== undefined ? JSON.stringify(images) : undefined,
           status: isConvertingFromPresale ? 'ACTIVE' : status,
           featured: featured !== undefined ? Boolean(featured) : undefined,
@@ -648,6 +659,9 @@ router.post('/import', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
       const price = parseFloat(row.price);
       const cost = parseFloat(row.cost);
       const stock = parseInt(row.stock) || 0;
+      const initialStock = row.initialStock != null && String(row.initialStock).trim() !== ''
+        ? (parseInt(row.initialStock) || 0)
+        : stock;
 
       if (isNaN(price) || isNaN(cost) || price < 0 || cost < 0) {
         results.errors.push(`Línea ${lineNum} (${resolvedSku}): precio o costo inválido`);
@@ -666,6 +680,7 @@ router.post('/import', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
         price,
         cost,
         stock,
+        initialStock,
         ean: (row.EAN || row.ean || row.barcode) ? String(row.EAN || row.ean || row.barcode) : null,
         images: JSON.stringify(row.images ? row.images.split('|').map((s: string) => s.trim()) : []),
         status: ['ACTIVE', 'ARCHIVED'].includes((row.status || 'ACTIVE').toUpperCase())
