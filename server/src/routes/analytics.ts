@@ -300,14 +300,6 @@ router.get('/inventory-discrepancy', authenticate, requireRole('ADMIN', 'STAFF')
     const [products, soldItems] = await Promise.all([
       prisma.product.findMany({
         where: { id: { in: filteredProductIds } },
-        include: {
-          inventoryBatches: {
-            select: {
-              quantity: true,
-              remaining: true,
-            },
-          },
-        },
       }),
       prisma.orderItem.findMany({
         where: {
@@ -335,21 +327,21 @@ router.get('/inventory-discrepancy', authenticate, requireRole('ADMIN', 'STAFF')
         const product = productsById.get(productId);
         if (!product) return null;
 
-        const totalReceived = product.inventoryBatches.reduce((sum, batch) => sum + batch.quantity, 0);
-        const totalRemaining = product.inventoryBatches.reduce((sum, batch) => sum + batch.remaining, 0);
+        const currentStock = product.stock;
+        const totalReceived = product.initialStock;
         const totalSold = soldByProduct.get(product.id) ?? 0;
         const expectedRemaining = totalReceived - totalSold;
-        const discrepancy = expectedRemaining - totalRemaining;
+        const discrepancy = currentStock - expectedRemaining;
 
         return {
           productId: product.id,
           productName: product.name,
           sku: product.sku,
           ean: product.ean ?? null,
-          currentStock: totalRemaining,
+          currentStock,
           totalReceived,
           totalSold,
-          totalRemaining,
+          totalRemaining: currentStock,
           expectedRemaining,
           discrepancy,
         };
