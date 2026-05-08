@@ -1,14 +1,11 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import {
   PurchaseRecord, Invoice, InvoiceItem, Box, ChileStockEntry,
   WebOrder, LocalPurchase, SaleRecord, GAVEntry, ERPConfig,
   InternacionData,
-  mockCompras, mockBoletas, mockBoletaItems, mockCajas,
-  mockStockChile, mockPedidosWeb, mockComprasChile, mockVentas,
-  mockGAVChile, mockConfig,
   calcDisponibleBySku as calcDisponibleBySkuHelper,
-  nextSku, nextBoletaId, calcCostoUnitario,
-} from '../data/shipmentsMockData';
+  nextSku, nextBoletaId,
+} from '../data/shipmentsDomain';
 
 // Input types for mutations
 interface NewBoletaInput {
@@ -89,17 +86,391 @@ interface ShipmentsDataContextType {
 
 const ShipmentsDataContext = createContext<ShipmentsDataContextType | null>(null);
 
+type ShipmentsApiEnvelope<T> = {
+  data: T;
+  meta?: { total?: number };
+};
+
+type ApiCompra = {
+  id: string;
+  sku: string;
+  fecha: string;
+  tipo: string;
+  nombre: string;
+  ean: string | null;
+  tarjeta: string;
+  precioU: number;
+  cant: number;
+  total: number;
+  estado: PurchaseRecord['estado'];
+  bodega: PurchaseRecord['bodega'];
+  tc: number | null;
+};
+
+type ApiBoleta = {
+  id?: string;
+  invoiceId?: string;
+  fecha: string;
+  subtotalJPY: number;
+  comision: number;
+  totalJPY: number;
+  tc: number;
+  totalCLP: number;
+  estado: Invoice['estado'];
+};
+
+type ApiBoletaDetail = {
+  data: {
+    invoiceId?: string;
+    id?: string;
+    fecha: string;
+    subtotalJPY: number;
+    comision: number;
+    totalJPY: number;
+    tc: number;
+    totalCLP: number;
+    estado: Invoice['estado'];
+    items: Array<{
+      fecha: string;
+      tipo: string;
+      nombre: string;
+      ean: string | null;
+      precioU: number;
+      cant: number;
+      comPct: number;
+      tc: number;
+    }>;
+  };
+};
+
+type ApiCaja = {
+  boxId?: string;
+  id?: string;
+  fecha: string;
+  estado: Box['estado'];
+  fleJpy?: number | null;
+  moHoras?: number | null;
+  moTarifa?: number | null;
+  matJpy?: number | null;
+  tcEnvio?: number | null;
+  internacionArancel?: number | null;
+  internacionIva?: number | null;
+  productos?: Array<{
+    compraId: string;
+    sku: string;
+    nombre: string;
+    ean: string | null;
+    cant: number;
+    precioU: number;
+    tc: number | null;
+  }>;
+};
+
+type ApiWebOrder = {
+  orderId: string;
+  fecha: string;
+  portal: string;
+  orden: string;
+  estado: WebOrder['estado'];
+  tc: number;
+  costoEnvioIntern: number;
+  productos: Array<{
+    nombre: string;
+    ean: string | null;
+    cant: number;
+    precioUSD: number;
+    precioCLP: number;
+    pctCosteo: number;
+    costoUnit: number;
+  }>;
+};
+
+type ApiStockChile = {
+  id: string;
+  sku: string;
+  name: string;
+  ean: string | null;
+  stock: number;
+  costUnit: number;
+  salePrice: number;
+};
+
+type ApiVentas = {
+  id: string;
+  fecha: string;
+  producto: string;
+  ean: string | null;
+  cant: number;
+  precioVenta: number;
+  costo: number;
+  total: number;
+  canal: SaleRecord['canal'];
+};
+
+type ApiComprasChile = LocalPurchase;
+type ApiGavChile = GAVEntry;
+
+type ApiConfig = {
+  cuentas: ERPConfig['cuentas'];
+  metodosPago: string[];
+  arrBodegaJP: number;
+  appBeyblade: number;
+  comisionPct: number;
+};
+
+async function shipmentsFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const token = localStorage.getItem('adminToken') || localStorage.getItem('token');
+  const response = await fetch(`/api/shipments${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+      ...(options?.headers || {}),
+    },
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(data.error || response.statusText);
+  }
+
+  return response.json() as Promise<T>;
+}
+
+function toDateOnly(value: string): string {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toISOString().split('T')[0];
+}
+
+function toNumber(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
 export function ShipmentsDataProvider({ children }: { children: React.ReactNode }) {
-  const [compras, setCompras] = useState<PurchaseRecord[]>([...mockCompras]);
-  const [boletas, setBoletas] = useState<Invoice[]>([...mockBoletas]);
-  const [boletaItems, setBoletaItems] = useState<Record<string, InvoiceItem[]>>({ ...mockBoletaItems });
-  const [cajas, setCajas] = useState<Box[]>([...mockCajas]);
-  const [stockChile, setStockChile] = useState<ChileStockEntry[]>([...mockStockChile]);
-  const [pedidosWeb, setPedidosWeb] = useState<WebOrder[]>([...mockPedidosWeb]);
-  const [comprasChile, setComprasChile] = useState<LocalPurchase[]>([...mockComprasChile]);
-  const [ventas, setVentas] = useState<SaleRecord[]>([...mockVentas]);
-  const [gavChile, setGavChile] = useState<GAVEntry[]>([...mockGAVChile]);
-  const [config, setConfig] = useState<ERPConfig>({ ...mockConfig });
+  const [compras, setCompras] = useState<PurchaseRecord[]>([]);
+  const [boletas, setBoletas] = useState<Invoice[]>([]);
+  const [boletaItems, setBoletaItems] = useState<Record<string, InvoiceItem[]>>({});
+  const [cajas, setCajas] = useState<Box[]>([]);
+  const [stockChile, setStockChile] = useState<ChileStockEntry[]>([]);
+  const [pedidosWeb, setPedidosWeb] = useState<WebOrder[]>([]);
+  const [comprasChile, setComprasChile] = useState<LocalPurchase[]>([]);
+  const [ventas, setVentas] = useState<SaleRecord[]>([]);
+  const [gavChile, setGavChile] = useState<GAVEntry[]>([]);
+  const [config, setConfig] = useState<ERPConfig>({
+    cuentas: [],
+    metodosPago: [],
+    arrBodegaJP: 0,
+    appBeyblade: 0,
+    comisionPct: 0,
+  });
+  const [purchaseUiToApiId, setPurchaseUiToApiId] = useState<Record<number, string>>({});
+
+  const syncFromApi = useCallback(async () => {
+    try {
+      const [
+        comprasResp,
+        boletasResp,
+        cajasResp,
+        comprasWebResp,
+        bodegaChileResp,
+        ventasResp,
+        comprasChileResp,
+        gavChileResp,
+        configResp,
+      ] = await Promise.all([
+        shipmentsFetch<ShipmentsApiEnvelope<ApiCompra[]>>('/compras'),
+        shipmentsFetch<ShipmentsApiEnvelope<ApiBoleta[]>>('/boletas'),
+        shipmentsFetch<ShipmentsApiEnvelope<ApiCaja[]>>('/cajas'),
+        shipmentsFetch<ShipmentsApiEnvelope<ApiWebOrder[]>>('/compras-web'),
+        shipmentsFetch<{ data: { items: ApiStockChile[] } }>('/bodega-chile'),
+        shipmentsFetch<{ data: ApiVentas[] }>('/ventas'),
+        shipmentsFetch<{ data: ApiComprasChile[] }>('/compras-chile'),
+        shipmentsFetch<{ data: ApiGavChile[] }>('/gav-chile'),
+        shipmentsFetch<{ data: ApiConfig }>('/config'),
+      ]);
+
+      const apiCompras = comprasResp.data || [];
+      const uiToApi: Record<number, string> = {};
+      const apiToUi: Record<string, number> = {};
+      const nextCompras: PurchaseRecord[] = apiCompras.map((item, index) => {
+        const uiId = index + 1;
+        uiToApi[uiId] = item.id;
+        apiToUi[item.id] = uiId;
+        return {
+          id: uiId,
+          sku: item.sku,
+          fecha: toDateOnly(item.fecha),
+          tipo: item.tipo,
+          nombre: item.nombre,
+          ean: item.ean || '',
+          tarjeta: item.tarjeta,
+          precioU: toNumber(item.precioU),
+          cant: toNumber(item.cant),
+          total: toNumber(item.total),
+          estado: item.estado,
+          bodega: item.bodega,
+          tc: item.tc === null ? null : toNumber(item.tc),
+        };
+      });
+
+      setPurchaseUiToApiId(uiToApi);
+      setCompras(nextCompras);
+
+      const boletasList = boletasResp.data || [];
+      const boletaIds = boletasList.map((b) => b.invoiceId || b.id).filter(Boolean) as string[];
+      const details = await Promise.all(
+        boletaIds.map((id) =>
+          shipmentsFetch<ApiBoletaDetail>(`/boletas/${encodeURIComponent(id)}`).catch(() => null)
+        )
+      );
+
+      const itemsByInvoice: Record<string, InvoiceItem[]> = {};
+      const productsCountByInvoice: Record<string, number> = {};
+      for (const detail of details) {
+        if (!detail?.data) continue;
+        const invoiceId = detail.data.invoiceId || detail.data.id;
+        if (!invoiceId) continue;
+        const lines = detail.data.items || [];
+        productsCountByInvoice[invoiceId] = lines.length;
+        itemsByInvoice[invoiceId] = lines.map((line) => ({
+          fecha: toDateOnly(line.fecha),
+          tipo: line.tipo,
+          nombre: line.nombre,
+          ean: line.ean || '',
+          precioU: toNumber(line.precioU),
+          cant: toNumber(line.cant),
+          comPct: toNumber(line.comPct),
+          tc: toNumber(line.tc),
+        }));
+      }
+
+      const nextBoletas: Invoice[] = boletasList.map((item) => {
+        const id = item.invoiceId || item.id || `BOL-${Date.now()}`;
+        return {
+          id,
+          fecha: toDateOnly(item.fecha),
+          productos: productsCountByInvoice[id] ?? 0,
+          subtotalJPY: toNumber(item.subtotalJPY),
+          comision: toNumber(item.comision),
+          totalJPY: toNumber(item.totalJPY),
+          tc: toNumber(item.tc),
+          totalCLP: toNumber(item.totalCLP),
+          estado: item.estado,
+        };
+      });
+
+      setBoletas(nextBoletas);
+      setBoletaItems(itemsByInvoice);
+
+      const apiCajas = cajasResp.data || [];
+      const nextCajas: Box[] = apiCajas.map((item) => {
+        const boxProducts = (item.productos || []).map((p) => ({
+          _compraId: apiToUi[p.compraId] ?? 0,
+          _sku: p.sku,
+          nombre: p.nombre,
+          ean: p.ean || '',
+          cant: toNumber(p.cant),
+          precioU: toNumber(p.precioU),
+          tc: p.tc === null ? 0 : toNumber(p.tc),
+        }));
+
+        const hasInternacion = item.internacionArancel != null && item.internacionIva != null;
+        const arancel = toNumber(item.internacionArancel);
+        const iva = toNumber(item.internacionIva);
+
+        return {
+          id: item.boxId || item.id || `Caja-${Date.now()}`,
+          fecha: toDateOnly(item.fecha),
+          estado: item.estado,
+          flete_jpy: toNumber(item.fleJpy),
+          mo_horas: toNumber(item.moHoras),
+          mo_tarifa: toNumber(item.moTarifa),
+          mat_jpy: toNumber(item.matJpy),
+          tc_envio: toNumber(item.tcEnvio),
+          internacion: hasInternacion
+            ? {
+                arancel,
+                iva,
+                total: arancel + iva,
+              }
+            : null,
+          productos: boxProducts,
+        };
+      });
+      setCajas(nextCajas);
+
+      const nextPedidosWeb: WebOrder[] = (comprasWebResp.data || []).map((order) => ({
+        id: order.orderId,
+        fecha: toDateOnly(order.fecha),
+        portal: order.portal,
+        orden: order.orden,
+        estado: order.estado,
+        costoEnvioIntern: toNumber(order.costoEnvioIntern),
+        tc: toNumber(order.tc),
+        productos: (order.productos || []).map((p) => ({
+          nombre: p.nombre,
+          ean: p.ean || '',
+          cant: toNumber(p.cant),
+          precioUSD: toNumber(p.precioUSD),
+          precioCLP: toNumber(p.precioCLP),
+          pctCosteo: toNumber(p.pctCosteo),
+          costoUnit: toNumber(p.costoUnit),
+        })),
+      }));
+      setPedidosWeb(nextPedidosWeb);
+
+      const stockRows = bodegaChileResp.data.items || [];
+      const nextStockChile: ChileStockEntry[] = stockRows.map((row) => ({
+        id: row.id,
+        _sku: row.sku,
+        nombre: row.name,
+        ean: row.ean || '',
+        caja: 'CHILE',
+        cant: toNumber(row.stock),
+        costoUnit: toNumber(row.costUnit),
+        precioVenta: toNumber(row.salePrice) > 0 ? toNumber(row.salePrice) : null,
+      }));
+      setStockChile(nextStockChile);
+
+      const nextVentas: SaleRecord[] = (ventasResp.data || []).map((sale) => ({
+        id: sale.id,
+        fecha: toDateOnly(sale.fecha),
+        producto: sale.producto,
+        ean: sale.ean || '',
+        cant: toNumber(sale.cant),
+        precioVenta: toNumber(sale.precioVenta),
+        costo: toNumber(sale.costo),
+        total: toNumber(sale.total),
+        canal: sale.canal,
+      }));
+      setVentas(nextVentas);
+
+      setComprasChile((comprasChileResp.data || []).map((item) => ({
+        ...item,
+        fecha: toDateOnly(item.fecha),
+      })));
+
+      setGavChile((gavChileResp.data || []).map((item) => ({
+        ...item,
+      })));
+
+      setConfig({
+        cuentas: configResp.data.cuentas || [],
+        metodosPago: configResp.data.metodosPago || [],
+        arrBodegaJP: toNumber(configResp.data.arrBodegaJP),
+        appBeyblade: toNumber(configResp.data.appBeyblade),
+        comisionPct: toNumber(configResp.data.comisionPct),
+      });
+    } catch {
+      // Fallback: mantener estado mock/local si la API no responde.
+    }
+  }, []);
+
+  useEffect(() => {
+    void syncFromApi();
+  }, [syncFromApi]);
 
   const calcDisponible = useCallback(
     (sku: string) => calcDisponibleBySkuHelper(sku, compras, cajas, stockChile),
@@ -111,8 +482,21 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
     const id = compras.length > 0 ? Math.max(...compras.map(c => c.id)) + 1 : 1;
     const record: PurchaseRecord = { ...data, id, sku };
     setCompras(prev => [...prev, record]);
+    void shipmentsFetch<ShipmentsApiEnvelope<ApiCompra>>('/compras', {
+      method: 'POST',
+      body: JSON.stringify({
+        fecha: data.fecha,
+        tipo: data.tipo,
+        nombre: data.nombre,
+        ean: data.ean,
+        tarjeta: data.tarjeta,
+        precioU: data.precioU,
+        cant: data.cant,
+        tc: data.tc,
+      }),
+    }).then(() => syncFromApi()).catch(() => undefined);
     return record;
-  }, [compras]);
+  }, [compras, syncFromApi]);
 
   const updateCompra = useCallback((id: number, data: Partial<PurchaseRecord>) => {
     setCompras(prev => prev.map(c => c.id === id ? { ...c, ...data } : c));
@@ -148,8 +532,27 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
         tc: data.tc,
       })),
     }));
+
+    const itemsPayload = data.items.map((item) => ({
+      compraId: purchaseUiToApiId[item.compraId] || String(item.compraId),
+      precioU: item.precioU,
+      cant: item.cant,
+      nombre: item.nombre,
+      ean: item.ean,
+      tipo: item.tipo,
+    }));
+
+    void shipmentsFetch('/boletas', {
+      method: 'POST',
+      body: JSON.stringify({
+        items: itemsPayload,
+        comisionPct: data.comisionPct,
+        tc: data.tc,
+      }),
+    }).then(() => syncFromApi()).catch(() => undefined);
+
     return invoice;
-  }, [boletas]);
+  }, [boletas, purchaseUiToApiId, syncFromApi]);
 
   const confirmPayment = useCallback((boletaId: string) => {
     setBoletas(prev => prev.map(b => b.id === boletaId ? { ...b, estado: 'pagado' as const } : b));
@@ -161,7 +564,11 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
         return matched ? { ...c, estado: 'pagado' as const } : c;
       }));
     }
-  }, [boletaItems]);
+    void shipmentsFetch(`/pagos/${encodeURIComponent(boletaId)}/confirmar`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }).then(() => syncFromApi()).catch(() => undefined);
+  }, [boletaItems, syncFromApi]);
 
   const addCaja = useCallback((data: Omit<Box, 'internacion'>): Box => {
     const box: Box = { ...data, internacion: null };
@@ -173,20 +580,58 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
         setCompras(prev => prev.map(c => c.sku === p._sku ? { ...c, bodega: 'transito' as const } : c));
       }
     });
+
+    const productosPayload = data.productos.map((p) => ({
+      compraId: purchaseUiToApiId[p._compraId] || String(p._compraId),
+      cant: p.cant,
+    }));
+
+    void shipmentsFetch('/cajas', {
+      method: 'POST',
+      body: JSON.stringify({
+        boxId: data.id,
+        fecha: data.fecha,
+        fleJpy: data.flete_jpy,
+        moHoras: data.mo_horas,
+        moTarifa: data.mo_tarifa,
+        matJpy: data.mat_jpy,
+        tcEnvio: data.tc_envio,
+        productos: productosPayload,
+      }),
+    }).then(() => syncFromApi()).catch(() => undefined);
+
     return box;
-  }, [compras, cajas, stockChile]);
+  }, [compras, cajas, stockChile, purchaseUiToApiId, syncFromApi]);
 
   const updateCaja = useCallback((id: string, data: Partial<Box>) => {
     setCajas(prev => prev.map(b => b.id === id ? { ...b, ...data } : b));
-  }, []);
+    void shipmentsFetch(`/cajas/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        fecha: data.fecha,
+        fleJpy: data.flete_jpy,
+        moHoras: data.mo_horas,
+        moTarifa: data.mo_tarifa,
+        matJpy: data.mat_jpy,
+        tcEnvio: data.tc_envio,
+      }),
+    }).then(() => syncFromApi()).catch(() => undefined);
+  }, [syncFromApi]);
 
   const deleteCaja = useCallback((id: string) => {
     setCajas(prev => prev.filter(b => b.id !== id));
-  }, []);
+    void shipmentsFetch(`/cajas/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    }).then(() => syncFromApi()).catch(() => undefined);
+  }, [syncFromApi]);
 
   const saveInternacion = useCallback((cajaId: string, data: InternacionData) => {
     setCajas(prev => prev.map(b => b.id === cajaId ? { ...b, internacion: data } : b));
-  }, []);
+    void shipmentsFetch(`/internacion/${encodeURIComponent(cajaId)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ arancel: data.arancel, iva: data.iva }),
+    }).then(() => syncFromApi()).catch(() => undefined);
+  }, [syncFromApi]);
 
   const confirmCosteo = useCallback((cajaId: string, costeoData: CosteoEntry[]) => {
     const box = cajas.find(b => b.id === cajaId);
@@ -216,11 +661,29 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
         setCompras(prev => prev.map(c => c.sku === entry._sku ? { ...c, bodega: 'chile' as const } : c));
       }
     });
-  }, [cajas, stockChile, compras]);
+
+    void shipmentsFetch(`/costeo/${encodeURIComponent(cajaId)}/confirmar`, {
+      method: 'POST',
+      body: JSON.stringify({
+        productos: costeoData.map((entry) => ({
+          compraId: purchaseUiToApiId[entry._compraId] || String(entry._compraId),
+          sku: entry._sku,
+          nombre: entry.nombre,
+          ean: entry.ean,
+          cant: entry.cant,
+          pct: entry.pct,
+        })),
+      }),
+    }).then(() => syncFromApi()).catch(() => undefined);
+  }, [cajas, stockChile, compras, purchaseUiToApiId, syncFromApi]);
 
   const updatePrecioVenta = useCallback((stockId: string, precio: number) => {
     setStockChile(prev => prev.map(s => s.id === stockId ? { ...s, precioVenta: precio } : s));
-  }, []);
+    void shipmentsFetch(`/bodega-chile/${encodeURIComponent(stockId)}/precio`, {
+      method: 'PUT',
+      body: JSON.stringify({ precioVenta: precio }),
+    }).then(() => syncFromApi()).catch(() => undefined);
+  }, [syncFromApi]);
 
   const addVenta = useCallback((data: NewVentaInput): SaleRecord => {
     const stockEntry = stockChile.find(s => s.id === data.stockId);
@@ -239,32 +702,70 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
     };
     setVentas(prev => [...prev, record]);
     setStockChile(prev => prev.map(s => s.id === data.stockId ? { ...s, cant: s.cant - data.cant } : s));
+
+    void shipmentsFetch('/ventas', {
+      method: 'POST',
+      body: JSON.stringify({
+        productId: data.stockId,
+        cant: data.cant,
+        precioVenta: data.precioVenta,
+        canal: data.canal,
+      }),
+    }).then(() => syncFromApi()).catch(() => undefined);
+
     return record;
-  }, [stockChile, ventas]);
+  }, [stockChile, ventas, syncFromApi]);
 
   const confirmGAV = useCallback((id: number) => {
     setGavChile(prev => prev.map(g =>
       g.id === id ? { ...g, estado: 'pagado' as const, fechaPago: new Date().toISOString().split('T')[0] } : g
     ));
-  }, []);
+    void shipmentsFetch(`/gav-chile/${id}/confirmar`, {
+      method: 'PUT',
+      body: JSON.stringify({ adjunto: true }),
+    }).then(() => syncFromApi()).catch(() => undefined);
+  }, [syncFromApi]);
 
   const updateConfig = useCallback((data: Partial<ERPConfig>) => {
     setConfig(prev => ({ ...prev, ...data }));
-  }, []);
+    void shipmentsFetch('/config', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }).then(() => syncFromApi()).catch(() => undefined);
+  }, [syncFromApi]);
 
   const addPedidoWeb = useCallback((data: NewWebOrderInput): WebOrder => {
     const id = `WEB-${String(pedidosWeb.length + 1).padStart(3, '0')}`;
     const order: WebOrder = { ...data, id, estado: 'pendiente' };
     setPedidosWeb(prev => [...prev, order]);
+
+    void shipmentsFetch('/compras-web', {
+      method: 'POST',
+      body: JSON.stringify({
+        portal: data.portal,
+        orden: data.orden,
+        fecha: data.fecha,
+        tc: data.tc,
+        costoEnvioIntern: data.costoEnvioIntern,
+        productos: data.productos,
+      }),
+    }).then(() => syncFromApi()).catch(() => undefined);
+
     return order;
-  }, [pedidosWeb]);
+  }, [pedidosWeb, syncFromApi]);
 
   const addCompraChile = useCallback((data: NewLocalPurchaseInput): LocalPurchase => {
     const id = `CC-${String(comprasChile.length + 1).padStart(3, '0')}`;
     const purchase: LocalPurchase = { ...data, id };
     setComprasChile(prev => [...prev, purchase]);
+
+    void shipmentsFetch('/compras-chile', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }).then(() => syncFromApi()).catch(() => undefined);
+
     return purchase;
-  }, [comprasChile]);
+  }, [comprasChile, syncFromApi]);
 
   const generateGAVBoleta = useCallback((): Invoice => {
     const id = nextBoletaId(boletas, true);
@@ -291,8 +792,14 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
         { fecha: invoice.fecha, tipo: 'Arriendo/App', nombre: 'App Beyblade', ean: '', precioU: config.appBeyblade, cant: 1, comPct: config.comisionPct, tc },
       ],
     }));
+
+    void shipmentsFetch('/gav-japon/generar', {
+      method: 'POST',
+      body: JSON.stringify({ tc }),
+    }).then(() => syncFromApi()).catch(() => undefined);
+
     return invoice;
-  }, [boletas, config, compras]);
+  }, [boletas, config, compras, syncFromApi]);
 
   return (
     <ShipmentsDataContext.Provider

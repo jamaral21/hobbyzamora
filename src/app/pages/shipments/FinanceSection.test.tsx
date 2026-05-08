@@ -85,7 +85,7 @@ import {
   calcBalanceSheet,
   calcCashFlow,
   groupRevenueByChannel,
-} from '../../data/shipmentsMockData';
+} from '../../data/shipmentsDomain';
 
 // ── Pre-compute expected values ───────────────────────────────────────
 

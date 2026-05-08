@@ -8,7 +8,7 @@ import { KPICard } from '../../components/shipments/KPICard';
 import { StatusBadge } from '../../components/shipments/StatusBadge';
 import { PriceDisplay } from '../../components/shipments/PriceDisplay';
 import { EmptyState } from '../../components/design-system/EmptyState';
-import type { Box, BoxState } from '../../data/shipmentsMockData';
+import type { Box, BoxState } from '../../data/shipmentsDomain';
 
 const SECTIONS: { state: BoxState; label: string }[] = [
   { state: 'transito', label: 'En Tránsito' },

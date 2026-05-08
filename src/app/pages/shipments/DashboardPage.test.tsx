@@ -41,7 +41,7 @@ vi.mock('../../contexts/ShipmentsDataContext', () => ({
 }));
 
 // Mock formatCLP
-vi.mock('../../data/shipmentsMockData', async (importOriginal) => {
+vi.mock('../../data/shipmentsDomain', async (importOriginal) => {
   const actual = await importOriginal() as any;
   return {
     ...actual,

@@ -7,7 +7,7 @@ import {
   calcIncomeStatement,
   groupRevenueByChannel,
   type SalesChannel,
-} from '../../data/shipmentsMockData';
+} from '../../data/shipmentsDomain';
 
 export default function EstadoResultadosPage() {
   const { ventas, boletas, gavChile, cajas, comprasChile } = useShipmentsData();

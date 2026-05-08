@@ -5,7 +5,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '.
 import { PriceDisplay } from '../../components/shipments/PriceDisplay';
 import { KPICard } from '../../components/shipments/KPICard';
 import { EmptyState } from '../../components/design-system/EmptyState';
-import { calcMargin, marginColor } from '../../data/shipmentsMockData';
+import { calcMargin, marginColor } from '../../data/shipmentsDomain';
 
 type ChileStockRow = {
   id: string;

@@ -10,7 +10,7 @@ import {
 import { clsx } from 'clsx';
 import { useState } from 'react';
 import { useShipmentsRole } from '../../contexts/ShipmentsRoleContext';
-import type { ShipmentsRole } from '../../data/shipmentsMockData';
+import type { ShipmentsRole } from '../../data/shipmentsDomain';
 import type { LucideIcon } from 'lucide-react';
 
 interface NavItem {

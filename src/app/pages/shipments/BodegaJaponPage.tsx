@@ -8,7 +8,7 @@ import { PriceDisplay } from '../../components/shipments/PriceDisplay';
 import { StatusBadge } from '../../components/shipments/StatusBadge';
 import { KPICard } from '../../components/shipments/KPICard';
 import { EmptyState } from '../../components/design-system/EmptyState';
-import type { PaymentState } from '../../data/shipmentsMockData';
+import type { PaymentState } from '../../data/shipmentsDomain';
 
 export default function BodegaJaponPage() {
   const { compras, calcDisponibleBySku } = useShipmentsData();

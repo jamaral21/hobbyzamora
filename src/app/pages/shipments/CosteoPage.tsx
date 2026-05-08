@@ -7,7 +7,7 @@ import { Select } from '../../components/design-system/Input';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/design-system/Table';
 import { PriceDisplay } from '../../components/shipments/PriceDisplay';
 import { EmptyState } from '../../components/design-system/EmptyState';
-import { calcCostoUnitario } from '../../data/shipmentsMockData';
+import { calcCostoUnitario } from '../../data/shipmentsDomain';
 
 interface CosteoRow {
   _compraId: number;

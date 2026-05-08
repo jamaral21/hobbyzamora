@@ -9,7 +9,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '.
 import { PriceDisplay } from '../../components/shipments/PriceDisplay';
 import { StatusBadge } from '../../components/shipments/StatusBadge';
 import { EmptyState } from '../../components/design-system/EmptyState';
-import type { PaymentState, LocationState } from '../../data/shipmentsMockData';
+import type { PaymentState, LocationState } from '../../data/shipmentsDomain';
 
 interface FormData {
   fecha: string;

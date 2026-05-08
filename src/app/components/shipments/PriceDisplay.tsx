@@ -1,5 +1,5 @@
 import { clsx } from 'clsx';
-import { formatJPY, formatCLP } from '../../data/shipmentsMockData';
+import { formatJPY, formatCLP } from '../../data/shipmentsDomain';
 
 interface PriceDisplayProps {
   amount: number;

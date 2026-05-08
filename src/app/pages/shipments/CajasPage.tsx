@@ -9,7 +9,7 @@ import { Modal, ModalFooter } from '../../components/design-system/Modal';
 import { StatusBadge } from '../../components/shipments/StatusBadge';
 import { PriceDisplay } from '../../components/shipments/PriceDisplay';
 import { EmptyState } from '../../components/design-system/EmptyState';
-import type { Box, BoxProduct } from '../../data/shipmentsMockData';
+import type { Box, BoxProduct } from '../../data/shipmentsDomain';
 
 interface ProductRow {
   _compraId: number;

@@ -4,7 +4,7 @@ import { useShipmentsData } from '../../contexts/ShipmentsDataContext';
 import { Card } from '../../components/design-system/Card';
 import { Input } from '../../components/design-system/Input';
 import { Button } from '../../components/design-system/Button';
-import type { BankAccount } from '../../data/shipmentsMockData';
+import type { BankAccount } from '../../data/shipmentsDomain';
 
 export default function ConfiguracionPage() {
   const { config, updateConfig } = useShipmentsData();
