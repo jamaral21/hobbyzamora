@@ -62,7 +62,7 @@ const heroSlides: HeroSlide[] = [
     image: '/banners/tomica.webp',
     title: '',
     subtitle: '',
-    ctaHref: '/store/products?category=tomica',
+    ctaHref: '/store/products?category=autos-tomy-tomica',
   },
 ];
 

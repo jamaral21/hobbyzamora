@@ -82,6 +82,10 @@ export function useCategories() {
   return useFetch(() => productsAPI.getCategories(), []);
 }
 
+export function useStoreSections() {
+  return useFetch(() => productsAPI.getSections(), []);
+}
+
 export function useOrders(
   params?: {
     status?: string;

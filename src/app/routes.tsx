@@ -23,6 +23,7 @@ import OrderDetailPage from './pages/admin/OrderDetailPage';
 import CustomersPage from './pages/admin/CustomersPage';
 import InstagramAgentPage from './pages/admin/InstagramAgentPage';
 import { PresalesPage as AdminPresalesPage } from './pages/admin/PresalesPage';
+import SectionsConfigPage from './pages/admin/SectionsConfigPage';
 
 import InstagramHealthPage from './pages/admin/InstagramHealthPage';
 
@@ -136,6 +137,10 @@ export const router = createBrowserRouter([
   {
     path: '/admin/instagram',
     Component: InstagramAgentPage,
+  },
+  {
+    path: '/admin/settings/sections',
+    Component: SectionsConfigPage,
   },
 
   {

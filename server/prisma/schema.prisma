@@ -91,6 +91,20 @@ model Product {
   @@map("products")
 }
 
+model ProductSection {
+  id             String   @id @default(uuid())
+  parentCategory String
+  name           String
+  slug           String
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([parentCategory, name])
+  @@unique([parentCategory, slug])
+  @@map("product_sections")
+}
+
 model ProductVariant {
   id        String   @id @default(uuid())
   productId String

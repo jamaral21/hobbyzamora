@@ -183,10 +183,18 @@ function SidebarContent({
           <Store className="w-5 h-5 flex-shrink-0" />
           {!isCollapsed && <span className="text-sm">Ver Tienda</span>}
         </Link>
-        <button className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors w-full">
+        <Link
+          to="/admin/settings/sections"
+          className={clsx(
+            'flex items-center gap-3 px-3 py-2 rounded-lg transition-colors w-full',
+            location.pathname.startsWith('/admin/settings')
+              ? 'bg-primary/10 text-primary'
+              : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+          )}
+        >
           <Settings className="w-5 h-5 flex-shrink-0" />
           {!isCollapsed && <span className="text-sm">Configuración</span>}
-        </button>
+        </Link>
         <button
           onClick={logout}
           className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors w-full"

@@ -5,16 +5,9 @@ import { StoreLayout } from '../../components/layout/StoreLayout';
 import { ProductCard } from '../../components/store/ProductCard';
 import { Button } from '../../components/design-system/Button';
 import { Select } from '../../components/design-system/Input';
-import { useProducts } from '../../hooks/useData';
+import { useProducts, useStoreSections } from '../../hooks/useData';
 import { useAuth } from '../../contexts/AuthContext';
-
-const slugify = (text: string) =>
-  text
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
+import { buildSectionGroups, matchesCategoryFilter, orderSectionLabels, slugifySection } from '../../lib/sections';
 
 export default function ProductListingPage() {
   return (
@@ -30,6 +23,7 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
   const [sortBy, setSortBy] = useState('featured');
   const [searchParams, setSearchParams] = useSearchParams();
   const categoryParam = searchParams.get('category') || 'all';
+  const { data: sectionData } = useStoreSections();
 
   const { data: products, isLoading } = useProducts(undefined, {
     authMode: isAuthenticated ? 'customer' : 'public',
@@ -49,16 +43,34 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
     return isAuthenticated ? products : products.filter((p: any) => !p.isPresale);
   }, [products, presalesOnly, isAuthenticated]);
 
+  const groups = useMemo(() => buildSectionGroups(sectionData || []), [sectionData]);
+
   const categories = useMemo(() => {
-    if (!baseProducts.length) return ['all'];
-    return ['all', ...Array.from(new Set(baseProducts.map((p: any) => p.category)))];
-  }, [baseProducts]);
+    if (!baseProducts.length) return [{ label: 'Todas las Categorías', slug: 'all' }];
+
+    const availableParents = new Set<string>();
+    for (const product of baseProducts as any[]) {
+      const category = String(product.category || '').trim();
+      const group = groups.find((item) =>
+        item.parentCategory === category || item.children.some((child) => child.name === category)
+      );
+      if (group) {
+        availableParents.add(group.parentCategory);
+      } else if (category) {
+        availableParents.add(category);
+      }
+    }
+
+    const normalized = orderSectionLabels(availableParents).map((value) => ({ label: value, slug: slugifySection(value) }));
+
+    return [{ label: 'Todas las Categorías', slug: 'all' }, ...normalized];
+  }, [baseProducts, groups]);
 
   const handleCategoryChange = (value: string) => {
     if (value === 'all') {
       searchParams.delete('category');
     } else {
-      searchParams.set('category', slugify(value));
+      searchParams.set('category', value);
     }
     setSearchParams(searchParams, { replace: true });
   };
@@ -68,7 +80,7 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
     return baseProducts
       .filter((p: any) => {
         const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesCategory = categoryParam === 'all' || slugify(p.category) === categoryParam;
+        const matchesCategory = matchesCategoryFilter(p.category, categoryParam, groups);
         return matchesSearch && matchesCategory;
       })
       .sort((a: any, b: any) => {
@@ -77,7 +89,7 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
         if (sortBy === 'name') return a.name.localeCompare(b.name);
         return 0;
       });
-  }, [baseProducts, searchQuery, categoryParam, sortBy]);
+  }, [baseProducts, searchQuery, categoryParam, sortBy, groups]);
 
   if (isLoading) {
     return (
@@ -111,13 +123,13 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
           </div>
 
           <Select
-            value={categoryParam === 'all' ? 'all' : (categories.find((c) => slugify(c) === categoryParam) || 'all')}
+            value={categoryParam === 'all' ? 'all' : (categories.find((c) => c.slug === categoryParam)?.slug || 'all')}
             onChange={(e) => handleCategoryChange(e.target.value)}
             className="md:w-48"
           >
             {categories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat === 'all' ? 'Todas las Categorías' : cat}
+              <option key={cat.slug} value={cat.slug}>
+                {cat.label}
               </option>
             ))}
           </Select>

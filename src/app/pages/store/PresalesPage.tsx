@@ -24,6 +24,8 @@ import { Button } from '../../components/design-system/Button';
 import { presaleAPI, productsAPI, type PresaleReservation, type Product } from '../../lib/api';
 import { useCartStore } from '../../lib/store';
 import { useAuth } from '../../contexts/AuthContext';
+import { useStoreSections } from '../../hooks/useData';
+import { buildSectionGroups, matchesCategoryFilter, orderSectionLabels, slugifySection } from '../../lib/sections';
 
 type PresaleTab = 'reservas' | 'disponibles';
 
@@ -185,6 +187,8 @@ function AvailablePresales({
   onCategoryOptionsChange: Dispatch<SetStateAction<string[]>>;
 }) {
   const navigate = useNavigate();
+  const { data: sectionData } = useStoreSections();
+  const groups = useMemo(() => buildSectionGroups(sectionData || []), [sectionData]);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -254,15 +258,21 @@ function AvailablePresales({
     const categories = new Set<string>();
     available.forEach((product) => {
       const category = String(product.category || '').trim();
-      if (category) categories.add(category);
+      if (!category) return;
+
+      const parent = groups.find((group) =>
+        group.parentCategory === category || group.children.some((child) => child.name === category)
+      );
+
+      categories.add(parent?.parentCategory || category);
     });
-    return ['ALL', ...Array.from(categories).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))];
-  }, [available]);
+    return ['ALL', ...orderSectionLabels(categories)];
+  }, [available, groups]);
 
   const filteredAvailable = useMemo(() => {
     if (categoryFilter === 'ALL') return available;
-    return available.filter((product) => product.category === categoryFilter);
-  }, [available, categoryFilter]);
+    return available.filter((product) => matchesCategoryFilter(product.category, slugifySection(categoryFilter), groups));
+  }, [available, categoryFilter, groups]);
 
   useEffect(() => {
     onCategoryOptionsChange((prev) => {

@@ -26,6 +26,18 @@ export interface Product {
   variants?: ProductVariant[];
 }
 
+export interface ProductSectionChild {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+export interface ProductSectionGroup {
+  parentCategory: string;
+  slug: string;
+  children: ProductSectionChild[];
+}
+
 export interface ProductVariant {
   id: string;
   name: string;
@@ -361,6 +373,21 @@ export const productsAPI = {
     fetchAPI<{ message: string }>(`/products/${id}`, { method: 'DELETE' }, 'admin'),
 
   getCategories: () => fetchAPI<string[]>('/products/meta/categories'),
+
+  getSections: () => fetchAPI<ProductSectionGroup[]>('/products/meta/sections'),
+
+  createSubsection: (parentCategory: string, name: string) =>
+    fetchAPI<ProductSectionChild & { parentCategory: string; isActive: boolean; createdAt: string; updatedAt: string }>(
+      '/products/meta/sections',
+      {
+        method: 'POST',
+        body: JSON.stringify({ parentCategory, name }),
+      },
+      'admin'
+    ),
+
+  deleteSubsection: (id: string) =>
+    fetchAPI<{ message: string }>(`/products/meta/sections/${id}`, { method: 'DELETE' }, 'admin'),
 
   getSuggestedSku: (category: string) =>
     fetchAPI<{ sku: string; prefix: string }>(`/products/meta/sku-preview?category=${encodeURIComponent(category)}`, undefined, 'admin'),

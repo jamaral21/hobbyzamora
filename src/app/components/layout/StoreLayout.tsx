@@ -5,7 +5,7 @@ export function StoreLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background">
       <StoreNavbar />
-      <main>{children}</main>
+      <main className="relative z-0">{children}</main>
       <footer className="bg-card border-t border-border mt-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">

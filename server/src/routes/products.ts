@@ -89,6 +89,85 @@ const parseOptions = (options: string): string[] => {
   }
 };
 
+const slugifyText = (value: string) =>
+  String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+
+async function getSectionTree() {
+  const sections = await prisma.productSection.findMany({
+    where: { isActive: true },
+    orderBy: [{ parentCategory: 'asc' }, { name: 'asc' }],
+  });
+
+  const grouped = new Map<string, { id: string; name: string; slug: string }[]>();
+  for (const section of sections) {
+    const current = grouped.get(section.parentCategory) || [];
+    current.push({ id: section.id, name: section.name, slug: section.slug });
+    grouped.set(section.parentCategory, current);
+  }
+
+  return grouped;
+}
+
+async function resolveAllowedCategoriesForFilter(category: string) {
+  const requested = String(category || '').trim();
+  if (!requested) return [] as string[];
+
+  const normalizedParent = normalizeStoreCategory(requested);
+  if (isOfficialStoreCategory(normalizedParent)) {
+    const children = await prisma.productSection.findMany({
+      where: { parentCategory: normalizedParent, isActive: true },
+      select: { name: true },
+    });
+    return [normalizedParent, ...children.map((child) => child.name)];
+  }
+
+  const exactChild = await prisma.productSection.findFirst({
+    where: { name: requested, isActive: true },
+    select: { name: true },
+  });
+  if (exactChild) return [exactChild.name];
+
+  const slug = slugifyText(requested);
+  const childBySlug = await prisma.productSection.findFirst({
+    where: { slug, isActive: true },
+    select: { name: true },
+  });
+  if (childBySlug) return [childBySlug.name];
+
+  return [normalizedParent];
+}
+
+async function resolveValidCategoryInput(category: string) {
+  const requested = String(category || '').trim();
+  const normalizedParent = normalizeStoreCategory(requested);
+
+  if (isOfficialStoreCategory(normalizedParent)) {
+    return { category: normalizedParent, valid: true };
+  }
+
+  const child = await prisma.productSection.findFirst({
+    where: {
+      OR: [
+        { name: requested },
+        { slug: slugifyText(requested) },
+      ],
+      isActive: true,
+    },
+    select: { name: true },
+  });
+
+  if (child) {
+    return { category: child.name, valid: true };
+  }
+
+  return { category: requested, valid: false };
+}
+
 // Get all products (public)
 router.get('/', optionalAuth, async (req: AuthRequest, res) => {
   try {
@@ -108,7 +187,12 @@ router.get('/', optionalAuth, async (req: AuthRequest, res) => {
     const isAdminOrStaff = req.user?.role === 'ADMIN' || req.user?.role === 'STAFF';
 
     if (category) {
-      where.category = category as string;
+      const allowedCategories = await resolveAllowedCategoriesForFilter(String(category));
+      if (allowedCategories.length > 1) {
+        where.category = { in: allowedCategories };
+      } else if (allowedCategories.length === 1) {
+        where.category = allowedCategories[0];
+      }
     }
 
     if (status && status !== 'ALL') {
@@ -344,14 +428,14 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
       initialStock,
     } = req.body;
 
-    const normalizedCategory = normalizeStoreCategory(String(category || ''));
+    const { category: normalizedCategory, valid: isValidCategory } = await resolveValidCategoryInput(String(category || ''));
 
     if (!String(name || '').trim() || !String(normalizedCategory || '').trim()) {
       return res.status(400).json({ error: 'Nombre y categoría son requeridos' });
     }
 
-    if (!isOfficialStoreCategory(normalizedCategory)) {
-      return res.status(400).json({ error: 'La categoría debe ser una de las disponibles en el menú oficial de la tienda' });
+    if (!isValidCategory) {
+      return res.status(400).json({ error: 'La categoría debe ser una sección principal o una subsección válida' });
     }
 
     const parsedEan: string | null = ean !== undefined
@@ -447,9 +531,9 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
       ? String(ean)
       : (barcode !== undefined ? String(barcode) : undefined);
 
-    const nextCategory = normalizeStoreCategory(String(category ?? existing.category));
-    if (!String(nextCategory).trim() || !isOfficialStoreCategory(nextCategory)) {
-      return res.status(400).json({ error: 'La categoría debe ser una de las disponibles en el menú oficial de la tienda' });
+    const { category: nextCategory, valid: isValidCategory } = await resolveValidCategoryInput(String(category ?? existing.category));
+    if (!String(nextCategory).trim() || !isValidCategory) {
+      return res.status(400).json({ error: 'La categoría debe ser una sección principal o una subsección válida' });
     }
 
     const nextSku = sku ?? existing.sku;
@@ -647,9 +731,9 @@ router.post('/import', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
         continue;
       }
 
-      const normalizedCategory = normalizeStoreCategory(String(row.category || ''));
-      if (!isOfficialStoreCategory(normalizedCategory)) {
-        results.errors.push(`Línea ${lineNum}: la categoría debe existir en el menú oficial de la tienda`);
+      const { category: normalizedCategory, valid: isValidCategory } = await resolveValidCategoryInput(String(row.category || ''));
+      if (!isValidCategory) {
+        results.errors.push(`Línea ${lineNum}: la categoría debe existir como sección principal o subsección activa`);
         results.skipped++;
         continue;
       }
@@ -745,6 +829,78 @@ router.get('/meta/sku-preview', authenticate, requireRole('ADMIN', 'STAFF'), asy
   } catch (error) {
     console.error('Get SKU preview error:', error);
     res.status(500).json({ error: 'Failed to get SKU preview' });
+  }
+});
+
+router.get('/meta/sections', async (_req, res) => {
+  try {
+    const tree = await getSectionTree();
+    const sections = Array.from(tree.entries())
+      .filter(([parentCategory]) => isOfficialStoreCategory(parentCategory))
+      .map(([parentCategory, children]) => ({
+        parentCategory,
+        slug: slugifyText(parentCategory),
+        children,
+      }))
+      .sort((a, b) => a.parentCategory.localeCompare(b.parentCategory, 'es', { sensitivity: 'base' }));
+
+    res.json(sections);
+  } catch (error) {
+    console.error('Get sections error:', error);
+    res.status(500).json({ error: 'Failed to get sections' });
+  }
+});
+
+router.post('/meta/sections', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
+  try {
+    const parentCategory = normalizeStoreCategory(String(req.body?.parentCategory || ''));
+    const name = String(req.body?.name || '').trim();
+
+    if (!isOfficialStoreCategory(parentCategory)) {
+      return res.status(400).json({ error: 'La sección principal no es válida' });
+    }
+
+    if (!name || name.length < 2) {
+      return res.status(400).json({ error: 'El nombre de la subsección es requerido' });
+    }
+
+    const slug = slugifyText(name);
+    if (!slug) {
+      return res.status(400).json({ error: 'El nombre de la subsección es inválido' });
+    }
+
+    const section = await prisma.productSection.create({
+      data: {
+        parentCategory,
+        name,
+        slug,
+      },
+    });
+
+    return res.status(201).json(section);
+  } catch (error: any) {
+    if (error?.code === 'P2002') {
+      return res.status(409).json({ error: 'Ya existe una subsección con ese nombre en la sección principal seleccionada' });
+    }
+    console.error('Create subsection error:', error);
+    return res.status(500).json({ error: 'Failed to create subsection' });
+  }
+});
+
+router.delete('/meta/sections/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
+  try {
+    const id = String(req.params.id || '');
+    const section = await prisma.productSection.findUnique({ where: { id } });
+
+    if (!section) {
+      return res.status(404).json({ error: 'Subsección no encontrada' });
+    }
+
+    await prisma.productSection.delete({ where: { id } });
+    return res.json({ message: 'Subsección eliminada' });
+  } catch (error) {
+    console.error('Delete subsection error:', error);
+    return res.status(500).json({ error: 'Failed to delete subsection' });
   }
 });
 

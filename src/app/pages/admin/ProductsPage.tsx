@@ -11,6 +11,7 @@ import { ProductEditor } from '../../components/admin/ProductEditor';
 import { useProducts, useMutation } from '../../hooks/useData';
 import { productsAPI } from '../../lib/api';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
+import { orderSectionLabels } from '../../lib/sections';
 
 export default function ProductsPage() {
   const { isAuthenticated } = useAdminAuth();
@@ -51,7 +52,7 @@ export default function ProductsPage() {
         if (category) categories.add(category);
       });
 
-    return ['ALL', ...Array.from(categories).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))];
+    return ['ALL', ...orderSectionLabels(categories)];
   }, [products, isPresalesView]);
 
   const filteredProducts = useMemo(() => {

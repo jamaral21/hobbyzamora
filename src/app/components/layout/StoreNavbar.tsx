@@ -1,27 +1,23 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router';
-import { Search, ShoppingCart, User, Menu, X, Star } from 'lucide-react';
+import { Search, ShoppingCart, User, Menu, X, Star, ChevronDown } from 'lucide-react';
 import { Button } from '../design-system/Button';
 import { Badge } from '../design-system/Badge';
 import { useCartStore } from '../../lib/store';
-
-const STORE_CATEGORIES = [
-  { name: 'Pokémon TCG', href: '/store/products?category=pokemon-tcg' },
-  { name: 'Beyblade X', href: '/store/products?category=beyblade-x' },
-  { name: 'Pokémon Merch', href: '/store/products?category=pokemon-merch' },
-  { name: 'Autos Tomy Tomica', href: '/store/products?category=tomica' },
-  { name: 'Figuarts', href: '/store/products?category=figuarts' },
-  { name: 'Nintendo', href: '/store/products?category=nintendo' },
-  { name: 'Coleccionables Varios', href: '/store/products?category=coleccionables' },
-] as const;
+import { useStoreSections } from '../../hooks/useData';
+import { buildSectionGroups, slugifySection } from '../../lib/sections';
 
 export function StoreNavbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const cartItemCount = useCartStore((s) => s.getItemCount());
   const location = useLocation();
+  const { data: sections } = useStoreSections();
+
+  const groups = useMemo(() => buildSectionGroups(sections || []), [sections]);
+  const currentCategory = new URLSearchParams(location.search).get('category') || '';
 
   return (
-    <nav className="sticky top-0 z-40 bg-background/80 backdrop-blur-xl border-b border-border">
+    <nav className="sticky top-0 z-[80] isolate overflow-visible bg-background/80 backdrop-blur-xl border-b border-border">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20 relative">
           {/* Left — Search */}
@@ -93,38 +89,76 @@ export function StoreNavbar() {
 
             {/* Categories */}
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider py-1">Categorías</p>
-            {STORE_CATEGORIES.map((cat) => (
-              <Link
-                key={cat.name}
-                to={cat.href}
+            {groups.map((group) => (
+              <div key={group.parentCategory}>
+                <Link
+                to={`/store/products?category=${group.slug}`}
                 onClick={() => setIsMenuOpen(false)}
                 className="block py-2 text-muted-foreground hover:text-primary transition-colors"
               >
-                {cat.name}
+                {group.parentCategory}
               </Link>
+              {group.children.length > 0 && (
+                <div className="ml-3 border-l border-border pl-3 pb-1">
+                  {group.children.map((child) => (
+                    <Link
+                      key={child.id}
+                      to={`/store/products?category=${child.slug}`}
+                      onClick={() => setIsMenuOpen(false)}
+                      className="block py-1.5 text-sm text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      {child.name}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
             ))}
           </div>
         </div>
       )}
 
       {/* Category Bar */}
-      <div className="hidden md:block border-t border-border bg-background/60 backdrop-blur-sm">
+      <div className="hidden md:block relative overflow-visible border-t border-border bg-background/60 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-center gap-2 overflow-x-auto py-3" style={{ scrollbarWidth: 'none' }}>
-            {STORE_CATEGORIES.map((cat) => {
-              const isActive = location.pathname + location.search === cat.href;
+          <div className="relative flex flex-wrap items-center justify-center gap-2 py-3 overflow-visible">
+            {groups.map((group) => {
+              const isParentActive = slugifySection(group.parentCategory) === slugifySection(currentCategory);
+              const activeChild = group.children.find((child) => child.slug === slugifySection(currentCategory));
+              const isActive = isParentActive || Boolean(activeChild);
+
               return (
-                <Link
-                  key={cat.name}
-                  to={cat.href}
-                  className={`shrink-0 px-4 py-2 rounded-md text-[0.9rem] transition-colors whitespace-nowrap ${
-                    isActive
-                      ? 'text-primary bg-primary/10 font-medium'
-                      : 'text-muted-foreground hover:text-primary hover:bg-primary/5'
-                  }`}
-                >
-                  {cat.name}
-                </Link>
+                <div key={group.parentCategory} className="relative group shrink-0 group-hover:z-50">
+                  <Link
+                    to={`/store/products?category=${group.slug}`}
+                    className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-[0.9rem] transition-colors whitespace-nowrap ${
+                      isActive
+                        ? 'text-primary bg-primary/10 font-medium'
+                        : 'text-muted-foreground hover:text-primary hover:bg-primary/5'
+                    }`}
+                  >
+                    {group.parentCategory}
+                    {group.children.length > 0 && <ChevronDown className="w-3.5 h-3.5" />}
+                  </Link>
+
+                  {group.children.length > 0 && (
+                    <div className="pointer-events-none absolute left-0 top-[calc(100%-1px)] z-[60] min-w-[220px] rounded-lg border border-border bg-card p-1 opacity-0 shadow-lg transition-all group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+                      {group.children.map((child) => (
+                        <Link
+                          key={child.id}
+                          to={`/store/products?category=${child.slug}`}
+                          className={`block rounded-md px-3 py-2 text-sm transition-colors ${
+                            currentCategory === child.slug
+                              ? 'bg-primary/10 text-primary'
+                              : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                          }`}
+                        >
+                          {child.name}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
               );
             })}
             <Link
