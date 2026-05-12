@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { randomUUID } from 'crypto';
 import { prisma } from '../index.js';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
 
@@ -50,6 +51,25 @@ const DEFAULT_CONFIG: SystemConfig = {
   comisionPct: 13,
 };
 
+function normalizeMetodosPago(raw: unknown): string[] {
+  if (!Array.isArray(raw)) {
+    return [...DEFAULT_CONFIG.metodosPago];
+  }
+
+  const normalized = raw.map((value) => String(value ?? '').trim());
+  const hasAnyValue = normalized.some((value) => value.length > 0);
+
+  if (!hasAnyValue) {
+    return [...DEFAULT_CONFIG.metodosPago];
+  }
+
+  if (!normalized[0]) {
+    normalized[0] = DEFAULT_CONFIG.metodosPago[0];
+  }
+
+  return normalized;
+}
+
 function sanitizeCuenta(raw: unknown): BankAccount {
   const input = typeof raw === 'object' && raw !== null ? (raw as Partial<BankAccount>) : {};
   return {
@@ -63,7 +83,7 @@ function sanitizeCuenta(raw: unknown): BankAccount {
 
 function parseConfigRow(row: { cuentas: string; metodosPago: string; arrBodegaJP: any; appBeyblade: any; comisionPct: any }): SystemConfig {
   let cuentas: BankAccount[] = DEFAULT_CONFIG.cuentas;
-  let metodosPago: string[] = DEFAULT_CONFIG.metodosPago;
+  let metodosPago: string[] = [...DEFAULT_CONFIG.metodosPago];
 
   try {
     const parsed = JSON.parse(row.cuentas);
@@ -76,9 +96,7 @@ function parseConfigRow(row: { cuentas: string; metodosPago: string; arrBodegaJP
 
   try {
     const parsed = JSON.parse(row.metodosPago);
-    if (Array.isArray(parsed)) {
-      metodosPago = parsed.map((value) => String(value ?? '').trim());
-    }
+    metodosPago = normalizeMetodosPago(parsed);
   } catch {
     // Keep defaults if JSON is malformed.
   }
@@ -92,21 +110,48 @@ function parseConfigRow(row: { cuentas: string; metodosPago: string; arrBodegaJP
   };
 }
 
-async function getOrCreateConfig(): Promise<SystemConfig> {
-  const existing = await prisma.shipmentsConfig.findFirst({
-    orderBy: { createdAt: 'asc' },
-    select: {
-      id: true,
-      cuentas: true,
-      metodosPago: true,
-      arrBodegaJP: true,
-      appBeyblade: true,
-      comisionPct: true,
-    },
-  });
+type ConfigRow = {
+  id: string;
+  cuentas: string;
+  metodosPago: string;
+  arrBodegaJP: any;
+  appBeyblade: any;
+  comisionPct: any;
+};
 
-  if (!existing) {
-    const created = await prisma.shipmentsConfig.create({
+function getConfigDelegate() {
+  return (prisma as any).shipmentsConfig;
+}
+
+async function findFirstConfigRow(): Promise<ConfigRow | null> {
+  const delegate = getConfigDelegate();
+
+  if (delegate) {
+    return delegate.findFirst({
+      orderBy: { createdAt: 'asc' },
+      select: {
+        id: true,
+        cuentas: true,
+        metodosPago: true,
+        arrBodegaJP: true,
+        appBeyblade: true,
+        comisionPct: true,
+      },
+    });
+  }
+
+  const rows = await prisma.$queryRawUnsafe<ConfigRow[]>(
+    'SELECT id, cuentas, metodosPago, arrBodegaJP, appBeyblade, comisionPct FROM shipments_config ORDER BY createdAt ASC LIMIT 1'
+  );
+
+  return rows[0] || null;
+}
+
+async function insertDefaultConfig(): Promise<ConfigRow> {
+  const delegate = getConfigDelegate();
+
+  if (delegate) {
+    return delegate.create({
       data: {
         cuentas: JSON.stringify(DEFAULT_CONFIG.cuentas),
         metodosPago: JSON.stringify(DEFAULT_CONFIG.metodosPago),
@@ -115,6 +160,7 @@ async function getOrCreateConfig(): Promise<SystemConfig> {
         comisionPct: DEFAULT_CONFIG.comisionPct,
       },
       select: {
+        id: true,
         cuentas: true,
         metodosPago: true,
         arrBodegaJP: true,
@@ -122,6 +168,78 @@ async function getOrCreateConfig(): Promise<SystemConfig> {
         comisionPct: true,
       },
     });
+  }
+
+  const id = randomUUID();
+  const now = new Date().toISOString();
+
+  await prisma.$executeRawUnsafe(
+    'INSERT INTO shipments_config (id, cuentas, metodosPago, arrBodegaJP, appBeyblade, comisionPct, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    id,
+    JSON.stringify(DEFAULT_CONFIG.cuentas),
+    JSON.stringify(DEFAULT_CONFIG.metodosPago),
+    DEFAULT_CONFIG.arrBodegaJP,
+    DEFAULT_CONFIG.appBeyblade,
+    DEFAULT_CONFIG.comisionPct,
+    now,
+  );
+
+  const created = await findFirstConfigRow();
+  if (!created) {
+    throw new Error('No se pudo crear la configuracion por defecto');
+  }
+  return created;
+}
+
+async function updateConfigRow(id: string, data: SystemConfig): Promise<ConfigRow> {
+  const delegate = getConfigDelegate();
+
+  if (delegate) {
+    return delegate.update({
+      where: { id },
+      data: {
+        cuentas: JSON.stringify(data.cuentas),
+        metodosPago: JSON.stringify(data.metodosPago),
+        arrBodegaJP: data.arrBodegaJP,
+        appBeyblade: data.appBeyblade,
+        comisionPct: data.comisionPct,
+      },
+      select: {
+        id: true,
+        cuentas: true,
+        metodosPago: true,
+        arrBodegaJP: true,
+        appBeyblade: true,
+        comisionPct: true,
+      },
+    });
+  }
+
+  const now = new Date().toISOString();
+
+  await prisma.$executeRawUnsafe(
+    'UPDATE shipments_config SET cuentas = ?, metodosPago = ?, arrBodegaJP = ?, appBeyblade = ?, comisionPct = ?, updatedAt = ? WHERE id = ?',
+    JSON.stringify(data.cuentas),
+    JSON.stringify(data.metodosPago),
+    data.arrBodegaJP,
+    data.appBeyblade,
+    data.comisionPct,
+    now,
+    id,
+  );
+
+  const updated = await findFirstConfigRow();
+  if (!updated) {
+    throw new Error('No se pudo actualizar la configuracion');
+  }
+  return updated;
+}
+
+async function getOrCreateConfig(): Promise<SystemConfig> {
+  const existing = await findFirstConfigRow();
+
+  if (!existing) {
+    const created = await insertDefaultConfig();
 
     return parseConfigRow(created);
   }
@@ -129,7 +247,7 @@ async function getOrCreateConfig(): Promise<SystemConfig> {
   return parseConfigRow(existing);
 }
 
-router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (_req: AuthRequest, res) => {
+router.get('/', authenticate, requireRole('ADMIN', 'STAFF', 'admin', 'staff'), async (_req: AuthRequest, res) => {
   try {
     const data = await getOrCreateConfig();
     return res.json({ data });
@@ -139,7 +257,7 @@ router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (_req: AuthRe
   }
 });
 
-router.put('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
+router.put('/', authenticate, requireRole('ADMIN', 'STAFF', 'admin', 'staff'), async (req: AuthRequest, res) => {
   try {
     const current = await getOrCreateConfig();
     const payload = req.body ?? {};
@@ -149,7 +267,7 @@ router.put('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthReq
       : current.cuentas;
 
     const metodosPago = Array.isArray(payload.metodosPago)
-      ? payload.metodosPago.map((value: unknown) => String(value ?? '').trim())
+      ? normalizeMetodosPago(payload.metodosPago)
       : current.metodosPago;
 
     const arrBodegaJP = payload.arrBodegaJP !== undefined ? Number(payload.arrBodegaJP) : current.arrBodegaJP;
@@ -168,28 +286,18 @@ router.put('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthReq
       return res.status(400).json({ error: 'comisionPct debe ser un numero mayor o igual a 0' });
     }
 
-    const target = await prisma.shipmentsConfig.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
+    const target = await findFirstConfigRow();
 
     if (!target) {
       return res.status(500).json({ error: 'No existe registro de configuracion para actualizar' });
     }
 
-    const updated = await prisma.shipmentsConfig.update({
-      where: { id: target.id },
-      data: {
-        cuentas: JSON.stringify(cuentas),
-        metodosPago: JSON.stringify(metodosPago),
-        arrBodegaJP,
-        appBeyblade,
-        comisionPct,
-      },
-      select: {
-        cuentas: true,
-        metodosPago: true,
-        arrBodegaJP: true,
-        appBeyblade: true,
-        comisionPct: true,
-      },
+    const updated = await updateConfigRow(target.id, {
+      cuentas,
+      metodosPago,
+      arrBodegaJP,
+      appBeyblade,
+      comisionPct,
     });
 
     return res.json({ data: parseConfigRow(updated) });

@@ -78,7 +78,7 @@ interface ShipmentsDataContextType {
   updatePrecioVenta: (stockId: string, precio: number) => void;
   addVenta: (data: NewVentaInput) => SaleRecord;
   confirmGAV: (id: number) => void;
-  updateConfig: (data: Partial<ERPConfig>) => void;
+  updateConfig: (data: Partial<ERPConfig>) => Promise<{ ok: true } | { ok: false; error: string }>;
   addPedidoWeb: (data: NewWebOrderInput) => WebOrder;
   addCompraChile: (data: NewLocalPurchaseInput) => LocalPurchase;
   generateGAVBoleta: () => Invoice;
@@ -218,23 +218,80 @@ type ApiConfig = {
   comisionPct: number;
 };
 
-async function shipmentsFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const token = localStorage.getItem('adminToken') || localStorage.getItem('token');
-  const response = await fetch(`/api/shipments${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
-      ...(options?.headers || {}),
-    },
-  });
+const DEFAULT_METODOS_PAGO = ['Efectivo', 'JCB Bandai', 'Rakuten', 'PayPay', 'View Card', '', '', '', '', ''];
 
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(data.error || response.statusText);
+function normalizeMetodosPago(raw: unknown): string[] {
+  if (!Array.isArray(raw)) {
+    return [...DEFAULT_METODOS_PAGO];
   }
 
-  return response.json() as Promise<T>;
+  const normalized = raw.map((value) => String(value ?? '').trim());
+  const hasAny = normalized.some((value) => value.length > 0);
+
+  if (!hasAny) {
+    return [...DEFAULT_METODOS_PAGO];
+  }
+
+  if (!normalized[0]) {
+    normalized[0] = DEFAULT_METODOS_PAGO[0];
+  }
+
+  return normalized;
+}
+
+const DEFAULT_ERP_CONFIG: ERPConfig = {
+  cuentas: [],
+  metodosPago: [...DEFAULT_METODOS_PAGO],
+  arrBodegaJP: 0,
+  appBeyblade: 0,
+  comisionPct: 0,
+};
+
+async function shipmentsFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const adminToken = localStorage.getItem('adminToken');
+  const customerToken = localStorage.getItem('token');
+  const candidates = [adminToken, customerToken].filter((value, idx, arr): value is string => {
+    return Boolean(value) && arr.indexOf(value) === idx;
+  });
+
+  const execute = async (token?: string) => {
+    const response = await fetch(`/api/shipments${endpoint}`, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+        ...(options?.headers || {}),
+      },
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({ error: 'Request failed' }));
+      const message = data.error || response.statusText;
+      throw new Error(`${response.status}: ${message}`);
+    }
+
+    return response.json() as Promise<T>;
+  };
+
+  if (candidates.length === 0) {
+    return execute();
+  }
+
+  let lastError: unknown = null;
+  for (let i = 0; i < candidates.length; i += 1) {
+    try {
+      return await execute(candidates[i]);
+    } catch (error) {
+      lastError = error;
+      const msg = error instanceof Error ? error.message : '';
+      const shouldRetry = msg.startsWith('401:') || msg.startsWith('403:');
+      if (!shouldRetry || i === candidates.length - 1) {
+        throw error;
+      }
+    }
+  }
+
+  throw (lastError instanceof Error ? lastError : new Error('Request failed'));
 }
 
 function toDateOnly(value: string): string {
@@ -258,16 +315,27 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
   const [comprasChile, setComprasChile] = useState<LocalPurchase[]>([]);
   const [ventas, setVentas] = useState<SaleRecord[]>([]);
   const [gavChile, setGavChile] = useState<GAVEntry[]>([]);
-  const [config, setConfig] = useState<ERPConfig>({
-    cuentas: [],
-    metodosPago: [],
-    arrBodegaJP: 0,
-    appBeyblade: 0,
-    comisionPct: 0,
-  });
+  const [config, setConfig] = useState<ERPConfig>(DEFAULT_ERP_CONFIG);
   const [purchaseUiToApiId, setPurchaseUiToApiId] = useState<Record<number, string>>({});
 
+  const applyConfigResponse = useCallback((apiConfig: ApiConfig) => {
+    setConfig({
+      cuentas: apiConfig?.cuentas || [],
+      metodosPago: normalizeMetodosPago(apiConfig?.metodosPago),
+      arrBodegaJP: toNumber(apiConfig?.arrBodegaJP),
+      appBeyblade: toNumber(apiConfig?.appBeyblade),
+      comisionPct: toNumber(apiConfig?.comisionPct),
+    });
+  }, []);
+
   const syncFromApi = useCallback(async () => {
+    try {
+      const configResp = await shipmentsFetch<{ data: ApiConfig }>('/config');
+      applyConfigResponse(configResp.data);
+    } catch {
+      // Si config falla, no bloquea la carga del resto de módulos.
+    }
+
     try {
       const [
         comprasResp,
@@ -278,7 +346,6 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
         ventasResp,
         comprasChileResp,
         gavChileResp,
-        configResp,
       ] = await Promise.all([
         shipmentsFetch<ShipmentsApiEnvelope<ApiCompra[]>>('/compras'),
         shipmentsFetch<ShipmentsApiEnvelope<ApiBoleta[]>>('/boletas'),
@@ -288,7 +355,6 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
         shipmentsFetch<{ data: ApiVentas[] }>('/ventas'),
         shipmentsFetch<{ data: ApiComprasChile[] }>('/compras-chile'),
         shipmentsFetch<{ data: ApiGavChile[] }>('/gav-chile'),
-        shipmentsFetch<{ data: ApiConfig }>('/config'),
       ]);
 
       const apiCompras = comprasResp.data || [];
@@ -455,18 +521,10 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
       setGavChile((gavChileResp.data || []).map((item) => ({
         ...item,
       })));
-
-      setConfig({
-        cuentas: configResp.data.cuentas || [],
-        metodosPago: configResp.data.metodosPago || [],
-        arrBodegaJP: toNumber(configResp.data.arrBodegaJP),
-        appBeyblade: toNumber(configResp.data.appBeyblade),
-        comisionPct: toNumber(configResp.data.comisionPct),
-      });
     } catch {
       // Fallback: mantener estado mock/local si la API no responde.
     }
-  }, []);
+  }, [applyConfigResponse]);
 
   useEffect(() => {
     void syncFromApi();
@@ -726,13 +784,28 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
     }).then(() => syncFromApi()).catch(() => undefined);
   }, [syncFromApi]);
 
-  const updateConfig = useCallback((data: Partial<ERPConfig>) => {
+  const updateConfig = useCallback(async (data: Partial<ERPConfig>): Promise<{ ok: true } | { ok: false; error: string }> => {
+    const previous = config;
     setConfig(prev => ({ ...prev, ...data }));
-    void shipmentsFetch('/config', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    }).then(() => syncFromApi()).catch(() => undefined);
-  }, [syncFromApi]);
+
+    try {
+      const response = await shipmentsFetch<{ data: ApiConfig }>('/config', {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      });
+
+      if (response?.data) {
+        applyConfigResponse(response.data);
+      }
+
+      await syncFromApi();
+      return { ok: true };
+    } catch (error) {
+      setConfig(previous);
+      const message = error instanceof Error ? error.message : 'No se pudo guardar la configuración';
+      return { ok: false, error: message };
+    }
+  }, [config, applyConfigResponse, syncFromApi]);
 
   const addPedidoWeb = useCallback((data: NewWebOrderInput): WebOrder => {
     const id = `WEB-${String(pedidosWeb.length + 1).padStart(3, '0')}`;

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Save, CheckCircle } from 'lucide-react';
 import { useShipmentsData } from '../../contexts/ShipmentsDataContext';
 import { Card } from '../../components/design-system/Card';
@@ -8,6 +8,8 @@ import type { BankAccount } from '../../data/shipmentsDomain';
 
 export default function ConfiguracionPage() {
   const { config, updateConfig } = useShipmentsData();
+  const emptyCuenta: BankAccount = { titular: '', rut: '', banco: '', tipo: '', numero: '' };
+  const emptyMetodos = Array.from({ length: 10 }, () => '');
 
   const [metodos, setMetodos] = useState<string[]>([...config.metodosPago]);
   const [cuentas, setCuentas] = useState<BankAccount[]>(
@@ -17,11 +19,27 @@ export default function ConfiguracionPage() {
   const [appBeyblade, setAppBeyblade] = useState(config.appBeyblade);
   const [comisionPct, setComisionPct] = useState(config.comisionPct);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Ensure we always have 3 bank accounts
-  while (cuentas.length < 3) {
-    cuentas.push({ titular: '', rut: '', banco: '', tipo: '', numero: '' });
-  }
+  const metodosPadded = [
+    ...(metodos || []),
+    ...Array.from({ length: Math.max(0, 10 - (metodos?.length || 0)) }, () => ''),
+  ].slice(0, 10);
+
+  useEffect(() => {
+    const incoming = config.metodosPago?.length ? config.metodosPago : emptyMetodos;
+    setMetodos([...(incoming || [])]);
+    setCuentas((config.cuentas || []).map((c) => ({ ...c })));
+    setArrBodegaJP(config.arrBodegaJP);
+    setAppBeyblade(config.appBeyblade);
+    setComisionPct(config.comisionPct);
+  }, [config]);
+
+  const cuentasPadded: BankAccount[] = [
+    ...cuentas.map((c) => ({ ...c })),
+    ...Array.from({ length: Math.max(0, 3 - cuentas.length) }, () => ({ ...emptyCuenta })),
+  ].slice(0, 3);
 
   function handleMetodoChange(idx: number, value: string) {
     setMetodos((prev) => {
@@ -33,20 +51,34 @@ export default function ConfiguracionPage() {
 
   function handleCuentaChange(idx: number, field: keyof BankAccount, value: string) {
     setCuentas((prev) => {
-      const next = prev.map((c) => ({ ...c }));
+      const next = [
+        ...prev.map((c) => ({ ...c })),
+        ...Array.from({ length: Math.max(0, 3 - prev.length) }, () => ({ ...emptyCuenta })),
+      ].slice(0, 3);
       next[idx] = { ...next[idx], [field]: value };
       return next;
     });
   }
 
-  function handleSave() {
-    updateConfig({
-      metodosPago: metodos,
-      cuentas,
+  async function handleSave() {
+    setSaveError(null);
+    setIsSaving(true);
+
+    const result = await updateConfig({
+      metodosPago: metodosPadded,
+      cuentas: cuentasPadded,
       arrBodegaJP,
       appBeyblade,
       comisionPct,
     });
+
+    setIsSaving(false);
+
+    if (!result.ok) {
+      setSaveError(result.error || 'No se pudo guardar. Revisa tu sesión e intenta nuevamente.');
+      return;
+    }
+
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
   }
@@ -55,7 +87,7 @@ export default function ConfiguracionPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold text-foreground">Configuración</h2>
-        <Button size="sm" onClick={handleSave}>
+        <Button size="sm" onClick={handleSave} disabled={isSaving}>
           <Save className="w-4 h-4" /> Guardar
         </Button>
       </div>
@@ -67,13 +99,19 @@ export default function ConfiguracionPage() {
         </div>
       )}
 
+      {saveError && (
+        <div className="fixed top-4 right-4 z-50 bg-red-600/90 text-white px-4 py-3 rounded-lg shadow-lg text-sm animate-in fade-in slide-in-from-top-2">
+          {saveError}
+        </div>
+      )}
+
       {/* Métodos de Pago */}
       <Card>
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">
           Métodos de Pago
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          {metodos.map((m, idx) => (
+          {metodosPadded.map((m, idx) => (
             <Input
               key={idx}
               label={`Slot ${idx}`}
@@ -92,7 +130,7 @@ export default function ConfiguracionPage() {
           Cuentas Bancarias
         </h3>
         <div className="space-y-6">
-          {cuentas.slice(0, 3).map((cuenta, idx) => (
+          {cuentasPadded.map((cuenta, idx) => (
             <div key={idx} className="space-y-3 pb-4 border-b border-border last:border-0 last:pb-0">
               <p className="text-sm font-medium text-foreground">Cuenta {idx + 1}</p>
               <div className="grid grid-cols-2 md:grid-cols-5 gap-3">

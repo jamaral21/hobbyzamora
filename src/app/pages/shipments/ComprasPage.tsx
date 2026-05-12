@@ -35,6 +35,8 @@ const emptyForm: FormData = {
 
 export default function ComprasPage() {
   const { compras, config, addCompra } = useShipmentsData();
+  const metodosPagoDisponibles = (config.metodosPago || []).filter(Boolean);
+  const metodosPago = metodosPagoDisponibles.length > 0 ? metodosPagoDisponibles : ['Efectivo'];
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState<FormData>({ ...emptyForm });
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
@@ -212,7 +214,7 @@ export default function ComprasPage() {
             error={errors.tarjeta}
           >
             <option value="">Seleccionar...</option>
-            {config.metodosPago.filter(Boolean).map((m) => (
+            {metodosPago.map((m) => (
               <option key={m} value={m}>{m}</option>
             ))}
           </Select>
