@@ -48,6 +48,26 @@ function getPresaleEndLabel(presaleEndDate?: string | null) {
   return `Expira en ${minutes}m`;
 }
 
+function getShippingAddress(order?: {
+  shippingStreet?: string | null;
+  shippingCity?: string | null;
+  shippingState?: string | null;
+  shippingZip?: string | null;
+  shippingCountry?: string | null;
+} | null): string {
+  if (!order) return '—';
+
+  const parts = [
+    order.shippingStreet,
+    order.shippingCity,
+    order.shippingState,
+    order.shippingZip,
+    order.shippingCountry,
+  ].filter((value) => typeof value === 'string' && value.trim().length > 0);
+
+  return parts.length > 0 ? parts.join(', ') : '—';
+}
+
 const STATUS_CONFIG: Record<string, { label: string; color: string; Icon: any }> = {
   PENDING: { label: 'Pendiente', color: 'bg-blue-100 text-blue-700', Icon: Clock },
   NOTIFIED: { label: 'Notificado', color: 'bg-amber-100 text-amber-700', Icon: AlertCircle },
@@ -595,6 +615,7 @@ export function PresalesPage() {
               <thead>
                 <tr className="border-b border-border bg-secondary/40">
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Cliente</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dirección envío</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Producto</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Estado</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Notificado</th>
@@ -620,6 +641,16 @@ export function PresalesPage() {
                         <p className="text-xs text-muted-foreground">{r.user.email}</p>
                         {r.user.presaleBanned && (
                           <p className="text-[11px] text-red-600 font-semibold mt-1">Bloqueado para preventas</p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground max-w-72 break-words">
+                        {r.order?.orderNumber ? (
+                          <>
+                            <p className="font-mono text-[11px] text-foreground mb-1">{r.order.orderNumber}</p>
+                            <p>{getShippingAddress(r.order)}</p>
+                          </>
+                        ) : (
+                          '—'
                         )}
                       </td>
                       {/* Product */}

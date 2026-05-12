@@ -71,6 +71,24 @@ function getPaymentLabel(method?: string): string {
   }
 }
 
+function getShippingAddress(order: {
+  shippingStreet?: string | null;
+  shippingCity?: string | null;
+  shippingState?: string | null;
+  shippingZip?: string | null;
+  shippingCountry?: string | null;
+}): string {
+  const parts = [
+    order.shippingStreet,
+    order.shippingCity,
+    order.shippingState,
+    order.shippingZip,
+    order.shippingCountry,
+  ].filter((value) => typeof value === 'string' && value.trim().length > 0);
+
+  return parts.length > 0 ? parts.join(', ') : '—';
+}
+
 export default function DashboardPage() {
   const { isAuthenticated } = useAdminAuth();
   const [datePreset, setDatePreset] = useState<DatePreset>('month');
@@ -170,6 +188,7 @@ export default function DashboardPage() {
       customerName: string;
       customerEmail: string;
       customerPhone: string;
+      shippingAddress: string;
       source: string;
       status: string;
       paymentMethod: string;
@@ -192,6 +211,7 @@ export default function DashboardPage() {
           customerName: order.customerName,
           customerEmail: order.customerEmail,
           customerPhone: order.customerPhone || '',
+          shippingAddress: getShippingAddress(order),
           source: SOURCE_LABELS[order.source] || order.source,
           status: STATUS_LABELS[order.status] || order.status,
           paymentMethod,
@@ -399,6 +419,7 @@ export default function DashboardPage() {
                       <th className="text-left py-2 text-muted-foreground font-normal">Fecha</th>
                       <th className="text-left py-2 text-muted-foreground font-normal">Cliente</th>
                       <th className="text-left py-2 text-muted-foreground font-normal">Contacto</th>
+                      <th className="text-left py-2 text-muted-foreground font-normal">Dirección envío</th>
                       <th className="text-left py-2 text-muted-foreground font-normal">Canal</th>
                       <th className="text-left py-2 text-muted-foreground font-normal">Pago</th>
                       <th className="text-left py-2 text-muted-foreground font-normal">Tipo</th>
@@ -418,6 +439,7 @@ export default function DashboardPage() {
                           {row.customerEmail && <span className="block truncate max-w-[160px]">{row.customerEmail}</span>}
                           {row.customerPhone && <span className="block text-[10px]">{row.customerPhone}</span>}
                         </td>
+                        <td className="py-2.5 text-muted-foreground text-xs max-w-[220px] break-words">{row.shippingAddress}</td>
                         <td className="py-2.5">
                           <Badge variant="default" size="sm">{row.source}</Badge>
                         </td>
@@ -451,7 +473,7 @@ export default function DashboardPage() {
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-border bg-secondary/50 font-semibold">
-                      <td colSpan={8} className="py-2.5 text-muted-foreground">
+                      <td colSpan={9} className="py-2.5 text-muted-foreground">
                         Total ({filteredSalesDetail.length} ventas)
                       </td>
                       <td className="py-2.5 text-right text-foreground">
@@ -556,6 +578,7 @@ export default function DashboardPage() {
                             {order.customerPhone && ` • 📱 ${order.customerPhone}`}
                           </p>
                         )}
+                        <p className="text-xs text-muted-foreground mt-1">🚚 {getShippingAddress(order)}</p>
                       </div>
                     )}
                   </div>

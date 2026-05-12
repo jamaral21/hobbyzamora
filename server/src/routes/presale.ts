@@ -167,7 +167,37 @@ router.get('/my', authenticate, async (req: AuthRequest, res) => {
       orderBy: { createdAt: 'desc' },
     });
 
-    const formatted = reservations.map((r) => ({
+    const reservationsWithOrder = await Promise.all(
+      reservations.map(async (r) => {
+        const relatedOrder = await prisma.order.findFirst({
+          where: {
+            userId: r.userId,
+            items: {
+              some: {
+                productId: r.productId,
+              },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            orderNumber: true,
+            shippingStreet: true,
+            shippingCity: true,
+            shippingState: true,
+            shippingZip: true,
+            shippingCountry: true,
+          },
+        });
+
+        return {
+          ...r,
+          order: relatedOrder,
+        };
+      })
+    );
+
+    const formatted = reservationsWithOrder.map((r) => ({
       ...r,
       product: {
         ...r.product,

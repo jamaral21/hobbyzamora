@@ -22,6 +22,18 @@ function getPaymentLabel(method?: string): string {
   }
 }
 
+function getShippingAddress(order: any): string {
+  const parts = [
+    order.shippingStreet,
+    order.shippingCity,
+    order.shippingState,
+    order.shippingZip,
+    order.shippingCountry,
+  ].filter((value) => typeof value === 'string' && value.trim().length > 0);
+
+  return parts.length > 0 ? parts.join(', ') : '—';
+}
+
 export default function OrdersPage() {
   const { isAuthenticated } = useAdminAuth();
   const navigate = useNavigate();
@@ -131,11 +143,12 @@ export default function OrdersPage() {
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => {
-              const headers = ['Pedido', 'Cliente', 'Email', 'Fecha', 'Artículos', 'Método de pago', 'Total', 'Estado'];
+              const headers = ['Pedido', 'Cliente', 'Email', 'Dirección envío', 'Fecha', 'Artículos', 'Método de pago', 'Total', 'Estado'];
               const rows = filteredOrders.map((o: any) => [
                 o.orderNumber,
                 o.customerName || '',
                 o.customerEmail || '',
+                getShippingAddress(o),
                 new Date(o.createdAt).toLocaleDateString(),
                 getItemsCount(o),
                 getPaymentLabel(o.payments?.[0]?.method),
@@ -299,6 +312,7 @@ export default function OrdersPage() {
           <TableRow>
             <TableHead>Pedido</TableHead>
             <TableHead>Cliente</TableHead>
+            <TableHead>Dirección envío</TableHead>
             <TableHead>Fecha</TableHead>
             <TableHead>Artículos</TableHead>
             <TableHead>Método de pago</TableHead>
@@ -318,6 +332,9 @@ export default function OrdersPage() {
                   <p className="text-sm text-foreground">{order.customerName}</p>
                   <p className="text-xs text-muted-foreground">{order.customerEmail}</p>
                 </div>
+              </TableCell>
+              <TableCell>
+                <p className="text-xs text-muted-foreground max-w-56 break-words">{getShippingAddress(order)}</p>
               </TableCell>
               <TableCell>
                 {new Date(order.createdAt).toLocaleDateString()}

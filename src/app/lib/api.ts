@@ -40,6 +40,11 @@ export interface Order {
   customerName: string;
   customerEmail: string;
   customerPhone?: string;
+  shippingStreet?: string | null;
+  shippingCity?: string | null;
+  shippingState?: string | null;
+  shippingZip?: string | null;
+  shippingCountry?: string | null;
   createdAt: string;
   subtotal: number;
   tax: number;
@@ -858,6 +863,15 @@ export interface AdminPresaleReservation {
   cancelledBy?: string | null;
   createdAt: string;
   user: { id: string; name: string; email: string; presaleBanned?: boolean };
+  order?: {
+    id: string;
+    orderNumber: string;
+    shippingStreet?: string | null;
+    shippingCity?: string | null;
+    shippingState?: string | null;
+    shippingZip?: string | null;
+    shippingCountry?: string | null;
+  } | null;
   product: {
     id: string;
     name: string;
