@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { CreditCard, CheckCircle } from 'lucide-react';
+import { CreditCard, CheckCircle, Trash2, AlertTriangle } from 'lucide-react';
 import { useShipmentsData } from '../../contexts/ShipmentsDataContext';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/design-system/Card';
 import { Button } from '../../components/design-system/Button';
@@ -9,11 +9,12 @@ import { StatusBadge } from '../../components/shipments/StatusBadge';
 import { EmptyState } from '../../components/design-system/EmptyState';
 
 export default function PagosPage() {
-  const { boletas, config, confirmPayment } = useShipmentsData();
+  const { boletas, config, confirmPayment, deleteBoleta } = useShipmentsData();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [cuenta, setCuenta] = useState('');
   const [fechaTransf, setFechaTransf] = useState(new Date().toISOString().split('T')[0]);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const pendientes = useMemo(
     () => boletas.filter((b) => b.estado === 'sin_pagar'),
@@ -32,6 +33,21 @@ export default function PagosPage() {
     setSelectedId(null);
     setCuenta('');
     setTimeout(() => setSuccessMsg(null), 4000);
+  }
+
+  function handleDelete(boletaId: string) {
+    const isGAV = boletaId.includes('GAV');
+    deleteBoleta(boletaId);
+    if (selectedId === boletaId) {
+      setSelectedId(null);
+      setCuenta('');
+    }
+    setConfirmDeleteId(null);
+    const msg = isGAV
+      ? `Boleta GAV ${boletaId} eliminada. Puede generarse nuevamente desde GAV Japón.`
+      : `Boleta ${boletaId} eliminada. Productos revertidos a "por pagar".`;
+    setSuccessMsg(msg);
+    setTimeout(() => setSuccessMsg(null), 5000);
   }
 
   return (
@@ -71,18 +87,57 @@ export default function PagosPage() {
                     ? 'border-primary/50 bg-primary/5'
                     : 'hover:border-primary/20'
                 }`}
-                onClick={() => setSelectedId(b.id)}
+                onClick={() => { setSelectedId(b.id); setConfirmDeleteId(null); }}
               >
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="font-[family-name:var(--font-mono)] text-sm font-medium">{b.id}</p>
                     <p className="text-xs text-muted-foreground">{b.fecha} · {b.productos} productos</p>
                   </div>
-                  <div className="text-right">
-                    <PriceDisplay amount={b.totalCLP} currency="CLP" className="text-lg" />
-                    <div className="mt-1"><StatusBadge status={b.estado} /></div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <PriceDisplay amount={b.totalCLP} currency="CLP" className="text-lg" />
+                      <div className="mt-1"><StatusBadge status={b.estado} /></div>
+                    </div>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      {confirmDeleteId === b.id ? (
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs text-destructive font-medium whitespace-nowrap">¿Eliminar?</span>
+                          <button
+                            onClick={() => handleDelete(b.id)}
+                            className="px-2 py-1 text-xs rounded bg-destructive text-destructive-foreground hover:opacity-90 transition-opacity font-medium"
+                          >
+                            Sí
+                          </button>
+                          <button
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="px-2 py-1 text-xs rounded border border-border text-muted-foreground hover:bg-secondary transition-colors"
+                          >
+                            No
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmDeleteId(b.id)}
+                          className="p-1.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          title="Eliminar boleta"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
+                {confirmDeleteId === b.id && (
+                  <div className="mt-2 pt-2 border-t border-destructive/20 flex items-start gap-2">
+                    <AlertTriangle className="w-3.5 h-3.5 text-destructive mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-destructive">
+                      {b.id.includes('GAV')
+                        ? 'Se eliminará la boleta GAV. Podrá generarse nuevamente desde GAV Japón.'
+                        : 'Los productos asociados volverán al estado "por pagar".'}
+                    </p>
+                  </div>
+                )}
               </Card>
             ))}
           </div>

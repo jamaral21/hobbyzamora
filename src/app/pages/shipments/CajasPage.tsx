@@ -1,10 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router';
-import { Package, Plus, Eye, Pencil, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Package, Plus, Pencil, Trash2, ChevronDown, ChevronUp, FileText, Upload, ExternalLink, X } from 'lucide-react';
 import { useShipmentsData } from '../../contexts/ShipmentsDataContext';
 import { Card } from '../../components/design-system/Card';
 import { Button } from '../../components/design-system/Button';
-import { Input } from '../../components/design-system/Input';
+import { Input, Select } from '../../components/design-system/Input';
 import { Modal, ModalFooter } from '../../components/design-system/Modal';
 import { StatusBadge } from '../../components/shipments/StatusBadge';
 import { PriceDisplay } from '../../components/shipments/PriceDisplay';
@@ -24,13 +24,27 @@ interface ProductRow {
 
 export default function CajasPage() {
   const {
-    cajas, compras, addCaja, updateCaja, deleteCaja, calcDisponibleBySku,
+    cajas,
+    compras,
+    addCaja,
+    updateCaja,
+    deleteCaja,
+    calcDisponibleBySku,
+    addDocumentoAduaneroCaja,
+    removeDocumentoAduaneroCaja,
   } = useShipmentsData();
   const navigate = useNavigate();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [docsModalOpen, setDocsModalOpen] = useState(false);
+  const [docsCajaId, setDocsCajaId] = useState<string | null>(null);
+  const [docNombre, setDocNombre] = useState('');
+  const [docTipo, setDocTipo] = useState<'DIN' | 'DTE' | 'Otro'>('DIN');
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [docsError, setDocsError] = useState('');
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
 
   // Form state
   const [nombre, setNombre] = useState('');
@@ -41,6 +55,7 @@ export default function CajasPage() {
   const [matJpy, setMatJpy] = useState('');
   const [tcEnvio, setTcEnvio] = useState('');
   const [selectedProducts, setSelectedProducts] = useState<ProductRow[]>([]);
+  const [qtyDraftBySku, setQtyDraftBySku] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Available products from Bodega Japón
@@ -79,6 +94,7 @@ export default function CajasPage() {
 
   const openCreateModal = () => {
     resetForm();
+    setQtyDraftBySku({});
     setModalOpen(true);
   };
 
@@ -92,6 +108,7 @@ export default function CajasPage() {
     setMatJpy(String(box.mat_jpy));
     setTcEnvio(String(box.tc_envio));
     setSelectedProducts([]);
+    setQtyDraftBySku({});
     setErrors({});
     setModalOpen(true);
   };
@@ -181,6 +198,67 @@ export default function CajasPage() {
   const totalValue = (box: Box) =>
     box.productos.reduce((s, p) => s + p.precioU * p.cant, 0);
 
+  const selectedCaja = docsCajaId ? cajas.find(c => c.id === docsCajaId) : undefined;
+
+  const openDocsModal = (cajaId: string) => {
+    setDocsCajaId(cajaId);
+    setDocsModalOpen(true);
+    setDocNombre('');
+    setDocTipo('DIN');
+    setDocFile(null);
+    setDocsError('');
+  };
+
+  const closeDocsModal = () => {
+    setDocsModalOpen(false);
+    setDocsCajaId(null);
+    setDocNombre('');
+    setDocTipo('DIN');
+    setDocFile(null);
+    setDocsError('');
+    setIsUploadingDoc(false);
+  };
+
+  const handleUploadDocumento = async () => {
+    if (!docsCajaId) return;
+    if (!docNombre.trim()) {
+      setDocsError('El nombre del documento es requerido.');
+      return;
+    }
+    if (!docFile) {
+      setDocsError('Selecciona un archivo para subir.');
+      return;
+    }
+
+    try {
+      setIsUploadingDoc(true);
+      setDocsError('');
+      await addDocumentoAduaneroCaja(docsCajaId, {
+        nombre: docNombre.trim(),
+        tipo: docTipo,
+        fileName: docFile.name,
+        file: docFile,
+      });
+      setDocNombre('');
+      setDocTipo('DIN');
+      setDocFile(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo subir el documento. Intenta nuevamente.';
+      setDocsError(message);
+    } finally {
+      setIsUploadingDoc(false);
+    }
+  };
+
+  const handleRemoveDocumento = async (cajaId: string, fileName: string) => {
+    try {
+      await removeDocumentoAduaneroCaja(cajaId, fileName);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo eliminar el documento.';
+      setDocsError(message);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -224,6 +302,11 @@ export default function CajasPage() {
                   >
                     {expandedId === box.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                     Ver
+                  </Button>
+
+                  <Button size="sm" variant="ghost" onClick={() => openDocsModal(box.id)}>
+                    <FileText className="w-4 h-4" />
+                    {(box.documentosAduaneros || []).length}
                   </Button>
 
                   {box.estado === 'transito' && (
@@ -355,6 +438,7 @@ export default function CajasPage() {
                   {availableProducts.map(p => {
                     const selected = selectedProducts.find(s => s._sku === p._sku);
                     const qty = selected?.cant || 0;
+                    const qtyDraft = qtyDraftBySku[p._sku] ?? String(qty);
                     return (
                       <div key={p._sku} className="flex items-center justify-between gap-3">
                         <div className="flex-1 min-w-0">
@@ -365,8 +449,28 @@ export default function CajasPage() {
                           type="number"
                           min={0}
                           max={p.disponible}
-                          value={qty}
-                          onChange={e => handleProductQtyChange(p._sku, Math.min(Number(e.target.value), p.disponible))}
+                          value={qtyDraft}
+                          onChange={e => {
+                            const raw = e.target.value;
+                            setQtyDraftBySku(prev => ({ ...prev, [p._sku]: raw }));
+                            if (raw === '') {
+                              handleProductQtyChange(p._sku, 0);
+                              return;
+                            }
+                            const parsed = Number(raw);
+                            if (!Number.isFinite(parsed)) return;
+                            const normalized = Math.max(0, Math.min(parsed, p.disponible));
+                            handleProductQtyChange(p._sku, normalized);
+                            if (String(normalized) !== raw) {
+                              setQtyDraftBySku(prev => ({ ...prev, [p._sku]: String(normalized) }));
+                            }
+                          }}
+                          onBlur={() => {
+                            const current = qtyDraftBySku[p._sku];
+                            if (current === '') {
+                              setQtyDraftBySku(prev => ({ ...prev, [p._sku]: '0' }));
+                            }
+                          }}
                           className="w-20 px-2 py-1 text-sm rounded border border-border bg-input-background text-foreground text-center"
                         />
                       </div>
@@ -384,6 +488,86 @@ export default function CajasPage() {
           </Button>
           <Button onClick={handleSubmit}>
             {editingId ? 'Guardar' : 'Crear Caja'}
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      <Modal
+        isOpen={docsModalOpen}
+        onClose={closeDocsModal}
+        title={selectedCaja ? `Documentos aduaneros · ${selectedCaja.id}` : 'Documentos aduaneros'}
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Nombre del documento"
+              value={docNombre}
+              onChange={e => setDocNombre(e.target.value)}
+              placeholder="Ej: DIN caja C-001"
+            />
+            <Select
+              label="Tipo"
+              value={docTipo}
+              onChange={e => setDocTipo(e.target.value as 'DIN' | 'DTE' | 'Otro')}
+            >
+              <option value="DIN">DIN</option>
+              <option value="DTE">DTE</option>
+              <option value="Otro">Otro</option>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-foreground">Archivo</label>
+            <input
+              type="file"
+              onChange={e => setDocFile(e.target.files?.[0] || null)}
+              className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background text-foreground"
+            />
+            {docsError && <p className="text-xs text-destructive">{docsError}</p>}
+          </div>
+
+          <div className="border border-border rounded-lg">
+            <div className="px-4 py-3 border-b border-border">
+              <p className="text-sm font-medium text-foreground">Documentos cargados</p>
+            </div>
+            <div className="p-3 space-y-2 max-h-64 overflow-y-auto">
+              {(selectedCaja?.documentosAduaneros || []).length === 0 ? (
+                <p className="text-sm text-muted-foreground">No hay documentos asociados.</p>
+              ) : (
+                (selectedCaja?.documentosAduaneros || []).map((doc) => (
+                  <div key={`${doc.fileName}-${doc.fileUrl}`} className="flex items-center justify-between gap-3 p-2 rounded border border-border">
+                    <div className="min-w-0">
+                      <p className="text-sm text-foreground truncate">{doc.nombre}</p>
+                      <p className="text-xs text-muted-foreground">{doc.tipo} · {doc.fileName}</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <a href={doc.fileUrl} target="_blank" rel="noreferrer">
+                        <Button type="button" size="sm" variant="ghost">
+                          <ExternalLink className="w-4 h-4" />
+                        </Button>
+                      </a>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => selectedCaja && handleRemoveDocumento(selectedCaja.id, doc.fileName)}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        <ModalFooter>
+          <Button variant="ghost" onClick={closeDocsModal}>Cerrar</Button>
+          <Button onClick={handleUploadDocumento} disabled={isUploadingDoc || !selectedCaja}>
+            <Upload className="w-4 h-4" />
+            {isUploadingDoc ? 'Subiendo...' : 'Subir documento'}
           </Button>
         </ModalFooter>
       </Modal>

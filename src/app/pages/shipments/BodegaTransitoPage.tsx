@@ -17,7 +17,7 @@ const SECTIONS: { state: BoxState; label: string }[] = [
 ];
 
 export default function BodegaTransitoPage() {
-  const { cajas } = useShipmentsData();
+  const { cajas, updateCaja } = useShipmentsData();
   const navigate = useNavigate();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -36,6 +36,7 @@ export default function BodegaTransitoPage() {
   }), [grouped]);
 
   const toggle = (id: string) => setExpandedId(prev => prev === id ? null : id);
+  const markAsArrived = (id: string) => updateCaja(id, { estado: 'llegada' });
 
   return (
     <div className="space-y-6">
@@ -81,6 +82,11 @@ export default function BodegaTransitoPage() {
                       </div>
                       <div className="flex items-center gap-3">
                         <StatusBadge status={box.estado} />
+                        {box.estado === 'transito' && (
+                          <Button size="sm" variant="outline" onClick={() => markAsArrived(box.id)}>
+                            Marcar Llegada
+                          </Button>
+                        )}
                         {box.estado === 'llegada' && (
                           <Button size="sm" variant="outline" onClick={() => navigate('/shipments/costeo')}>
                             Hacer Costeo

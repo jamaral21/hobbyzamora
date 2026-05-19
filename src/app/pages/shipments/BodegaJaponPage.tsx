@@ -34,7 +34,7 @@ export default function BodegaJaponPage() {
     const totalJPY = allAvailable.reduce((s, c) => s + c.precioU * c.disponible, 0);
     const totalCLP = allAvailable.reduce((s, c) => {
       const tc = c.tc && c.tc > 0 ? c.tc : 6.0;
-      return s + (c.precioU * c.disponible) / tc;
+      return s + (c.precioU * c.disponible) * tc;
     }, 0);
 
     return { skus, unidades, totalJPY, totalCLP: Math.round(totalCLP) };

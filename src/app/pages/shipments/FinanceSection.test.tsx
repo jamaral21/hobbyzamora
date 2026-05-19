@@ -20,12 +20,12 @@ const ventas = [
 ];
 
 const boletasPagadas = [
-  { id: 'BOL-2026-001', fecha: '2026-01-20', productos: 2, subtotalJPY: 50000, comision: 13, totalJPY: 56500, tc: 6.0, totalCLP: 9417, estado: 'pagado' as const },
-  { id: 'BOL-2026-GAV-001', fecha: '2026-01-25', productos: 'GAV Enero', subtotalJPY: 25550, comision: 13, totalJPY: 28872, tc: 6.0, totalCLP: 4812, estado: 'pagado' as const },
+  { id: 'BOL-2026-001', fecha: '2026-01-20', productos: 2, subtotalJPY: 50000, comision: 13, totalJPY: 56500, tc: 6.0, totalCLP: 339000, estado: 'pagado' as const },
+  { id: 'BOL-2026-GAV-001', fecha: '2026-01-25', productos: 'GAV Enero', subtotalJPY: 25550, comision: 13, totalJPY: 28872, tc: 6.0, totalCLP: 173232, estado: 'pagado' as const },
 ];
 
 const boletasSinPagar = [
-  { id: 'BOL-2026-002', fecha: '2026-02-12', productos: 1, subtotalJPY: 30000, comision: 13, totalJPY: 33900, tc: 6.0, totalCLP: 5650, estado: 'sin_pagar' as const },
+  { id: 'BOL-2026-002', fecha: '2026-02-12', productos: 1, subtotalJPY: 30000, comision: 13, totalJPY: 33900, tc: 6.0, totalCLP: 203400, estado: 'sin_pagar' as const },
 ];
 
 const boletas = [...boletasPagadas, ...boletasSinPagar];
@@ -220,10 +220,10 @@ describe('BalancePage', () => {
     expect(expectedBalance.invChile).toBe(expected);
   });
 
-  it('Inventario Japón = sum(precioU * cant / tc) for bodega=japon', () => {
+  it('Inventario Japón = sum(precioU * cant * tc) for bodega=japon', () => {
     const expected = compras
       .filter((c) => c.bodega === 'japon' && c.tc && c.tc > 0)
-      .reduce((s, c) => s + (c.precioU * c.cant) / c.tc!, 0);
+      .reduce((s, c) => s + (c.precioU * c.cant) * c.tc!, 0);
     expect(expectedBalance.invJapon).toBe(expected);
   });
 
