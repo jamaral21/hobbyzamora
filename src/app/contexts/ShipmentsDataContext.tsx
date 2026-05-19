@@ -346,7 +346,7 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
         ventasResp,
         comprasChileResp,
         gavChileResp,
-      ] = await Promise.all([
+      ] = await Promise.allSettled([
         shipmentsFetch<ShipmentsApiEnvelope<ApiCompra[]>>('/compras'),
         shipmentsFetch<ShipmentsApiEnvelope<ApiBoleta[]>>('/boletas'),
         shipmentsFetch<ShipmentsApiEnvelope<ApiCaja[]>>('/cajas'),
@@ -357,7 +357,7 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
         shipmentsFetch<{ data: ApiGavChile[] }>('/gav-chile'),
       ]);
 
-      const apiCompras = comprasResp.data || [];
+      const apiCompras = comprasResp.status === 'fulfilled' ? (comprasResp.value.data || []) : [];
       const uiToApi: Record<number, string> = {};
       const apiToUi: Record<string, number> = {};
       const nextCompras: PurchaseRecord[] = apiCompras.map((item, index) => {
@@ -384,7 +384,7 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
       setPurchaseUiToApiId(uiToApi);
       setCompras(nextCompras);
 
-      const boletasList = boletasResp.data || [];
+      const boletasList = boletasResp.status === 'fulfilled' ? (boletasResp.value.data || []) : [];
       const boletaIds = boletasList.map((b) => b.invoiceId || b.id).filter(Boolean) as string[];
       const details = await Promise.all(
         boletaIds.map((id) =>
@@ -430,7 +430,7 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
       setBoletas(nextBoletas);
       setBoletaItems(itemsByInvoice);
 
-      const apiCajas = cajasResp.data || [];
+      const apiCajas = cajasResp.status === 'fulfilled' ? (cajasResp.value.data || []) : [];
       const nextCajas: Box[] = apiCajas.map((item) => {
         const boxProducts = (item.productos || []).map((p) => ({
           _compraId: apiToUi[p.compraId] ?? 0,
@@ -467,7 +467,8 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
       });
       setCajas(nextCajas);
 
-      const nextPedidosWeb: WebOrder[] = (comprasWebResp.data || []).map((order) => ({
+      const apiPedidosWeb = comprasWebResp.status === 'fulfilled' ? (comprasWebResp.value.data || []) : [];
+      const nextPedidosWeb: WebOrder[] = apiPedidosWeb.map((order) => ({
         id: order.orderId,
         fecha: toDateOnly(order.fecha),
         portal: order.portal,
@@ -487,7 +488,7 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
       }));
       setPedidosWeb(nextPedidosWeb);
 
-      const stockRows = bodegaChileResp.data.items || [];
+      const stockRows = bodegaChileResp.status === 'fulfilled' ? (bodegaChileResp.value.data.items || []) : [];
       const nextStockChile: ChileStockEntry[] = stockRows.map((row) => ({
         id: row.id,
         _sku: row.sku,
@@ -500,7 +501,8 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
       }));
       setStockChile(nextStockChile);
 
-      const nextVentas: SaleRecord[] = (ventasResp.data || []).map((sale) => ({
+      const apiVentas = ventasResp.status === 'fulfilled' ? (ventasResp.value.data || []) : [];
+      const nextVentas: SaleRecord[] = apiVentas.map((sale) => ({
         id: sale.id,
         fecha: toDateOnly(sale.fecha),
         producto: sale.producto,
@@ -513,12 +515,14 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
       }));
       setVentas(nextVentas);
 
-      setComprasChile((comprasChileResp.data || []).map((item) => ({
+      const apiComprasChile = comprasChileResp.status === 'fulfilled' ? (comprasChileResp.value.data || []) : [];
+      setComprasChile(apiComprasChile.map((item) => ({
         ...item,
         fecha: toDateOnly(item.fecha),
       })));
 
-      setGavChile((gavChileResp.data || []).map((item) => ({
+      const apiGavChile = gavChileResp.status === 'fulfilled' ? (gavChileResp.value.data || []) : [];
+      setGavChile(apiGavChile.map((item) => ({
         ...item,
       })));
     } catch {
