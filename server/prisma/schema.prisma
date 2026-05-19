@@ -161,9 +161,11 @@ model Order {
   customerName  String
   customerEmail String
   customerPhone String?
+  customerRut   String?
 
   addressId       String?
   address         Address? @relation(fields: [addressId], references: [id])
+  deliveryMethod  String?
   shippingStreet  String?
   shippingCity    String?
   shippingState   String?

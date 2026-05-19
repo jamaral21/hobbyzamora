@@ -248,7 +248,12 @@ export default function DashboardPage() {
     return Object.values(map);
   }, [allOrders]);
 
-  if (statsLoading || chartLoading || ordersLoading) {
+  const showInitialLoading =
+    (statsLoading && !stats) ||
+    (chartLoading && !chartData) ||
+    (ordersLoading && !ordersData);
+
+  if (showInitialLoading) {
     return (
       <AdminLayout>
         <div className="flex items-center justify-center h-64">
@@ -273,6 +278,7 @@ export default function DashboardPage() {
             <div className="flex items-center gap-1 bg-secondary rounded-lg p-1">
               {(['today', 'week', 'month'] as DatePreset[]).map((preset) => (
                 <button
+                  type="button"
                   key={preset}
                   onClick={() => setDatePreset(preset)}
                   className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
@@ -287,6 +293,7 @@ export default function DashboardPage() {
             </div>
 
             <button
+              type="button"
               onClick={() => setDatePreset('custom')}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-colors ${
                 datePreset === 'custom'
@@ -310,14 +317,16 @@ export default function DashboardPage() {
             type="date"
             value={customStart}
             onChange={(e) => setCustomStart(e.target.value)}
-            className="bg-background border border-border rounded-md px-2 py-1 text-sm text-foreground"
+            style={{ colorScheme: 'dark' }}
+            className="px-3 py-1.5 rounded-lg border border-border bg-input-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
           <label className="text-xs text-muted-foreground">Hasta</label>
           <input
             type="date"
             value={customEnd}
             onChange={(e) => setCustomEnd(e.target.value)}
-            className="bg-background border border-border rounded-md px-2 py-1 text-sm text-foreground"
+            style={{ colorScheme: 'dark' }}
+            className="px-3 py-1.5 rounded-lg border border-border bg-input-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </div>
       )}
@@ -500,6 +509,7 @@ export default function DashboardPage() {
                 return (
                   <div key={order.id} className="border border-border/50 rounded-lg overflow-hidden">
                     <button
+                      type="button"
                       onClick={() => setExpandedOrder(isExpanded ? null : order.id)}
                       className="w-full flex items-center justify-between p-4 hover:bg-secondary/50 transition-colors text-left"
                     >

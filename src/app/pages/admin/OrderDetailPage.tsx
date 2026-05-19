@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { Link } from 'react-router';
-import { ArrowLeft, Package, CreditCard, Truck, Loader2, AlertCircle, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Package, CreditCard, Truck, Loader2, AlertCircle, ShieldAlert, MapPin } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { Button } from '../../components/design-system/Button';
 import { Badge } from '../../components/design-system/Badge';
@@ -21,6 +21,37 @@ const STATUS_BADGE_VARIANT: Record<string, 'default' | 'success' | 'warning' | '
   CANCELLED: 'danger',
   REFUNDED: 'danger',
 };
+
+function getDeliveryMethodLabel(deliveryMethod?: string | null): string {
+  switch (deliveryMethod) {
+    case 'starken-domicilio':
+      return 'Envío a domicilio';
+    case 'starken-sucursal':
+      return 'Envío a sucursal Starken';
+    case 'pickup-santiago':
+      return 'Entrega presencial en Santiago';
+    case 'pickup-valparaiso':
+      return 'Entrega presencial en Valparaíso';
+    default:
+      return deliveryMethod || 'No informado';
+  }
+}
+
+function getShippingAddress(order: {
+  shippingStreet?: string | null;
+  shippingCity?: string | null;
+  shippingState?: string | null;
+  shippingZip?: string | null;
+  shippingCountry?: string | null;
+}): string {
+  return [
+    order.shippingStreet,
+    order.shippingCity,
+    order.shippingState,
+    order.shippingZip,
+    order.shippingCountry,
+  ].filter(Boolean).join(', ') || 'No informada';
+}
 
 export default function OrderDetailPage() {
   const { isAuthenticated } = useAdminAuth();
@@ -240,6 +271,34 @@ export default function OrderDetailPage() {
                 <div>
                   <p className="text-xs text-muted-foreground">Teléfono</p>
                   <p className="text-sm text-foreground">{order.customerPhone}</p>
+                </div>
+              )}
+            </div>
+          </Card>
+
+          {/* Shipping Info */}
+          <Card>
+            <div className="flex items-center gap-2 mb-4">
+              <MapPin className="w-5 h-5 text-muted-foreground" />
+              <h2 className="text-lg font-semibold text-foreground">Envío</h2>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Tipo de entrega</p>
+                <p className="text-sm text-foreground">{getDeliveryMethodLabel(order.deliveryMethod)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Dirección de envío</p>
+                <p className="text-sm text-foreground">{getShippingAddress(order)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">RUT del cliente</p>
+                <p className="text-sm text-foreground">{order.customerRut || 'No informado'}</p>
+              </div>
+              {order.notes && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Detalle de entrega</p>
+                  <p className="text-sm text-foreground whitespace-pre-line">{order.notes}</p>
                 </div>
               )}
             </div>

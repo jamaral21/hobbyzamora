@@ -34,28 +34,65 @@ function getShippingAddress(order: any): string {
   return parts.length > 0 ? parts.join(', ') : '—';
 }
 
+function formatDateInput(value: string): string {
+  const digits = value.replace(/\D/g, '').slice(0, 8);
+  const day = digits.slice(0, 2);
+  const month = digits.slice(2, 4);
+  const year = digits.slice(4, 8);
+
+  if (digits.length <= 2) return day;
+  if (digits.length <= 4) return `${day}-${month}`;
+  return `${day}-${month}-${year}`;
+}
+
+function parseDisplayDateToApi(value: string): string | undefined {
+  const match = value.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (!match) return undefined;
+
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+
+  if (month < 1 || month > 12 || day < 1 || day > 31) return undefined;
+
+  const date = new Date(year, month - 1, day);
+  const isValidDate =
+    date.getFullYear() === year &&
+    date.getMonth() === month - 1 &&
+    date.getDate() === day;
+
+  if (!isValidDate) return undefined;
+
+  const monthText = String(month).padStart(2, '0');
+  const dayText = String(day).padStart(2, '0');
+  return `${year}-${monthText}-${dayText}`;
+}
+
 export default function OrdersPage() {
   const { isAuthenticated } = useAdminAuth();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sourceFilter, setSourceFilter] = useState('all');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [dateFromInput, setDateFromInput] = useState('');
+  const [dateToInput, setDateToInput] = useState('');
   const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [eanFilter, setEanFilter] = useState('');
   const [skuFilter, setSkuFilter] = useState('');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 25;
 
-  const hasActiveExtraFilters = sourceFilter !== 'all' || dateFrom !== '' || dateTo !== '' || eanFilter !== '' || skuFilter !== '';
+  const hasActiveExtraFilters = sourceFilter !== 'all' || dateFromInput !== '' || dateToInput !== '' || eanFilter !== '' || skuFilter !== '';
+
+  const dateFrom = parseDisplayDateToApi(dateFromInput);
+  const dateTo = parseDisplayDateToApi(dateToInput);
 
   const resetPage = () => setPage(1);
 
   const clearExtraFilters = () => {
     setSourceFilter('all');
-    setDateFrom('');
-    setDateTo('');
+    setDateFromInput('');
+    setDateToInput('');
     setEanFilter('');
     setSkuFilter('');
     resetPage();
@@ -206,7 +243,7 @@ export default function OrdersPage() {
             Más Filtros
             {hasActiveExtraFilters && (
               <span className="ml-1.5 bg-white/20 text-xs rounded-full px-1.5 py-0.5 leading-none">
-                {[sourceFilter !== 'all', dateFrom !== '', dateTo !== '', eanFilter !== '', skuFilter !== ''].filter(Boolean).length}
+                {[sourceFilter !== 'all', dateFromInput !== '', dateToInput !== '', eanFilter !== '', skuFilter !== ''].filter(Boolean).length}
               </span>
             )}
           </Button>
@@ -230,20 +267,24 @@ export default function OrdersPage() {
             <div className="flex flex-col gap-1">
               <label className="text-xs text-muted-foreground">Desde</label>
               <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                style={{ colorScheme: 'dark' }}
+                type="text"
+                inputMode="numeric"
+                maxLength={10}
+                placeholder="DD-MM-YYYY"
+                value={dateFromInput}
+                onChange={(e) => { setDateFromInput(formatDateInput(e.target.value)); resetPage(); }}
                 className="px-3 py-1.5 rounded-lg border border-border bg-input-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
             </div>
             <div className="flex flex-col gap-1">
               <label className="text-xs text-muted-foreground">Hasta</label>
               <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                style={{ colorScheme: 'dark' }}
+                type="text"
+                inputMode="numeric"
+                maxLength={10}
+                placeholder="DD-MM-YYYY"
+                value={dateToInput}
+                onChange={(e) => { setDateToInput(formatDateInput(e.target.value)); resetPage(); }}
                 className="px-3 py-1.5 rounded-lg border border-border bg-input-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
             </div>

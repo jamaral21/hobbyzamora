@@ -7,8 +7,8 @@ import { Input } from '../../components/design-system/Input';
 import { Button } from '../../components/design-system/Button';
 import { Badge } from '../../components/design-system/Badge';
 import { useAuth } from '../../contexts/AuthContext';
-import { ordersAPI, wishlistAPI, presaleAPI, Order, WishlistItem, PresaleReservation } from '../../lib/api';
-import { User, Package, LogOut, Loader2, ChevronRight, Heart, X, ShoppingCart, Camera, Clock, CheckCircle, XCircle, AlertCircle, ShoppingBag, Sparkles } from 'lucide-react';
+import { ordersAPI, wishlistAPI, presaleAPI, addressesAPI, Order, WishlistItem, PresaleReservation, type Address } from '../../lib/api';
+import { User, Package, LogOut, Loader2, ChevronRight, Heart, X, ShoppingCart, Camera, Clock, CheckCircle, XCircle, AlertCircle, ShoppingBag, Sparkles, MapPin, Plus, Pencil, Trash2, Check } from 'lucide-react';
 import { useCartStore } from '../../lib/store';
 
 export default function AccountPage() {
@@ -29,10 +29,25 @@ function AccountContent() {
   const [loadingWishlist, setLoadingWishlist] = useState(true);
   const [presales, setPresales] = useState<PresaleReservation[]>([]);
   const [loadingPresales, setLoadingPresales] = useState(true);
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [loadingAddresses, setLoadingAddresses] = useState(true);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [isAddressFormOpen, setIsAddressFormOpen] = useState(false);
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+  const [savingAddress, setSavingAddress] = useState(false);
+  const [addressForm, setAddressForm] = useState({
+    name: '',
+    street: '',
+    city: '',
+    state: '',
+    zipCode: '',
+    country: 'Chile',
+    phone: '',
+    isDefault: false,
+  });
   const [form, setForm] = useState({ name: user?.name || '', phone: user?.phone || '' });
   const { addItem, items: cartItems } = useCartStore();
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -47,15 +62,18 @@ function AccountContent() {
       setLoadingOrders(false);
       setLoadingWishlist(false);
       setLoadingPresales(false);
+      setLoadingAddresses(false);
       return;
     }
 
     setLoadingOrders(true);
     setLoadingWishlist(true);
     setLoadingPresales(true);
+    setLoadingAddresses(true);
     setOrders([]);
     setWishlist([]);
     setPresales([]);
+    setAddresses([]);
 
     ordersAPI.getMyOrders()
       .then(setOrders)
@@ -71,6 +89,11 @@ function AccountContent() {
       .then((data) => setPresales(data.reservations))
       .catch(() => setPresales([]))
       .finally(() => setLoadingPresales(false));
+
+    addressesAPI.getAll()
+      .then(setAddresses)
+      .catch(() => setAddresses([]))
+      .finally(() => setLoadingAddresses(false));
   }, [user?.id]);
 
   const handleRemoveWishlist = async (productId: string) => {
@@ -109,6 +132,93 @@ function AccountContent() {
     } finally {
       setIsUploadingAvatar(false);
       e.target.value = '';
+    }
+  };
+
+  const refreshAddresses = async () => {
+    try {
+      const data = await addressesAPI.getAll();
+      setAddresses(data);
+    } catch {
+      // keep silent
+    }
+  };
+
+  const resetAddressForm = () => {
+    setEditingAddressId(null);
+    setAddressForm({
+      name: '',
+      street: '',
+      city: '',
+      state: '',
+      zipCode: '',
+      country: 'Chile',
+      phone: '',
+      isDefault: false,
+    });
+  };
+
+  const startCreateAddress = () => {
+    resetAddressForm();
+    setIsAddressFormOpen(true);
+  };
+
+  const startEditAddress = (address: Address) => {
+    setEditingAddressId(address.id);
+    setAddressForm({
+      name: address.name,
+      street: address.street,
+      city: address.city,
+      state: address.state,
+      zipCode: address.zipCode,
+      country: address.country,
+      phone: address.phone || '',
+      isDefault: address.isDefault,
+    });
+    setIsAddressFormOpen(true);
+  };
+
+  const handleSaveAddress = async () => {
+    setSavingAddress(true);
+    try {
+      const payload = {
+        ...addressForm,
+        phone: addressForm.phone || undefined,
+      };
+
+      if (editingAddressId) {
+        await addressesAPI.update(editingAddressId, payload);
+      } else {
+        await addressesAPI.create(payload);
+      }
+
+      setIsAddressFormOpen(false);
+      resetAddressForm();
+      await refreshAddresses();
+    } catch {
+      // keep form open on error
+    } finally {
+      setSavingAddress(false);
+    }
+  };
+
+  const handleDeleteAddress = async (id: string) => {
+    if (!window.confirm('¿Eliminar esta dirección guardada?')) return;
+
+    try {
+      await addressesAPI.delete(id);
+      await refreshAddresses();
+    } catch {
+      // keep silent
+    }
+  };
+
+  const handleSetDefaultAddress = async (address: Address) => {
+    try {
+      await addressesAPI.update(address.id, { isDefault: true });
+      await refreshAddresses();
+    } catch {
+      // keep silent
     }
   };
 
@@ -263,6 +373,115 @@ function AccountContent() {
                   </div>
                 </Link>
               ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Direcciones */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
+                <MapPin className="w-5 h-5 text-primary" />
+              </div>
+              <CardTitle>Direcciones Guardadas</CardTitle>
+            </div>
+            <Button variant="outline" size="sm" onClick={startCreateAddress}>
+              <Plus className="w-4 h-4 mr-2" />
+              Nueva dirección
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {loadingAddresses ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            </div>
+          ) : addresses.length === 0 ? (
+            <div className="text-center py-8">
+              <MapPin className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+              <p className="text-muted-foreground mb-4">No tienes direcciones guardadas</p>
+              <Button variant="outline" onClick={startCreateAddress}>Crear primera dirección</Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {addresses.map((address) => (
+                <div key={address.id} className="rounded-lg border border-border p-4 bg-secondary/20">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-medium text-foreground">{address.name}</p>
+                        {address.isDefault && <Badge variant="success" className="text-xs"><Check className="w-3 h-3 mr-1" />Predeterminada</Badge>}
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1">{address.street}</p>
+                      <p className="text-sm text-muted-foreground">{address.city}, {address.state} · {address.zipCode} · {address.country}</p>
+                      {address.phone && <p className="text-sm text-muted-foreground">Teléfono: {address.phone}</p>}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                      {!address.isDefault && (
+                        <Button variant="outline" size="sm" onClick={() => handleSetDefaultAddress(address)}>
+                          <Check className="w-4 h-4 mr-2" />
+                          Predeterminada
+                        </Button>
+                      )}
+                      <Button variant="outline" size="sm" onClick={() => startEditAddress(address)}>
+                        <Pencil className="w-4 h-4 mr-2" />
+                        Editar
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => handleDeleteAddress(address.id)}>
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Eliminar
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {isAddressFormOpen && (
+            <div className="rounded-lg border border-border p-4 space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-foreground">{editingAddressId ? 'Editar dirección' : 'Nueva dirección'}</h3>
+                <button
+                  type="button"
+                  onClick={() => { setIsAddressFormOpen(false); resetAddressForm(); }}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Cerrar
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input label="Nombre / Alias" value={addressForm.name} onChange={(e) => setAddressForm({ ...addressForm, name: e.target.value })} />
+                <Input label="Teléfono" value={addressForm.phone} onChange={(e) => setAddressForm({ ...addressForm, phone: e.target.value })} />
+              </div>
+              <Input label="Dirección" value={addressForm.street} onChange={(e) => setAddressForm({ ...addressForm, street: e.target.value })} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input label="Ciudad" value={addressForm.city} onChange={(e) => setAddressForm({ ...addressForm, city: e.target.value })} />
+                <Input label="Región" value={addressForm.state} onChange={(e) => setAddressForm({ ...addressForm, state: e.target.value })} />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Input label="Código Postal" value={addressForm.zipCode} onChange={(e) => setAddressForm({ ...addressForm, zipCode: e.target.value })} />
+                <Input label="País" value={addressForm.country} onChange={(e) => setAddressForm({ ...addressForm, country: e.target.value })} />
+              </div>
+              <label className="flex items-center gap-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  checked={addressForm.isDefault}
+                  onChange={(e) => setAddressForm({ ...addressForm, isDefault: e.target.checked })}
+                />
+                Usar como dirección predeterminada
+              </label>
+              <div className="flex gap-3">
+                <Button onClick={handleSaveAddress} disabled={savingAddress}>
+                  {savingAddress ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Guardando...</> : 'Guardar dirección'}
+                </Button>
+                <Button variant="outline" onClick={() => { setIsAddressFormOpen(false); resetAddressForm(); }}>
+                  Cancelar
+                </Button>
+              </div>
             </div>
           )}
         </CardContent>

@@ -170,6 +170,142 @@ router.get('/me', authenticate, async (req: AuthRequest, res) => {
   }
 });
 
+router.get('/me/addresses', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const addresses = await prisma.address.findMany({
+      where: { userId: req.user!.id },
+      orderBy: [
+        { isDefault: 'desc' },
+        { name: 'asc' },
+      ],
+    });
+
+    res.json(addresses);
+  } catch (error) {
+    console.error('Get addresses error:', error);
+    res.status(500).json({ error: 'Failed to get addresses' });
+  }
+});
+
+router.post('/me/addresses', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const { name, street, city, state, zipCode, country, phone, isDefault } = req.body;
+
+    if (!name || !street || !city || !state || !zipCode || !country) {
+      return res.status(400).json({ error: 'Missing address fields' });
+    }
+
+    const shouldBeDefault = Boolean(isDefault) || (await prisma.address.count({ where: { userId: req.user!.id } })) === 0;
+
+    const address = await prisma.$transaction(async (tx) => {
+      if (shouldBeDefault) {
+        await tx.address.updateMany({
+          where: { userId: req.user!.id },
+          data: { isDefault: false },
+        });
+      }
+
+      return tx.address.create({
+        data: {
+          userId: req.user!.id,
+          name,
+          street,
+          city,
+          state,
+          zipCode,
+          country,
+          phone: phone || null,
+          isDefault: shouldBeDefault,
+        },
+      });
+    });
+
+    res.status(201).json(address);
+  } catch (error) {
+    console.error('Create address error:', error);
+    res.status(500).json({ error: 'Failed to create address' });
+  }
+});
+
+router.patch('/me/addresses/:id', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const { name, street, city, state, zipCode, country, phone, isDefault } = req.body;
+
+    const existing = await prisma.address.findFirst({
+      where: { id: req.params.id as string, userId: req.user!.id },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Address not found' });
+    }
+
+    const shouldBeDefault = Boolean(isDefault);
+
+    const address = await prisma.$transaction(async (tx) => {
+      if (shouldBeDefault) {
+        await tx.address.updateMany({
+          where: { userId: req.user!.id, id: { not: existing.id } },
+          data: { isDefault: false },
+        });
+      }
+
+      return tx.address.update({
+        where: { id: existing.id },
+        data: {
+          ...(name !== undefined ? { name } : {}),
+          ...(street !== undefined ? { street } : {}),
+          ...(city !== undefined ? { city } : {}),
+          ...(state !== undefined ? { state } : {}),
+          ...(zipCode !== undefined ? { zipCode } : {}),
+          ...(country !== undefined ? { country } : {}),
+          ...(phone !== undefined ? { phone: phone || null } : {}),
+          ...(isDefault !== undefined ? { isDefault: shouldBeDefault } : {}),
+        },
+      });
+    });
+
+    res.json(address);
+  } catch (error) {
+    console.error('Update address error:', error);
+    res.status(500).json({ error: 'Failed to update address' });
+  }
+});
+
+router.delete('/me/addresses/:id', authenticate, async (req: AuthRequest, res) => {
+  try {
+    const existing = await prisma.address.findFirst({
+      where: { id: req.params.id as string, userId: req.user!.id },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Address not found' });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.address.delete({ where: { id: existing.id } });
+
+      if (existing.isDefault) {
+        const nextDefault = await tx.address.findFirst({
+          where: { userId: req.user!.id },
+          orderBy: { name: 'asc' },
+        });
+
+        if (nextDefault) {
+          await tx.address.update({
+            where: { id: nextDefault.id },
+            data: { isDefault: true },
+          });
+        }
+      }
+    });
+
+    res.json({ message: 'Address deleted' });
+  } catch (error) {
+    console.error('Delete address error:', error);
+    res.status(500).json({ error: 'Failed to delete address' });
+  }
+});
+
 // Update profile
 router.patch('/me', authenticate, async (req: AuthRequest, res) => {
   try {

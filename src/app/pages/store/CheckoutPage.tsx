@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router';
 import { StoreLayout } from '../../components/layout/StoreLayout';
 import { CheckoutSummary } from '../../components/store/CheckoutSummary';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/design-system/Card';
+import { Badge } from '../../components/design-system/Badge';
 import { Input } from '../../components/design-system/Input';
 import { Button } from '../../components/design-system/Button';
-import { CreditCard, Lock, Loader2, MapPin, ShieldCheck, ChevronRight, AlertCircle, Wallet, Landmark, Package, Truck, Users } from 'lucide-react';
+import { CreditCard, Lock, Loader2, MapPin, ShieldCheck, ChevronRight, AlertCircle, Wallet, Landmark, Package, Truck, Users, Check } from 'lucide-react';
 import { useCartStore } from '../../lib/store';
-import { ordersAPI, paymentsAPI } from '../../lib/api';
+import { ordersAPI, paymentsAPI, addressesAPI, type Address } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { RequireAuth } from '../../components/auth/RequireAuth';
 
@@ -81,9 +82,13 @@ function CheckoutForm() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethodType>('credit');
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('starken-domicilio');
   const [starkenCity, setStarkenCity] = useState('');
+  const [savedAddresses, setSavedAddresses] = useState<Address[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState('');
+  const [saveNewAddress, setSaveNewAddress] = useState(true);
+  const [loadingAddresses, setLoadingAddresses] = useState(false);
   const [shippingErrors, setShippingErrors] = useState<Record<string, string>>({});
   const [shippingData, setShippingData] = useState({
-    firstName: '', lastName: '', email: '', phone: '',
+    firstName: '', lastName: '', email: '', phone: '', rut: '',
     address: '', city: '', state: '', zipCode: '', country: 'Chile'
   });
   const navigate = useNavigate();
@@ -101,6 +106,38 @@ function CheckoutForm() {
       }));
     }
   }, [user]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setSavedAddresses([]);
+      setSelectedAddressId('');
+      return;
+    }
+
+    setLoadingAddresses(true);
+    addressesAPI.getAll()
+      .then((data) => {
+        setSavedAddresses(data);
+        setSelectedAddressId((current) => current || data.find((item) => item.isDefault)?.id || data[0]?.id || '');
+      })
+      .catch(() => setSavedAddresses([]))
+      .finally(() => setLoadingAddresses(false));
+  }, [user?.id]);
+
+  useEffect(() => {
+    const selected = savedAddresses.find((item) => item.id === selectedAddressId);
+    if (!selected) return;
+
+    setShippingData(prev => ({
+      ...prev,
+      address: selected.street,
+      city: selected.city,
+      state: selected.state,
+      zipCode: selected.zipCode,
+      country: selected.country,
+      phone: selected.phone || prev.phone,
+    }));
+  }, [savedAddresses, selectedAddressId]);
 
   // Redirect to cart if empty
   useEffect(() => {
@@ -127,10 +164,12 @@ function CheckoutForm() {
     if (!shippingData.email.trim()) errors.email = 'Email requerido';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(shippingData.email)) errors.email = 'Email inválido';
     if (!shippingData.phone.trim()) errors.phone = 'Teléfono requerido';
+    if (!shippingData.rut.trim()) errors.rut = 'RUT requerido';
 
     const selectedOption = DELIVERY_OPTIONS.find(o => o.id === deliveryMethod);
+    const selectedSavedAddress = savedAddresses.find((item) => item.id === selectedAddressId);
 
-    if (selectedOption?.needsAddress) {
+    if (selectedOption?.needsAddress && !selectedSavedAddress) {
       if (!shippingData.address.trim()) errors.address = 'Dirección requerida';
       if (!shippingData.city.trim()) errors.city = 'Ciudad requerida';
       if (!shippingData.state.trim()) errors.state = 'Región requerida';
@@ -157,6 +196,7 @@ function CheckoutForm() {
     setError(null);
 
     const selectedDelivery = DELIVERY_OPTIONS.find(o => o.id === deliveryMethod)!;
+    const selectedSavedAddress = savedAddresses.find((item) => item.id === selectedAddressId);
     const deliveryNotes = [
       `Método de entrega: ${selectedDelivery.label}`,
       deliveryMethod === 'starken-sucursal' ? `Ciudad sucursal: ${starkenCity}` : null,
@@ -165,6 +205,25 @@ function CheckoutForm() {
     ].filter(Boolean).join(' | ');
 
     try {
+      let addressId: string | undefined;
+
+      if (selectedSavedAddress) {
+        addressId = selectedSavedAddress.id;
+      } else if (saveNewAddress && selectedDelivery.needsAddress) {
+        const createdAddress = await addressesAPI.create({
+          name: `${shippingData.firstName} ${shippingData.lastName}`.trim() || 'Dirección principal',
+          street: shippingData.address,
+          city: shippingData.city,
+          state: shippingData.state,
+          zipCode: shippingData.zipCode,
+          country: shippingData.country,
+          phone: shippingData.phone || undefined,
+          isDefault: savedAddresses.length === 0,
+        });
+        setSavedAddresses((prev) => [createdAddress, ...prev.filter((item) => item.id !== createdAddress.id)]);
+        addressId = createdAddress.id;
+      }
+
       const order = await ordersAPI.create({
         items: cartItems.map(item => ({
           productId: item.productId,
@@ -174,7 +233,10 @@ function CheckoutForm() {
         customerName: `${shippingData.firstName} ${shippingData.lastName}`,
         customerEmail: shippingData.email,
         customerPhone: shippingData.phone,
-        ...(selectedDelivery.needsAddress ? {
+        ...(addressId ? { addressId } : {}),
+        customerRut: shippingData.rut,
+        deliveryMethod,
+        ...(!addressId && selectedDelivery.needsAddress ? {
           shippingAddress: {
             street: shippingData.address,
             city: shippingData.city,
@@ -299,6 +361,70 @@ function CheckoutForm() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  <div className="space-y-3 border-b border-border pb-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-medium text-foreground flex items-center gap-2">
+                        <MapPin className="w-4 h-4 text-primary" />
+                        Direcciones guardadas
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedAddressId('');
+                          setSaveNewAddress(true);
+                          setShippingData((prev) => ({
+                            ...prev,
+                            address: '',
+                            city: '',
+                            state: '',
+                            zipCode: '',
+                          }));
+                          setShippingErrors({});
+                        }}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        Usar una nueva
+                      </button>
+                    </div>
+
+                    {loadingAddresses ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Cargando direcciones...
+                      </div>
+                    ) : savedAddresses.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No tienes direcciones guardadas. Completa una nueva y podrás guardarla para futuras compras.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {savedAddresses.map((address) => {
+                          const isSelected = selectedAddressId === address.id;
+                          return (
+                            <button
+                              key={address.id}
+                              type="button"
+                              onClick={() => setSelectedAddressId(address.id)}
+                              className={`w-full text-left p-3 rounded-lg border transition-all ${
+                                isSelected ? 'border-primary bg-primary/5' : 'border-border bg-secondary hover:border-muted-foreground/40'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-sm font-medium text-foreground">{address.name}</span>
+                                    {address.isDefault && <Badge variant="success" className="text-[10px]">Predeterminada</Badge>}
+                                  </div>
+                                  <p className="text-xs text-muted-foreground mt-1">{address.street}</p>
+                                  <p className="text-xs text-muted-foreground">{address.city}, {address.state} · {address.zipCode}</p>
+                                </div>
+                                {isSelected && <Check className="w-4 h-4 text-primary shrink-0 mt-0.5" />}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
                   {/* Opciones de entrega */}
                   {DELIVERY_OPTIONS.map(option => (
                     <button
@@ -359,6 +485,22 @@ function CheckoutForm() {
                         <Input label="Teléfono *" type="tel" placeholder="+56 9 1234 5678" value={shippingData.phone} onChange={(e) => updateField('phone', e.target.value)} />
                         {shippingErrors.phone && <p className="text-xs text-red-400 mt-1">{shippingErrors.phone}</p>}
                       </div>
+                      <div>
+                        <Input label="RUT *" placeholder="12.345.678-9" value={shippingData.rut} onChange={(e) => updateField('rut', e.target.value)} />
+                        {shippingErrors.rut && <p className="text-xs text-red-400 mt-1">{shippingErrors.rut}</p>}
+                      </div>
+
+                      {!selectedAddressId && deliveryMethod === 'starken-domicilio' && (
+                        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            checked={saveNewAddress}
+                            onChange={(e) => setSaveNewAddress(e.target.checked)}
+                            className="rounded border-border"
+                          />
+                          Guardar esta dirección para futuras compras
+                        </label>
+                      )}
 
                       {/* Ciudad para Starken sucursal */}
                       {deliveryMethod === 'starken-sucursal' && (
@@ -370,7 +512,7 @@ function CheckoutForm() {
                       )}
 
                       {/* Dirección completa solo para Starken domicilio */}
-                      {deliveryMethod === 'starken-domicilio' && (
+                      {deliveryMethod === 'starken-domicilio' && !selectedAddressId && (
                         <>
                           <div>
                             <Input label="Dirección *" placeholder="Calle y número" value={shippingData.address} onChange={(e) => updateField('address', e.target.value)} />
@@ -654,6 +796,7 @@ function CheckoutForm() {
                             {shippingData.firstName} {shippingData.lastName}
                           </p>
                           <p className="text-xs text-muted-foreground">{shippingData.email} · {shippingData.phone}</p>
+                          <p className="text-xs text-muted-foreground">RUT: {shippingData.rut}</p>
                         </>
                       );
                     })()}

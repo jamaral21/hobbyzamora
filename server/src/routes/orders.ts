@@ -244,6 +244,9 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
       customerName,
       customerEmail,
       customerPhone,
+      addressId,
+      customerRut,
+      deliveryMethod,
       shipping,
       shippingAddress,
       paymentMethod,
@@ -260,6 +263,16 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
           select: { id: true, presaleBanned: true },
         })
       : null;
+
+    const savedAddress = addressId
+      ? await prisma.address.findFirst({
+          where: { id: addressId, userId: req.user?.id || '' },
+        })
+      : null;
+
+    if (addressId && !savedAddress) {
+      return res.status(404).json({ error: 'Saved address not found' });
+    }
 
     // Validate and get product details
     const orderItems: any[] = [];
@@ -362,11 +375,14 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
         customerName,
         customerEmail,
         customerPhone,
-        shippingStreet: shippingAddress?.street,
-        shippingCity: shippingAddress?.city,
-        shippingState: shippingAddress?.state,
-        shippingZip: shippingAddress?.zipCode,
-        shippingCountry: shippingAddress?.country,
+        addressId: savedAddress?.id || null,
+        customerRut: customerRut || null,
+        deliveryMethod: deliveryMethod || null,
+        shippingStreet: savedAddress?.street || shippingAddress?.street,
+        shippingCity: savedAddress?.city || shippingAddress?.city,
+        shippingState: savedAddress?.state || shippingAddress?.state,
+        shippingZip: savedAddress?.zipCode || shippingAddress?.zipCode,
+        shippingCountry: savedAddress?.country || shippingAddress?.country,
         subtotal,
         tax,
         shipping: shippingCost,

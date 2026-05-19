@@ -52,11 +52,15 @@ export interface Order {
   customerName: string;
   customerEmail: string;
   customerPhone?: string;
+  addressId?: string | null;
+  customerRut?: string | null;
+  deliveryMethod?: string | null;
   shippingStreet?: string | null;
   shippingCity?: string | null;
   shippingState?: string | null;
   shippingZip?: string | null;
   shippingCountry?: string | null;
+  notes?: string | null;
   createdAt: string;
   subtotal: number;
   tax: number;
@@ -216,6 +220,18 @@ export interface User {
   presaleBanned?: boolean;
 }
 
+export interface Address {
+  id: string;
+  name: string;
+  street: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  country: string;
+  phone?: string | null;
+  isDefault: boolean;
+}
+
 // API Error class
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -330,7 +346,27 @@ export const authAPI = {
       method: 'POST',
       body: JSON.stringify({ token, newPassword }),
     }),
+
+  addresses: {
+    getAll: () => fetchAPI<Address[]>('/auth/me/addresses', undefined, 'customer'),
+    create: (data: Omit<Address, 'id'>) =>
+      fetchAPI<Address>('/auth/me/addresses', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }, 'customer'),
+    update: (id: string, data: Partial<Omit<Address, 'id'>>) =>
+      fetchAPI<Address>(`/auth/me/addresses/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }, 'customer'),
+    delete: (id: string) =>
+      fetchAPI<{ message: string }>(`/auth/me/addresses/${id}`, {
+        method: 'DELETE',
+      }, 'customer'),
+  },
 };
+
+export const addressesAPI = authAPI.addresses;
 
 // Products API
 export const productsAPI = {
@@ -511,6 +547,9 @@ export const ordersAPI = {
     customerName: string;
     customerEmail: string;
     customerPhone?: string;
+    addressId?: string;
+    customerRut?: string;
+    deliveryMethod?: string;
     shipping?: { cost: number };
     shippingAddress?: {
       street: string;
