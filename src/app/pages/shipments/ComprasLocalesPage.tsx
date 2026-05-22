@@ -8,6 +8,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '.
 import { PriceDisplay } from '../../components/shipments/PriceDisplay';
 import { StatusBadge } from '../../components/shipments/StatusBadge';
 import { EmptyState } from '../../components/design-system/EmptyState';
+import { getAnyAuthToken } from '../../lib/authStorage';
 
 interface FormData {
   fecha: string;
@@ -53,7 +54,7 @@ const emptyForm: FormData = {
 };
 
 async function shipmentsFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const token = localStorage.getItem('adminToken') || localStorage.getItem('token');
+  const token = getAnyAuthToken();
   const response = await fetch(`/api/shipments/compras-chile${endpoint}`, {
     ...options,
     headers: {

@@ -6,6 +6,7 @@ import { PriceDisplay } from '../../components/shipments/PriceDisplay';
 import { KPICard } from '../../components/shipments/KPICard';
 import { EmptyState } from '../../components/design-system/EmptyState';
 import { calcMargin, marginColor } from '../../data/shipmentsDomain';
+import { getAnyAuthToken } from '../../lib/authStorage';
 
 type ChileStockRow = {
   id: string;
@@ -30,7 +31,7 @@ type BodegaChileResponse = {
 };
 
 async function shipmentsFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const token = localStorage.getItem('adminToken') || localStorage.getItem('token');
+  const token = getAnyAuthToken();
   const response = await fetch(`/api/shipments/bodega-chile${endpoint}`, {
     ...options,
     headers: {

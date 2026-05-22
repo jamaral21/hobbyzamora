@@ -2,6 +2,13 @@
 // Replaces mock data with real API calls
 
 const API_BASE = '/api';
+import {
+  clearCustomerToken,
+  getAdminToken,
+  getAnyAuthToken,
+  getCustomerToken,
+  setCustomerToken,
+} from './authStorage';
 
 // Types matching the database schema
 export interface Product {
@@ -208,8 +215,8 @@ export class ApiError extends Error {
 type AuthMode = 'auto' | 'customer' | 'admin' | 'public';
 
 function getAuthToken(mode: AuthMode = 'auto') {
-  const adminToken = localStorage.getItem('adminToken');
-  const customerToken = localStorage.getItem('token');
+  const adminToken = getAdminToken();
+  const customerToken = getCustomerToken();
 
   if (mode === 'public') return null;
   if (mode === 'customer') return customerToken;
@@ -245,7 +252,7 @@ export const authAPI = {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
-    localStorage.setItem('token', data.token);
+    setCustomerToken(data.token);
     return data;
   },
 
@@ -254,12 +261,12 @@ export const authAPI = {
       method: 'POST',
       body: JSON.stringify({ email, password, name, phone }),
     });
-    localStorage.setItem('token', data.token);
+    setCustomerToken(data.token);
     return data;
   },
 
   logout: () => {
-    localStorage.removeItem('token');
+    clearCustomerToken();
   },
 
   getMe: () => fetchAPI<User>('/auth/me', undefined, 'customer'),
@@ -296,7 +303,7 @@ export const authAPI = {
       method: 'POST',
       body: JSON.stringify({ credential }),
     });
-    localStorage.setItem('token', data.token);
+    setCustomerToken(data.token);
     return data;
   },
 
@@ -375,7 +382,7 @@ export const productsAPI = {
     }, 'admin'),
 
   uploadImages: async (file: File, onProgress?: (pct: number) => void) => {
-    const token = localStorage.getItem('adminToken') || localStorage.getItem('token');
+    const token = getAnyAuthToken();
     const CHUNK_SIZE = 1 * 1024 * 1024; // 1MB per chunk (safe for most proxy limits)
     const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
 
@@ -419,7 +426,7 @@ export const productsAPI = {
   },
 
   uploadImage: async (file: File) => {
-    const token = localStorage.getItem('adminToken') || localStorage.getItem('token');
+    const token = getAnyAuthToken();
     const formData = new FormData();
     formData.append('image', file);
 

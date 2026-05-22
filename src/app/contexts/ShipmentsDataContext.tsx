@@ -6,6 +6,7 @@ import {
   calcDisponibleBySku as calcDisponibleBySkuHelper,
   nextSku, nextBoletaId,
 } from '../data/shipmentsDomain';
+import { getAdminToken, getCustomerToken } from '../lib/authStorage';
 
 // Input types for mutations
 interface NewBoletaInput {
@@ -248,8 +249,8 @@ const DEFAULT_ERP_CONFIG: ERPConfig = {
 };
 
 async function shipmentsFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const adminToken = localStorage.getItem('adminToken');
-  const customerToken = localStorage.getItem('token');
+  const adminToken = getAdminToken();
+  const customerToken = getCustomerToken();
   const candidates = [adminToken, customerToken].filter((value, idx, arr): value is string => {
     return Boolean(value) && arr.indexOf(value) === idx;
   });
@@ -305,6 +306,24 @@ function toNumber(value: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+function extractArray<T>(value: unknown): T[] {
+  if (Array.isArray(value)) {
+    return value as T[];
+  }
+
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if (Array.isArray(record.items)) {
+      return record.items as T[];
+    }
+    if (Array.isArray(record.data)) {
+      return record.data as T[];
+    }
+  }
+
+  return [];
+}
+
 export function ShipmentsDataProvider({ children }: { children: React.ReactNode }) {
   const [compras, setCompras] = useState<PurchaseRecord[]>([]);
   const [boletas, setBoletas] = useState<Invoice[]>([]);
@@ -357,7 +376,7 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
         shipmentsFetch<{ data: ApiGavChile[] }>('/gav-chile'),
       ]);
 
-      const apiCompras = comprasResp.status === 'fulfilled' ? (comprasResp.value.data || []) : [];
+      const apiCompras = comprasResp.status === 'fulfilled' ? extractArray<ApiCompra>(comprasResp.value.data) : [];
       const uiToApi: Record<number, string> = {};
       const apiToUi: Record<string, number> = {};
       const nextCompras: PurchaseRecord[] = apiCompras.map((item, index) => {
@@ -384,8 +403,10 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
       setPurchaseUiToApiId(uiToApi);
       setCompras(nextCompras);
 
-      const boletasList = boletasResp.status === 'fulfilled' ? (boletasResp.value.data || []) : [];
-      const boletaIds = boletasList.map((b) => b.invoiceId || b.id).filter(Boolean) as string[];
+      const boletasList = boletasResp.status === 'fulfilled' ? extractArray<ApiBoleta>(boletasResp.value.data) : [];
+      const boletaIds = boletasList
+        .map((b) => b.invoiceId || b.id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0);
       const details = await Promise.all(
         boletaIds.map((id) =>
           shipmentsFetch<ApiBoletaDetail>(`/boletas/${encodeURIComponent(id)}`).catch(() => null)
@@ -430,7 +451,7 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
       setBoletas(nextBoletas);
       setBoletaItems(itemsByInvoice);
 
-      const apiCajas = cajasResp.status === 'fulfilled' ? (cajasResp.value.data || []) : [];
+      const apiCajas = cajasResp.status === 'fulfilled' ? extractArray<ApiCaja>(cajasResp.value.data) : [];
       const nextCajas: Box[] = apiCajas.map((item) => {
         const boxProducts = (item.productos || []).map((p) => ({
           _compraId: apiToUi[p.compraId] ?? 0,
@@ -467,7 +488,7 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
       });
       setCajas(nextCajas);
 
-      const apiPedidosWeb = comprasWebResp.status === 'fulfilled' ? (comprasWebResp.value.data || []) : [];
+      const apiPedidosWeb = comprasWebResp.status === 'fulfilled' ? extractArray<ApiWebOrder>(comprasWebResp.value.data) : [];
       const nextPedidosWeb: WebOrder[] = apiPedidosWeb.map((order) => ({
         id: order.orderId,
         fecha: toDateOnly(order.fecha),
@@ -488,7 +509,9 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
       }));
       setPedidosWeb(nextPedidosWeb);
 
-      const stockRows = bodegaChileResp.status === 'fulfilled' ? (bodegaChileResp.value.data.items || []) : [];
+      const stockRows = bodegaChileResp.status === 'fulfilled'
+        ? extractArray<ApiStockChile>(bodegaChileResp.value.data?.items)
+        : [];
       const nextStockChile: ChileStockEntry[] = stockRows.map((row) => ({
         id: row.id,
         _sku: row.sku,
@@ -501,7 +524,7 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
       }));
       setStockChile(nextStockChile);
 
-      const apiVentas = ventasResp.status === 'fulfilled' ? (ventasResp.value.data || []) : [];
+      const apiVentas = ventasResp.status === 'fulfilled' ? extractArray<ApiVentas>(ventasResp.value.data) : [];
       const nextVentas: SaleRecord[] = apiVentas.map((sale) => ({
         id: sale.id,
         fecha: toDateOnly(sale.fecha),
@@ -515,18 +538,20 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
       }));
       setVentas(nextVentas);
 
-      const apiComprasChile = comprasChileResp.status === 'fulfilled' ? (comprasChileResp.value.data || []) : [];
+      const apiComprasChile = comprasChileResp.status === 'fulfilled'
+        ? extractArray<ApiComprasChile>(comprasChileResp.value.data)
+        : [];
       setComprasChile(apiComprasChile.map((item) => ({
         ...item,
         fecha: toDateOnly(item.fecha),
       })));
 
-      const apiGavChile = gavChileResp.status === 'fulfilled' ? (gavChileResp.value.data || []) : [];
+      const apiGavChile = gavChileResp.status === 'fulfilled' ? extractArray<ApiGavChile>(gavChileResp.value.data) : [];
       setGavChile(apiGavChile.map((item) => ({
         ...item,
       })));
     } catch {
-      // Fallback: mantener estado mock/local si la API no responde.
+      // Si ocurre un error inesperado de parseo, mantenemos el estado actual.
     }
   }, [applyConfigResponse]);
 

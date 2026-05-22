@@ -8,6 +8,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '.
 import { Badge } from '../../components/design-system/Badge';
 import { PriceDisplay } from '../../components/shipments/PriceDisplay';
 import { EmptyState } from '../../components/design-system/EmptyState';
+import { getAnyAuthToken } from '../../lib/authStorage';
 
 const CANALES = ['Instagram', 'TikTok', 'Mercado Libre', 'Web', 'Local'] as const;
 type SalesChannel = (typeof CANALES)[number];
@@ -63,7 +64,7 @@ const emptyForm: FormData = {
 };
 
 async function shipmentsFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const token = localStorage.getItem('adminToken') || localStorage.getItem('token');
+  const token = getAnyAuthToken();
   const response = await fetch(`/api/shipments${endpoint}`, {
     ...options,
     headers: {

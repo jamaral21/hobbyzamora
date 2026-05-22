@@ -6,6 +6,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '.
 import { PriceDisplay } from '../../components/shipments/PriceDisplay';
 import { StatusBadge } from '../../components/shipments/StatusBadge';
 import { EmptyState } from '../../components/design-system/EmptyState';
+import { getAnyAuthToken } from '../../lib/authStorage';
 
 type GAVEntry = {
   id: number;
@@ -27,7 +28,7 @@ type GavConfirmResponse = {
 };
 
 async function shipmentsFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const token = localStorage.getItem('adminToken') || localStorage.getItem('token');
+  const token = getAnyAuthToken();
   const response = await fetch(`/api/shipments/gav-chile${endpoint}`, {
     ...options,
     headers: {

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { authAPI, User } from '../lib/api';
+import { clearCustomerToken, getCustomerToken } from '../lib/authStorage';
 
 interface AuthContextType {
   user: User | null;
@@ -21,12 +22,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Check for existing session on mount
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = getCustomerToken();
     if (token) {
       authAPI.getMe()
         .then(setUser)
         .catch(() => {
-          localStorage.removeItem('token');
+          clearCustomerToken();
         })
         .finally(() => setIsLoading(false));
     } else {
