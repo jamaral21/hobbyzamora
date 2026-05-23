@@ -16,7 +16,10 @@
     "db:push": "prisma db push --schema=server/prisma/schema.prisma",
     "db:seed": "tsx server/prisma/seed.ts",
     "db:seed:shipments": "tsx server/prisma/seed-shipments.ts",
-    "db:studio": "prisma studio --schema=server/prisma/schema.prisma"
+    "db:studio": "prisma studio --schema=server/prisma/schema.prisma",
+    "shipments:backup": "bash scripts/shipments/backup-shipments-state.sh",
+    "shipments:changes:today": "bash scripts/shipments/export-shipments-changes-since.sh server/prisma/dev.db $(date +%Y-%m-%d)",
+    "shipments:changes:since": "bash scripts/shipments/export-shipments-changes-since.sh"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

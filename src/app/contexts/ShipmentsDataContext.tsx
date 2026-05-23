@@ -3,6 +3,7 @@ import {
   PurchaseRecord, Invoice, InvoiceItem, Box, ChileStockEntry,
   WebOrder, LocalPurchase, SaleRecord, GAVEntry, ERPConfig,
   InternacionData,
+  CustomsDocument,
   calcDisponibleBySku as calcDisponibleBySkuHelper,
   nextSku, nextBoletaId,
 } from '../data/shipmentsDomain';
@@ -53,6 +54,31 @@ interface NewLocalPurchaseInput {
   estado: 'pagado' | 'pendiente';
 }
 
+interface PaymentAccountSplit {
+  cuenta: string;
+  montoCLP: number;
+}
+
+interface PaymentConfirmationPayload {
+  cuenta?: string;
+  fecha?: string;
+  montoCLP?: number;
+  cuentas?: PaymentAccountSplit[];
+}
+
+interface GavGenerationPeriod {
+  year: number;
+  month: number;
+  tc: number;
+}
+
+interface NewCustomsDocumentInput {
+  nombre: string;
+  tipo: CustomsDocument['tipo'];
+  fileName: string;
+  file: File;
+}
+
 interface ShipmentsDataContextType {
   compras: PurchaseRecord[];
   boletas: Invoice[];
@@ -70,7 +96,7 @@ interface ShipmentsDataContextType {
   addCompra: (data: Omit<PurchaseRecord, 'id' | 'sku'>) => PurchaseRecord;
   updateCompra: (id: number, data: Partial<PurchaseRecord>) => void;
   addBoleta: (data: NewBoletaInput) => Invoice;
-  confirmPayment: (boletaId: string) => void;
+  confirmPayment: (boletaId: string, payload?: PaymentConfirmationPayload) => void;
   addCaja: (data: Omit<Box, 'internacion'>) => Box;
   updateCaja: (id: string, data: Partial<Box>) => void;
   deleteCaja: (id: string) => void;
@@ -81,8 +107,13 @@ interface ShipmentsDataContextType {
   confirmGAV: (id: number) => void;
   updateConfig: (data: Partial<ERPConfig>) => Promise<{ ok: true } | { ok: false; error: string }>;
   addPedidoWeb: (data: NewWebOrderInput) => WebOrder;
+  updatePedidoWeb: (id: string, data: Partial<WebOrder>) => void;
+  addDocumentoAduaneroCaja: (cajaId: string, data: NewCustomsDocumentInput) => Promise<void>;
+  removeDocumentoAduaneroCaja: (cajaId: string, fileName: string) => Promise<void>;
+  addDocumentoAduaneroWebOrder: (orderId: string, data: NewCustomsDocumentInput) => Promise<void>;
+  removeDocumentoAduaneroWebOrder: (orderId: string, fileName: string) => Promise<void>;
   addCompraChile: (data: NewLocalPurchaseInput) => LocalPurchase;
-  generateGAVBoleta: () => Invoice;
+  generateGAVBoleta: (period?: GavGenerationPeriod) => Promise<Invoice>;
 }
 
 const ShipmentsDataContext = createContext<ShipmentsDataContextType | null>(null);
@@ -267,7 +298,12 @@ async function shipmentsFetch<T>(endpoint: string, options?: RequestInit): Promi
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({ error: 'Request failed' }));
-      const message = data.error || response.statusText;
+      const message =
+        typeof data?.error === 'string'
+          ? data.error
+          : typeof data?.error?.message === 'string'
+            ? data.error.message
+            : response.statusText;
       throw new Error(`${response.status}: ${message}`);
     }
 
@@ -295,9 +331,19 @@ async function shipmentsFetch<T>(endpoint: string, options?: RequestInit): Promi
   throw (lastError instanceof Error ? lastError : new Error('Request failed'));
 }
 
-function toDateOnly(value: string): string {
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
+function toDateOnly(value: unknown): string {
+  if (value === null || value === undefined) return '';
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? String(value) : d.toISOString().split('T')[0];
+  }
+
+  const raw = String(value);
+  const numeric = raw.match(/^\d+$/) ? Number(raw) : NaN;
+  const parsedValue = Number.isFinite(numeric) ? numeric : raw;
+  const d = new Date(parsedValue as string | number);
+  if (Number.isNaN(d.getTime())) return raw;
   return d.toISOString().split('T')[0];
 }
 
@@ -322,6 +368,41 @@ function extractArray<T>(value: unknown): T[] {
   }
 
   return [];
+}
+
+async function uploadCustomsDocument(file: File): Promise<string> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const adminToken = getAdminToken();
+  const customerToken = getCustomerToken();
+  const token = adminToken || customerToken;
+
+  const response = await fetch('/api/upload', {
+    method: 'POST',
+    body: formData,
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({ error: 'No se pudo subir el archivo' }));
+    const message =
+      typeof data?.error === 'string'
+        ? data.error
+        : typeof data?.error?.message === 'string'
+          ? data.error.message
+          : response.statusText;
+    throw new Error(message);
+  }
+
+  const data = (await response.json()) as { url?: string };
+  if (!data.url) {
+    throw new Error('Respuesta inválida del servidor al subir documento');
+  }
+
+  return data.url;
 }
 
 export function ShipmentsDataProvider({ children }: { children: React.ReactNode }) {
@@ -486,7 +567,13 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
           productos: boxProducts,
         };
       });
-      setCajas(nextCajas);
+      setCajas((prev) => {
+        const docsByBoxId = new Map(prev.map((box) => [box.id, box.documentosAduaneros || []]));
+        return nextCajas.map((box) => ({
+          ...box,
+          documentosAduaneros: docsByBoxId.get(box.id) || [],
+        }));
+      });
 
       const apiPedidosWeb = comprasWebResp.status === 'fulfilled' ? extractArray<ApiWebOrder>(comprasWebResp.value.data) : [];
       const nextPedidosWeb: WebOrder[] = apiPedidosWeb.map((order) => ({
@@ -507,7 +594,13 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
           costoUnit: toNumber(p.costoUnit),
         })),
       }));
-      setPedidosWeb(nextPedidosWeb);
+      setPedidosWeb((prev) => {
+        const docsByOrderId = new Map(prev.map((order) => [order.id, order.documentosAduaneros || []]));
+        return nextPedidosWeb.map((order) => ({
+          ...order,
+          documentosAduaneros: docsByOrderId.get(order.id) || [],
+        }));
+      });
 
       const stockRows = bodegaChileResp.status === 'fulfilled'
         ? extractArray<ApiStockChile>(bodegaChileResp.value.data?.items)
@@ -641,7 +734,7 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
     return invoice;
   }, [boletas, purchaseUiToApiId, syncFromApi]);
 
-  const confirmPayment = useCallback((boletaId: string) => {
+  const confirmPayment = useCallback((boletaId: string, payload?: PaymentConfirmationPayload) => {
     setBoletas(prev => prev.map(b => b.id === boletaId ? { ...b, estado: 'pagado' as const } : b));
     // Also update related purchases
     const items = boletaItems[boletaId];
@@ -653,7 +746,7 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
     }
     void shipmentsFetch(`/pagos/${encodeURIComponent(boletaId)}/confirmar`, {
       method: 'POST',
-      body: JSON.stringify({}),
+      body: JSON.stringify(payload || {}),
     }).then(() => syncFromApi()).catch(() => undefined);
   }, [boletaItems, syncFromApi]);
 
@@ -695,6 +788,7 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
     void shipmentsFetch(`/cajas/${encodeURIComponent(id)}`, {
       method: 'PUT',
       body: JSON.stringify({
+        estado: data.estado,
         fecha: data.fecha,
         fleJpy: data.flete_jpy,
         moHoras: data.mo_horas,
@@ -702,7 +796,7 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
         matJpy: data.mat_jpy,
         tcEnvio: data.tc_envio,
       }),
-    }).then(() => syncFromApi()).catch(() => undefined);
+    }).then(() => syncFromApi()).catch(() => syncFromApi());
   }, [syncFromApi]);
 
   const deleteCaja = useCallback((id: string) => {
@@ -856,6 +950,66 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
     return order;
   }, [pedidosWeb, syncFromApi]);
 
+  const updatePedidoWeb = useCallback((id: string, data: Partial<WebOrder>) => {
+    setPedidosWeb((prev) => prev.map((order) => (order.id === id ? { ...order, ...data } : order)));
+  }, []);
+
+  const addDocumentoAduaneroCaja = useCallback(async (cajaId: string, data: NewCustomsDocumentInput) => {
+    const fileUrl = await uploadCustomsDocument(data.file);
+    const doc: CustomsDocument = {
+      nombre: data.nombre,
+      tipo: data.tipo,
+      fileName: data.fileName,
+      fileUrl,
+    };
+
+    setCajas((prev) => prev.map((box) => {
+      if (box.id !== cajaId) return box;
+      return {
+        ...box,
+        documentosAduaneros: [...(box.documentosAduaneros || []), doc],
+      };
+    }));
+  }, []);
+
+  const removeDocumentoAduaneroCaja = useCallback(async (cajaId: string, fileName: string) => {
+    setCajas((prev) => prev.map((box) => {
+      if (box.id !== cajaId) return box;
+      return {
+        ...box,
+        documentosAduaneros: (box.documentosAduaneros || []).filter((doc) => doc.fileName !== fileName),
+      };
+    }));
+  }, []);
+
+  const addDocumentoAduaneroWebOrder = useCallback(async (orderId: string, data: NewCustomsDocumentInput) => {
+    const fileUrl = await uploadCustomsDocument(data.file);
+    const doc: CustomsDocument = {
+      nombre: data.nombre,
+      tipo: data.tipo,
+      fileName: data.fileName,
+      fileUrl,
+    };
+
+    setPedidosWeb((prev) => prev.map((order) => {
+      if (order.id !== orderId) return order;
+      return {
+        ...order,
+        documentosAduaneros: [...(order.documentosAduaneros || []), doc],
+      };
+    }));
+  }, []);
+
+  const removeDocumentoAduaneroWebOrder = useCallback(async (orderId: string, fileName: string) => {
+    setPedidosWeb((prev) => prev.map((order) => {
+      if (order.id !== orderId) return order;
+      return {
+        ...order,
+        documentosAduaneros: (order.documentosAduaneros || []).filter((doc) => doc.fileName !== fileName),
+      };
+    }));
+  }, []);
+
   const addCompraChile = useCallback((data: NewLocalPurchaseInput): LocalPurchase => {
     const id = `CC-${String(comprasChile.length + 1).padStart(3, '0')}`;
     const purchase: LocalPurchase = { ...data, id };
@@ -869,16 +1023,29 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
     return purchase;
   }, [comprasChile, syncFromApi]);
 
-  const generateGAVBoleta = useCallback((): Invoice => {
-    const id = nextBoletaId(boletas, true);
+  const generateGAVBoleta = useCallback(async (period?: GavGenerationPeriod): Promise<Invoice> => {
+    const targetDate = period
+      ? new Date(period.year, period.month - 1, 1)
+      : new Date();
+    const invoiceYear = targetDate.getFullYear();
+    const idPrefix = `BOL-${invoiceYear}-GAV-`;
+    const sameYearIds = boletas
+      .filter((b) => b.id.startsWith(idPrefix))
+      .map((b) => {
+        const suffix = b.id.slice(idPrefix.length);
+        return parseInt(suffix, 10) || 0;
+      });
+    const id = `${idPrefix}${String((sameYearIds.length > 0 ? Math.max(...sameYearIds) : 0) + 1).padStart(3, '0')}`;
     const subtotalJPY = config.arrBodegaJP + config.appBeyblade;
     const totalJPY = Math.round(subtotalJPY * (1 + config.comisionPct / 100));
-    const tc = compras.length > 0 ? compras[compras.length - 1].tc || 6.0 : 6.0;
+    const tc = period?.tc ?? (compras.length > 0 ? compras[compras.length - 1].tc || 6.0 : 6.0);
     const totalCLP = Math.round(totalJPY / tc);
+    const monthLabel = targetDate.toLocaleString('es-CL', { month: 'long', year: 'numeric' });
+    const targetDateOnly = targetDate.toISOString().split('T')[0];
     const invoice: Invoice = {
       id,
-      fecha: new Date().toISOString().split('T')[0],
-      productos: `GAV ${new Date().toLocaleString('es-CL', { month: 'long', year: 'numeric' })}`,
+      fecha: targetDateOnly,
+      productos: `GAV ${monthLabel}`,
       subtotalJPY,
       comision: config.comisionPct,
       totalJPY,
@@ -886,19 +1053,15 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
       totalCLP,
       estado: 'sin_pagar',
     };
-    setBoletas(prev => [...prev, invoice]);
-    setBoletaItems(prev => ({
-      ...prev,
-      [id]: [
-        { fecha: invoice.fecha, tipo: 'Arriendo/App', nombre: 'Arriendo Bodega Japón', ean: '', precioU: config.arrBodegaJP, cant: 1, comPct: config.comisionPct, tc },
-        { fecha: invoice.fecha, tipo: 'Arriendo/App', nombre: 'App Beyblade', ean: '', precioU: config.appBeyblade, cant: 1, comPct: config.comisionPct, tc },
-      ],
-    }));
-
-    void shipmentsFetch('/gav-japon/generar', {
+    await shipmentsFetch('/gav-japon/generar', {
       method: 'POST',
-      body: JSON.stringify({ tc }),
-    }).then(() => syncFromApi()).catch(() => undefined);
+      body: JSON.stringify({
+        tc,
+        ...(period ? { year: period.year, month: period.month } : {}),
+      }),
+    });
+
+    await syncFromApi();
 
     return invoice;
   }, [boletas, config, compras, syncFromApi]);
@@ -912,7 +1075,10 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
         addCompra, updateCompra, addBoleta, confirmPayment,
         addCaja, updateCaja, deleteCaja, saveInternacion,
         confirmCosteo, updatePrecioVenta, addVenta, confirmGAV,
-        updateConfig, addPedidoWeb, addCompraChile, generateGAVBoleta,
+        updateConfig, addPedidoWeb, updatePedidoWeb,
+        addDocumentoAduaneroCaja, removeDocumentoAduaneroCaja,
+        addDocumentoAduaneroWebOrder, removeDocumentoAduaneroWebOrder,
+        addCompraChile, generateGAVBoleta,
       }}
     >
       {children}

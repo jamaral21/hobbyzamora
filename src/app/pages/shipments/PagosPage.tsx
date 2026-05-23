@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { CreditCard, CheckCircle, Trash2, AlertTriangle } from 'lucide-react';
 import { useShipmentsData } from '../../contexts/ShipmentsDataContext';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/design-system/Card';
@@ -8,10 +8,15 @@ import { PriceDisplay } from '../../components/shipments/PriceDisplay';
 import { StatusBadge } from '../../components/shipments/StatusBadge';
 import { EmptyState } from '../../components/design-system/EmptyState';
 
+interface PaymentAllocation {
+  cuentaIndex: string;
+  monto: string;
+}
+
 export default function PagosPage() {
   const { boletas, config, confirmPayment, deleteBoleta } = useShipmentsData();
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [cuenta, setCuenta] = useState('');
+  const [allocations, setAllocations] = useState<PaymentAllocation[]>([{ cuentaIndex: '', monto: '' }]);
   const [fechaTransf, setFechaTransf] = useState(new Date().toISOString().split('T')[0]);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -26,12 +31,78 @@ export default function PagosPage() {
     [pendientes, selectedId],
   );
 
+  const allocationSummary = useMemo(() => {
+    if (!selected) {
+      return {
+        totalAssigned: 0,
+        remaining: 0,
+        isValid: false,
+        normalized: [] as Array<{ cuenta: string; montoCLP: number }>,
+      };
+    }
+
+    const normalized = allocations
+      .map((entry) => {
+        const idx = Number(entry.cuentaIndex);
+        const account = Number.isInteger(idx) ? config.cuentas[idx] : undefined;
+        const amount = Number(entry.monto);
+
+        if (!account || !Number.isFinite(amount) || amount <= 0) {
+          return null;
+        }
+
+        return {
+          cuenta: `${account.titular} — ${account.banco} ${account.numero}`,
+          montoCLP: Math.round(amount),
+        };
+      })
+      .filter((entry): entry is { cuenta: string; montoCLP: number } => entry !== null);
+
+    const totalAssigned = normalized.reduce((sum, item) => sum + item.montoCLP, 0);
+    const remaining = selected.totalCLP - totalAssigned;
+    const isValid = normalized.length > 0 && Math.abs(remaining) < 1;
+
+    return {
+      totalAssigned,
+      remaining,
+      isValid,
+      normalized,
+    };
+  }, [allocations, config.cuentas, selected]);
+
+  useEffect(() => {
+    setAllocations([{ cuentaIndex: '', monto: '' }]);
+  }, [selectedId]);
+
+  const addAllocationRow = () => {
+    setAllocations((prev) => [...prev, { cuentaIndex: '', monto: '' }]);
+  };
+
+  const updateAllocationRow = (idx: number, patch: Partial<PaymentAllocation>) => {
+    setAllocations((prev) => prev.map((row, i) => (i === idx ? { ...row, ...patch } : row)));
+  };
+
+  const removeAllocationRow = (idx: number) => {
+    setAllocations((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
+
   function handleConfirm() {
-    if (!selectedId) return;
-    confirmPayment(selectedId);
+    if (!selectedId || !selected || !allocationSummary.isValid) return;
+
+    const cuentas = allocationSummary.normalized;
+    confirmPayment(selectedId, {
+      fecha: fechaTransf,
+      montoCLP: selected.totalCLP,
+      cuenta: cuentas.map((item) => item.cuenta).join(' + '),
+      cuentas,
+    });
+
     setSuccessMsg(`Pago confirmado para boleta ${selectedId}`);
     setSelectedId(null);
-    setCuenta('');
+    setAllocations([{ cuentaIndex: '', monto: '' }]);
     setTimeout(() => setSuccessMsg(null), 4000);
   }
 
@@ -40,7 +111,7 @@ export default function PagosPage() {
     deleteBoleta(boletaId);
     if (selectedId === boletaId) {
       setSelectedId(null);
-      setCuenta('');
+      setAllocations([{ cuentaIndex: '', monto: '' }]);
     }
     setConfirmDeleteId(null);
     const msg = isGAV
@@ -87,7 +158,10 @@ export default function PagosPage() {
                     ? 'border-primary/50 bg-primary/5'
                     : 'hover:border-primary/20'
                 }`}
-                onClick={() => { setSelectedId(b.id); setConfirmDeleteId(null); }}
+                onClick={() => {
+                  setSelectedId(b.id);
+                  setConfirmDeleteId(null);
+                }}
               >
                 <div className="flex items-center justify-between">
                   <div>
@@ -166,18 +240,55 @@ export default function PagosPage() {
                       </div>
                     </div>
 
-                    <Select
-                      label="Cuenta Bancaria"
-                      value={cuenta}
-                      onChange={(e) => setCuenta(e.target.value)}
-                    >
-                      <option value="">Seleccionar cuenta...</option>
-                      {config.cuentas.map((c, i) => (
-                        <option key={i} value={c.titular}>
-                          {c.titular} — {c.banco} {c.numero}
-                        </option>
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium text-foreground">Distribución por cuentas</p>
+                      {allocations.map((row, idx) => (
+                        <div key={`alloc-${idx}`} className="grid grid-cols-1 md:grid-cols-[1fr_160px_auto] gap-2 items-end">
+                          <Select
+                            label={idx === 0 ? 'Cuenta Bancaria' : 'Cuenta adicional'}
+                            value={row.cuentaIndex}
+                            onChange={(e) => updateAllocationRow(idx, { cuentaIndex: e.target.value })}
+                          >
+                            <option value="">Seleccionar cuenta...</option>
+                            {config.cuentas.map((c, accountIdx) => (
+                              <option key={accountIdx} value={String(accountIdx)}>
+                                {c.titular} — {c.banco} {c.numero}
+                              </option>
+                            ))}
+                          </Select>
+
+                          <Input
+                            label="Monto CLP"
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={row.monto}
+                            onChange={(e) => updateAllocationRow(idx, { monto: e.target.value })}
+                          />
+
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            onClick={() => removeAllocationRow(idx)}
+                            disabled={allocations.length === 1}
+                          >
+                            Quitar
+                          </Button>
+                        </div>
                       ))}
-                    </Select>
+
+                      <div className="flex items-center justify-between">
+                        <Button type="button" variant="outline" onClick={addAllocationRow}>
+                          Agregar cuenta
+                        </Button>
+                        <div className="text-right text-sm">
+                          <p className="text-muted-foreground">Asignado: {allocationSummary.totalAssigned.toLocaleString('es-CL')}</p>
+                          <p className={allocationSummary.remaining === 0 ? 'text-[#00e676]' : 'text-[#ffab00]'}>
+                            Restante: {allocationSummary.remaining.toLocaleString('es-CL')}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
 
                     <Input
                       label="Fecha Transferencia"
@@ -191,7 +302,7 @@ export default function PagosPage() {
                       <PriceDisplay amount={selected.totalCLP} currency="CLP" className="text-2xl" />
                     </div>
 
-                    <Button fullWidth onClick={handleConfirm}>
+                    <Button fullWidth onClick={handleConfirm} disabled={!allocationSummary.isValid}>
                       <CheckCircle className="w-4 h-4" /> Confirmar Pago
                     </Button>
                   </div>

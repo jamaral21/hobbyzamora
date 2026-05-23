@@ -73,21 +73,29 @@ function buildNextCompraId(items: CompraChileRecord[]): string {
   return `CC-${String(max + 1).padStart(3, '0')}`;
 }
 
+async function listCompraChileRecords(): Promise<CompraChileRecord[]> {
+  const logs = await prisma.auditLog.findMany({
+    where: {
+      entity: COMPRA_ENTITY,
+      action: COMPRA_ACTION,
+    },
+    orderBy: { createdAt: 'asc' },
+    select: { metadata: true },
+  });
+
+  const byId = new Map<string, CompraChileRecord>();
+  for (const log of logs) {
+    const parsed = toCompraRecord(log.metadata);
+    if (!parsed) continue;
+    byId.set(parsed.id, parsed);
+  }
+
+  return Array.from(byId.values()).sort((a, b) => b.fecha.localeCompare(a.fecha));
+}
+
 router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (_req: AuthRequest, res) => {
   try {
-    const logs = await prisma.auditLog.findMany({
-      where: {
-        entity: COMPRA_ENTITY,
-        action: COMPRA_ACTION,
-      },
-      orderBy: { createdAt: 'desc' },
-      select: { metadata: true },
-    });
-
-    const data = logs
-      .map((log) => toCompraRecord(log.metadata))
-      .filter((item): item is CompraChileRecord => item !== null)
-      .sort((a, b) => b.fecha.localeCompare(a.fecha));
+    const data = await listCompraChileRecords();
 
     return res.json({ data });
   } catch (error) {
@@ -134,17 +142,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
       return res.status(400).json({ error: "estado debe ser 'pagado' o 'pendiente'" });
     }
 
-    const existingLogs = await prisma.auditLog.findMany({
-      where: {
-        entity: COMPRA_ENTITY,
-        action: COMPRA_ACTION,
-      },
-      select: { metadata: true },
-    });
-
-    const existing = existingLogs
-      .map((log) => toCompraRecord(log.metadata))
-      .filter((item): item is CompraChileRecord => item !== null);
+    const existing = await listCompraChileRecords();
 
     const id = buildNextCompraId(existing);
     const nowIso = new Date().toISOString();
@@ -176,6 +174,53 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
   } catch (error) {
     console.error('POST /shipments/compras-chile error:', error);
     return res.status(500).json({ error: 'No se pudo registrar la compra local' });
+  }
+});
+
+router.put('/:id/estado', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
+  try {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const estado = req.body?.estado;
+
+    if (!id || typeof id !== 'string') {
+      return res.status(400).json({ error: 'id invalido' });
+    }
+
+    if (estado !== 'pagado' && estado !== 'pendiente') {
+      return res.status(400).json({ error: "estado debe ser 'pagado' o 'pendiente'" });
+    }
+
+    const records = await listCompraChileRecords();
+    const current = records.find((row) => row.id === id);
+
+    if (!current) {
+      return res.status(404).json({ error: 'Compra local no encontrada' });
+    }
+
+    if (current.estado === estado) {
+      return res.json({ data: current });
+    }
+
+    const updated: CompraChileRecord = {
+      ...current,
+      estado,
+      createdAt: new Date().toISOString(),
+    };
+
+    await prisma.auditLog.create({
+      data: {
+        action: COMPRA_ACTION,
+        entity: COMPRA_ENTITY,
+        entityIds: updated.id,
+        performedBy: req.user?.email ?? 'unknown',
+        metadata: JSON.stringify(updated),
+      },
+    });
+
+    return res.json({ data: updated });
+  } catch (error) {
+    console.error('PUT /shipments/compras-chile/:id/estado error:', error);
+    return res.status(500).json({ error: 'No se pudo actualizar estado de la compra local' });
   }
 });
 

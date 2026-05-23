@@ -55,10 +55,13 @@ const SHIPMENTS_PERMISSIONS: Record<string, string[]> = {
   'POST:/api/shipments/compras-locales': ['admin', 'chile'],
   'GET:/api/shipments/compras-chile': ['admin', 'chile'],
   'POST:/api/shipments/compras-chile': ['admin', 'chile'],
+  'PUT:/api/shipments/compras-chile/:id/estado': ['admin', 'chile'],
 
   'GET:/api/shipments/gav-chile': ['admin', 'chile', 'contador'],
   'POST:/api/shipments/gav-chile': ['admin', 'chile'],
   'PUT:/api/shipments/gav-chile/:id': ['admin', 'chile'],
+  'PUT:/api/shipments/gav-chile/:id/documentos': ['admin', 'chile'],
+  'DELETE:/api/shipments/gav-chile/:id/documentos/:id': ['admin', 'chile'],
   'PUT:/api/shipments/gav-chile/:id/confirmar': ['admin', 'chile'],
 
   // ==================== MÓDULOS FINANZAS ====================

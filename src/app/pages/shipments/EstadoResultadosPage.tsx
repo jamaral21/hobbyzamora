@@ -90,6 +90,10 @@ export default function EstadoResultadosPage() {
             <span className="text-sm text-foreground">(-) GAV Chile (pagado)</span>
             <PriceDisplay amount={eerr.gavChile} currency="CLP" className="text-sm text-destructive" />
           </div>
+          <div className="flex justify-between items-center py-1">
+            <span className="text-sm text-foreground">(-) Compras locales (gasto, pagado)</span>
+            <PriceDisplay amount={eerr.gavComprasLocales} currency="CLP" className="text-sm text-destructive" />
+          </div>
           <div className="flex justify-between items-center pt-2 border-t border-border">
             <span className="font-medium text-foreground">Total GAV</span>
             <PriceDisplay amount={eerr.gavTotal} currency="CLP" className="text-destructive" />

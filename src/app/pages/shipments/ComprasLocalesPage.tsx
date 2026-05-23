@@ -80,6 +80,7 @@ export default function ComprasLocalesPage() {
   const [form, setForm] = useState<FormData>({ ...emptyForm });
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
   const [saving, setSaving] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   async function loadComprasChile() {
     setIsLoading(true);
@@ -150,6 +151,22 @@ export default function ComprasLocalesPage() {
     setShowModal(true);
   }
 
+  async function handleMarkAsPaid(id: string) {
+    try {
+      setUpdatingId(id);
+      const response = await shipmentsFetch<CompraCreateResponse>(`/${encodeURIComponent(id)}/estado`, {
+        method: 'PUT',
+        body: JSON.stringify({ estado: 'pagado' }),
+      });
+
+      setComprasChile((prev) => prev.map((item) => (item.id === id ? response.data : item)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo actualizar el estado');
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -193,6 +210,7 @@ export default function ComprasLocalesPage() {
                 <TableHead className="text-right">Monto</TableHead>
                 <TableHead className="text-right">IVA</TableHead>
                 <TableHead>Estado</TableHead>
+                <TableHead>Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -209,6 +227,20 @@ export default function ComprasLocalesPage() {
                     {c.iva > 0 ? <PriceDisplay amount={c.iva} currency="CLP" /> : <span className="text-muted-foreground">—</span>}
                   </TableCell>
                   <TableCell><StatusBadge status={c.estado} /></TableCell>
+                  <TableCell>
+                    {c.estado === 'pendiente' ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleMarkAsPaid(c.id)}
+                        disabled={updatingId === c.id}
+                      >
+                        {updatingId === c.id ? 'Actualizando...' : 'Marcar pagado'}
+                      </Button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

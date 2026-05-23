@@ -46,7 +46,7 @@ router.get('/historial', async (req: ShipmentsRequest, res) => {
  */
 router.post('/generar', async (req: ShipmentsRequest, res) => {
   try {
-    const { tc } = req.body;
+    const { tc, year, month } = req.body;
 
     // Validar entrada
     if (!tc || typeof tc !== 'number' || tc <= 0) {
@@ -59,7 +59,31 @@ router.post('/generar', async (req: ShipmentsRequest, res) => {
       });
     }
 
-    const result = await generateGavJaponBoleta(new Decimal(tc));
+    if (year !== undefined && (!Number.isInteger(year) || year < 2000 || year > 2100)) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'year inválido. Debe ser un entero entre 2000 y 2100',
+          details: [{ field: 'year', message: 'year inválido' }],
+        },
+      });
+    }
+
+    if (month !== undefined && (!Number.isInteger(month) || month < 1 || month > 12)) {
+      return res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'month inválido. Debe ser un entero entre 1 y 12',
+          details: [{ field: 'month', message: 'month inválido' }],
+        },
+      });
+    }
+
+    const result = await generateGavJaponBoleta(
+      new Decimal(tc),
+      year !== undefined ? Number(year) : undefined,
+      month !== undefined ? Number(month) : undefined,
+    );
 
     if (result.error) {
       const statusCode =

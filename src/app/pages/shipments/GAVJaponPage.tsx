@@ -19,6 +19,23 @@ interface EditableLine {
   cant: number;
 }
 
+function getInvoiceYearMonthUTC(fecha: string): { year: number; month: number } | null {
+  const raw = String(fecha ?? '').trim();
+  if (!raw) return null;
+
+  const isNumeric = /^\d+$/.test(raw);
+  const parsed = isNumeric
+    ? new Date(Number(raw))
+    : new Date(raw.length === 10 ? `${raw}T00:00:00Z` : raw);
+
+  if (Number.isNaN(parsed.getTime())) return null;
+
+  return {
+    year: parsed.getUTCFullYear(),
+    month: parsed.getUTCMonth(),
+  };
+}
+
 export default function GAVJaponPage() {
   const { boletas, boletaItems, compras, config, updateConfig, generateGAVBoleta, updateBoleta } = useShipmentsData();
 
@@ -32,7 +49,37 @@ export default function GAVJaponPage() {
   const [saved, setSaved] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [tc, setTc] = useState<number>(tcReferencia);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const [period, setPeriod] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
   const [generating, setGenerating] = useState(false);
+  const [selectedYear, selectedMonth] = useMemo(() => {
+    const [yearText, monthText] = period.split('-');
+    const y = Number(yearText);
+    const m = Number(monthText);
+    if (!Number.isInteger(y) || !Number.isInteger(m) || m < 1 || m > 12) {
+      return [null, null] as const;
+    }
+    return [y, m - 1] as const;
+  }, [period]);
+
+  const selectedPeriodDate = useMemo(() => {
+    if (selectedYear === null || selectedMonth === null) return null;
+    return new Date(selectedYear, selectedMonth, 1);
+  }, [selectedYear, selectedMonth]);
+
+  const selectedPeriodLabel = selectedPeriodDate
+    ? selectedPeriodDate.toLocaleString('es-CL', { month: 'long', year: 'numeric' })
+    : 'periodo inválido';
+
+  const hasSelectedPeriodGAV = useMemo(() => {
+    if (selectedYear === null || selectedMonth === null) return false;
+    return boletas.some((b) => {
+      if (!b.id.includes('GAV')) return false;
+      const ym = getInvoiceYearMonthUTC(b.fecha);
+      return !!ym && ym.year === selectedYear && ym.month === selectedMonth;
+    });
+  }, [boletas, selectedYear, selectedMonth]);
+
 
   const [editBoleta, setEditBoleta] = useState<Invoice | null>(null);
   const [editComision, setEditComision] = useState('');
@@ -50,8 +97,8 @@ export default function GAVJaponPage() {
     const month = now.getMonth();
     return boletas.some((b) => {
       if (!b.id.includes('GAV')) return false;
-      const d = new Date(b.fecha);
-      return d.getFullYear() === year && d.getMonth() === month;
+      const ym = getInvoiceYearMonthUTC(b.fecha);
+      return !!ym && ym.year === year && ym.month === month;
     });
   }, [boletas, now]);
 
@@ -71,8 +118,8 @@ export default function GAVJaponPage() {
     return months.map((m) => {
       const invoice = boletas.find((b) => {
         if (!b.id.includes('GAV')) return false;
-        const d = new Date(b.fecha);
-        return d.getFullYear() === m.year && d.getMonth() === m.month;
+        const ym = getInvoiceYearMonthUTC(b.fecha);
+        return !!ym && ym.year === m.year && ym.month === m.month;
       });
 
       return {
@@ -118,16 +165,36 @@ export default function GAVJaponPage() {
   }
 
   function handleGenerar() {
+    setGenerateError(null);
     setTc(tcReferencia);
+    setPeriod(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`);
     setModalOpen(true);
   }
 
-  function handleConfirmarGenerar() {
+  async function handleConfirmarGenerar() {
+    if (!selectedPeriodDate) return;
     setGenerating(true);
-    updateConfig({ arrBodegaJP, appBeyblade, comisionPct });
-    generateGAVBoleta();
-    setGenerating(false);
-    setModalOpen(false);
+    setGenerateError(null);
+
+    const configResult = await updateConfig({ arrBodegaJP, appBeyblade, comisionPct });
+    if (!configResult.ok) {
+      setGenerateError(configResult.error);
+      setGenerating(false);
+      return;
+    }
+
+    try {
+      await generateGAVBoleta({
+        year: selectedPeriodDate.getFullYear(),
+        month: selectedPeriodDate.getMonth() + 1,
+        tc,
+      });
+      setModalOpen(false);
+    } catch (error) {
+      setGenerateError(error instanceof Error ? error.message : 'No se pudo generar la boleta GAV');
+    } finally {
+      setGenerating(false);
+    }
   }
 
   function handleGuardarParametros() {
@@ -182,14 +249,30 @@ export default function GAVJaponPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold text-foreground">Gastos Fijos Japón</h2>
-        <Button size="sm" onClick={handleGenerar} disabled={hasCurrentMonthGAV}>
+        <Button size="sm" onClick={handleGenerar}>
           <Receipt className="w-4 h-4" /> Generar Boleta
         </Button>
       </div>
 
       <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)} title="Confirmar generación de boleta GAV" size="md">
         <div className="space-y-4">
+          {generateError && (
+            <div className="rounded-lg border border-red-400/50 bg-red-500/10 p-3 text-sm text-red-200">
+              {generateError}
+            </div>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Mes/Año de la boleta"
+              type="month"
+              value={period}
+              onChange={(e) => setPeriod(e.target.value)}
+              style={{ colorScheme: 'dark' }}
+            />
+            <div>
+              <p className="text-sm text-muted-foreground">Periodo seleccionado</p>
+              <p className="text-lg font-semibold capitalize text-foreground">{selectedPeriodLabel}</p>
+            </div>
             <div>
               <p className="text-sm text-muted-foreground">Arriendo Bodega JP</p>
               <PriceDisplay amount={arrBodegaJP} currency="JPY" className="text-lg font-semibold" />
@@ -222,11 +305,18 @@ export default function GAVJaponPage() {
               <p className="text-sm text-muted-foreground">Total estimado CLP</p>
               <PriceDisplay amount={Math.round(totalConComisionJPY * tc)} currency="CLP" className="text-lg font-semibold" />
             </div>
+            {hasSelectedPeriodGAV && (
+              <div className="col-span-2 rounded-lg border border-[#ffab00]/40 bg-[#ffab00]/10 p-3">
+                <p className="text-sm text-[#ffab00]">
+                  Ya existe una boleta GAV para este período. Si confirmas, el backend bloqueará la duplicación.
+                </p>
+              </div>
+            )}
           </div>
         </div>
         <ModalFooter>
           <Button variant="ghost" onClick={() => setModalOpen(false)} disabled={generating}>Cancelar</Button>
-          <Button onClick={handleConfirmarGenerar} disabled={generating || tc <= 0}>
+          <Button onClick={handleConfirmarGenerar} disabled={generating || tc <= 0 || !selectedPeriodDate || hasSelectedPeriodGAV}>
             {generating ? 'Generando...' : 'Confirmar y generar'}
           </Button>
         </ModalFooter>

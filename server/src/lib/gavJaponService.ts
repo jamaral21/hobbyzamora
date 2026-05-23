@@ -160,13 +160,27 @@ export async function getGavJaponHistorial(): Promise<ShipmentsResponse<GavJapon
  * - Genera boleta con ID formato: BOL-YYYY-GAV-NNN
  */
 export async function generateGavJaponBoleta(
-  tcArriendoJpy: Decimal
+  tcArriendoJpy: Decimal,
+  targetYear?: number,
+  targetMonth?: number
 ): Promise<ShipmentsResponse<GavJaponGenerateResponse>> {
   try {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = today.getMonth() + 1;
-    const mesNombre = today.toLocaleDateString('es-ES', {
+    const now = new Date();
+    const year = targetYear && Number.isInteger(targetYear) ? targetYear : now.getFullYear();
+    const month = targetMonth && Number.isInteger(targetMonth) ? targetMonth : now.getMonth() + 1;
+
+    if (month < 1 || month > 12) {
+      return {
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Mes inválido. Debe estar entre 1 y 12',
+          details: [{ field: 'month', message: 'month debe ser entre 1 y 12' }],
+        },
+      };
+    }
+
+    const targetDate = new Date(year, month - 1, 1);
+    const mesNombre = targetDate.toLocaleDateString('es-ES', {
       month: 'long',
       year: 'numeric',
     });
@@ -227,10 +241,26 @@ export async function generateGavJaponBoleta(
     // Crear transacción: compras + boleta + control
     const result = await prisma.$transaction(async (tx: any) => {
       // 1. Crear compra para arriendo
-      const arrendoCompra = await tx.shipmentsPurchase.create({
-        data: {
-          sku: `GAV-${year}-${String(month).padStart(2, '0')}-ARR`,
-          fecha: today,
+      const arrSku = `GAV-${year}-${String(month).padStart(2, '0')}-ARR`;
+      const appSku = `GAV-${year}-${String(month).padStart(2, '0')}-APP`;
+
+      const arrendoCompra = await tx.shipmentsPurchase.upsert({
+        where: { sku: arrSku },
+        create: {
+          sku: arrSku,
+          fecha: targetDate,
+          tipo: 'Gasto Fijo',
+          nombre: 'Arriendo Bodega Japón',
+          tarjeta: 'N/A',
+          precioU: new Decimal(arriendo),
+          cant: 1,
+          total: new Decimal(arriendo),
+          estado: 'por_pagar',
+          bodega: 'japon',
+          tc: tcArriendoJpy,
+        },
+        update: {
+          fecha: targetDate,
           tipo: 'Gasto Fijo',
           nombre: 'Arriendo Bodega Japón',
           tarjeta: 'N/A',
@@ -244,10 +274,23 @@ export async function generateGavJaponBoleta(
       });
 
       // 2. Crear compra para app
-      const appCompra = await tx.shipmentsPurchase.create({
-        data: {
-          sku: `GAV-${year}-${String(month).padStart(2, '0')}-APP`,
-          fecha: today,
+      const appCompra = await tx.shipmentsPurchase.upsert({
+        where: { sku: appSku },
+        create: {
+          sku: appSku,
+          fecha: targetDate,
+          tipo: 'Gasto Fijo',
+          nombre: 'App Beyblade',
+          tarjeta: 'N/A',
+          precioU: new Decimal(app),
+          cant: 1,
+          total: new Decimal(app),
+          estado: 'por_pagar',
+          bodega: 'japon',
+          tc: tcArriendoJpy,
+        },
+        update: {
+          fecha: targetDate,
           tipo: 'Gasto Fijo',
           nombre: 'App Beyblade',
           tarjeta: 'N/A',
@@ -269,7 +312,7 @@ export async function generateGavJaponBoleta(
       const boleta = await tx.shipmentsInvoice.create({
         data: {
           invoiceId: boletaId,
-          fecha: today,
+          fecha: targetDate,
           subtotalJPY,
           comision: new Decimal(comisionPct),
           totalJPY,
@@ -284,7 +327,7 @@ export async function generateGavJaponBoleta(
         data: [
           {
             invoiceId: boleta.id,
-            fecha: today,
+            fecha: targetDate,
             tipo: 'Gasto Fijo',
             nombre: 'Arriendo Bodega Japón',
             precioU: new Decimal(arriendo),
@@ -294,7 +337,7 @@ export async function generateGavJaponBoleta(
           },
           {
             invoiceId: boleta.id,
-            fecha: today,
+            fecha: targetDate,
             tipo: 'Gasto Fijo',
             nombre: 'App Beyblade',
             precioU: new Decimal(app),
@@ -306,9 +349,14 @@ export async function generateGavJaponBoleta(
       });
 
       // 6. Crear control de mes (link a compra de arriendo)
-      await tx.shipmentsGavMonthControl.create({
-        data: {
+      await tx.shipmentsGavMonthControl.upsert({
+        where: { mes: mesNormalizado },
+        create: {
           mes: mesNormalizado,
+          boletaId: boletaId,
+          compraId: arrendoCompra.id,
+        },
+        update: {
           boletaId: boletaId,
           compraId: arrendoCompra.id,
         },

@@ -26,6 +26,7 @@ interface CreateBoxPayload {
 }
 
 interface UpdateBoxPayload {
+  estado?: 'transito' | 'llegada';
   fecha?: string;
   fleJpy?: number;
   moHoras?: number;
@@ -344,6 +345,15 @@ export async function updateBox(
       if (!existing) throw new Error('BOX_NOT_FOUND');
       if (existing.estado !== 'transito') throw new Error('BOX_NOT_TRANSITO');
 
+      if (payload.estado && payload.estado !== 'transito' && payload.estado !== 'llegada') {
+        throw new Error('INVALID_BOX_STATE');
+      }
+
+      // Solo permitimos transición explícita de transito -> llegada en esta ruta.
+      if (payload.estado && payload.estado !== existing.estado && payload.estado !== 'llegada') {
+        throw new Error('BOX_INVALID_TRANSITION');
+      }
+
       const newProductIds = payload.productos?.map((p) => p.compraId) || [];
       const oldProductIds = existing.productos.map((p: ShipmentsBoxProduct) => p.compraId);
       const affectedProductIds = Array.from(new Set([...oldProductIds, ...newProductIds]));
@@ -372,6 +382,7 @@ export async function updateBox(
       await tx.shipmentsBox.update({
         where: { id: existing.id },
         data: {
+          ...(payload.estado && { estado: payload.estado }),
           ...(payload.fecha && { fecha: new Date(payload.fecha) }),
           ...(payload.fleJpy !== undefined && { fleJpy: new Decimal(payload.fleJpy) }),
           ...(payload.moHoras !== undefined && { moHoras: new Decimal(payload.moHoras) }),
@@ -436,6 +447,24 @@ export async function updateBox(
         error: {
           code: 'CONFLICT',
           message: 'Solo se puede editar una caja en estado "transito"',
+        },
+      };
+    }
+
+    if (error.message === 'INVALID_BOX_STATE') {
+      return {
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Estado de caja inválido. Use "transito" o "llegada"',
+        },
+      };
+    }
+
+    if (error.message === 'BOX_INVALID_TRANSITION') {
+      return {
+        error: {
+          code: 'CONFLICT',
+          message: 'Transición de estado inválida para la caja',
         },
       };
     }

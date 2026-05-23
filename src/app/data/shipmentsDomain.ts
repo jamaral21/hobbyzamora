@@ -64,6 +64,13 @@ export interface InternacionData {
   total: number;
 }
 
+export interface CustomsDocument {
+  nombre: string;
+  tipo: 'DIN' | 'DTE' | 'Otro';
+  fileName: string;
+  fileUrl: string;
+}
+
 export interface Box {
   id: string;
   fecha: string;
@@ -75,6 +82,7 @@ export interface Box {
   tc_envio: number;
   internacion: InternacionData | null;
   productos: BoxProduct[];
+  documentosAduaneros?: CustomsDocument[];
 }
 
 export interface ChileStockEntry {
@@ -107,6 +115,7 @@ export interface WebOrder {
   costoEnvioIntern: number;
   tc: number;
   productos: WebOrderProduct[];
+  documentosAduaneros?: CustomsDocument[];
 }
 
 export interface LocalPurchase {
@@ -291,6 +300,7 @@ export interface IncomeStatement {
   margenBruto: number;
   gavJapon: number;
   gavChile: number;
+  gavComprasLocales: number;
   gavTotal: number;
   ebit: number;
   ivaCredito: number;
@@ -316,7 +326,11 @@ export function calcIncomeStatement(
     .filter((g) => g.estado === 'pagado')
     .reduce((sum, g) => sum + g.monto, 0);
 
-  const gavTotal = gavJaponTotal + gavChileTotal;
+  const gavComprasLocalesTotal = comprasChile
+    .filter((c) => c.estado === 'pagado' && c.tipo === 'gasto')
+    .reduce((sum, c) => sum + c.monto, 0);
+
+  const gavTotal = gavJaponTotal + gavChileTotal + gavComprasLocalesTotal;
   const ebit = margenBruto - gavTotal;
 
   const ivaInternaciones = internaciones
@@ -336,6 +350,7 @@ export function calcIncomeStatement(
     margenBruto,
     gavJapon: gavJaponTotal,
     gavChile: gavChileTotal,
+    gavComprasLocales: gavComprasLocalesTotal,
     gavTotal,
     ebit,
     ivaCredito,
