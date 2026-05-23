@@ -17,7 +17,11 @@
     "db:seed": "tsx server/prisma/seed.ts",
     "db:studio": "prisma studio --schema=server/prisma/schema.prisma",
     "db:backfill-initial-stock": "tsx server/scripts/backfill-initial-stock.ts",
-    "db:backfill-initial-stock:dry": "tsx server/scripts/backfill-initial-stock.ts --dry-run"
+    "db:backfill-initial-stock:dry": "tsx server/scripts/backfill-initial-stock.ts --dry-run",
+    "db:seed:shipments": "tsx server/prisma/seed-shipments.ts",
+    "shipments:backup": "bash scripts/shipments/backup-shipments-state.sh",
+    "shipments:changes:today": "bash scripts/shipments/export-shipments-changes-since.sh server/prisma/dev.db $(date +%Y-%m-%d)",
+    "shipments:changes:since": "bash scripts/shipments/export-shipments-changes-since.sh"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

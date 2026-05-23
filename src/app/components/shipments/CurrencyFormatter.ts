@@ -1,1 +1,1 @@
-export { formatJPY, formatCLP } from '../../data/shipmentsMockData';
+export { formatJPY, formatCLP } from '../../data/shipmentsDomain';

@@ -6,7 +6,7 @@ import {
 import { useShipmentsData } from '../../contexts/ShipmentsDataContext';
 import { Card } from '../../components/design-system/Card';
 import { KPICard } from '../../components/shipments/KPICard';
-import { formatCLP } from '../../data/shipmentsMockData';
+import { formatCLP } from '../../data/shipmentsDomain';
 
 export default function DashboardPage() {
   const { compras, cajas, stockChile, boletas, ventas, calcDisponibleBySku } = useShipmentsData();

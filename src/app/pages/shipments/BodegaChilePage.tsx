@@ -1,23 +1,83 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Package, DollarSign, AlertTriangle } from 'lucide-react';
-import { useShipmentsData } from '../../contexts/ShipmentsDataContext';
 import { Card } from '../../components/design-system/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/design-system/Table';
 import { PriceDisplay } from '../../components/shipments/PriceDisplay';
 import { KPICard } from '../../components/shipments/KPICard';
 import { EmptyState } from '../../components/design-system/EmptyState';
-import { calcMargin, marginColor } from '../../data/shipmentsMockData';
+import { calcMargin, marginColor } from '../../data/shipmentsDomain';
+
+type ChileStockRow = {
+  id: string;
+  sku: string;
+  name: string;
+  ean: string | null;
+  stock: number;
+  costUnit: number;
+  salePrice: number;
+  marginPct: number | null;
+};
+
+type BodegaChileResponse = {
+  data: {
+    items: ChileStockRow[];
+    kpis: {
+      totalUnits: number;
+      inventoryValue: number;
+      noSalePrice: number;
+    };
+  };
+};
+
+async function shipmentsFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const token = localStorage.getItem('adminToken') || localStorage.getItem('token');
+  const response = await fetch(`/api/shipments/bodega-chile${endpoint}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+      ...(options?.headers || {}),
+    },
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(data.error || response.statusText);
+  }
+
+  return response.json() as Promise<T>;
+}
 
 export default function BodegaChilePage() {
-  const { stockChile, updatePrecioVenta } = useShipmentsData();
+  const [stockChile, setStockChile] = useState<ChileStockRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
 
+  const loadStockChile = async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const response = await shipmentsFetch<BodegaChileResponse>('');
+      setStockChile(response.data.items);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : 'No se pudo cargar bodega Chile');
+      setStockChile([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadStockChile();
+  }, []);
+
   // KPIs
   const kpis = useMemo(() => {
-    const unidadesTotales = stockChile.reduce((s, e) => s + e.cant, 0);
-    const valorInventario = stockChile.reduce((s, e) => s + e.cant * e.costoUnit, 0);
-    const sinPrecio = stockChile.filter((e) => e.precioVenta === null || e.precioVenta <= 0).length;
+    const unidadesTotales = stockChile.reduce((s, e) => s + e.stock, 0);
+    const valorInventario = stockChile.reduce((s, e) => s + e.stock * e.costUnit, 0);
+    const sinPrecio = stockChile.filter((e) => e.salePrice <= 0).length;
     return { unidadesTotales, valorInventario, sinPrecio };
   }, [stockChile]);
 
@@ -26,10 +86,18 @@ export default function BodegaChilePage() {
     setEditValue(currentPrice != null ? String(currentPrice) : '');
   }
 
-  function commitEdit(id: string) {
+  async function commitEdit(id: string) {
     const val = Number(editValue);
     if (val > 0) {
-      updatePrecioVenta(id, val);
+      try {
+        const response = await shipmentsFetch<{ data: ChileStockRow }>(`/${id}/precio`, {
+          method: 'PUT',
+          body: JSON.stringify({ precioVenta: val }),
+        });
+        setStockChile((prev) => prev.map((row) => (row.id === id ? response.data : row)));
+      } catch (error) {
+        setLoadError(error instanceof Error ? error.message : 'No se pudo actualizar precio de venta');
+      }
     }
     setEditingId(null);
     setEditValue('');
@@ -50,6 +118,12 @@ export default function BodegaChilePage() {
     <div className="space-y-6">
       <h2 className="text-xl font-semibold text-foreground">Bodega Chile</h2>
 
+      {loadError && (
+        <Card>
+          <p className="text-sm text-destructive">{loadError}</p>
+        </Card>
+      )}
+
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <KPICard title="Unidades Totales" value={kpis.unidadesTotales} icon={Package} />
@@ -69,7 +143,13 @@ export default function BodegaChilePage() {
 
       {/* Table */}
       <Card padding="none">
-        {stockChile.length === 0 ? (
+        {isLoading ? (
+          <EmptyState
+            icon={Package}
+            title="Cargando bodega Chile"
+            description="Obteniendo inventario y precios..."
+          />
+        ) : stockChile.length === 0 ? (
           <EmptyState
             icon={Package}
             title="Sin stock en Chile"
@@ -91,20 +171,20 @@ export default function BodegaChilePage() {
             </TableHeader>
             <TableBody>
               {stockChile.map((entry) => {
-                const margin = entry.precioVenta != null && entry.precioVenta > 0
-                  ? calcMargin(entry.precioVenta, entry.costoUnit)
+                const margin = entry.salePrice != null && entry.salePrice > 0
+                  ? calcMargin(entry.salePrice, entry.costUnit)
                   : null;
                 const mColor = margin != null ? marginColor(margin) : null;
 
                 return (
                   <TableRow key={entry.id}>
-                    <TableCell className="font-[family-name:var(--font-mono)] text-xs">{entry._sku}</TableCell>
-                    <TableCell className="max-w-[200px] truncate">{entry.nombre}</TableCell>
+                    <TableCell className="font-[family-name:var(--font-mono)] text-xs">{entry.sku}</TableCell>
+                    <TableCell className="max-w-[200px] truncate">{entry.name}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{entry.ean || '—'}</TableCell>
-                    <TableCell className="text-xs">{entry.caja}</TableCell>
-                    <TableCell className="text-right">{entry.cant}</TableCell>
+                    <TableCell className="text-xs">—</TableCell>
+                    <TableCell className="text-right">{entry.stock}</TableCell>
                     <TableCell className="text-right">
-                      <PriceDisplay amount={entry.costoUnit} currency="CLP" />
+                      <PriceDisplay amount={entry.costUnit} currency="CLP" />
                     </TableCell>
                     <TableCell className="text-right">
                       {editingId === entry.id ? (
@@ -114,7 +194,9 @@ export default function BodegaChilePage() {
                           className="w-24 px-2 py-1 rounded border border-primary/40 bg-input-background text-foreground text-right text-sm font-[family-name:var(--font-mono)] focus:outline-none focus:ring-1 focus:ring-primary/30"
                           value={editValue}
                           onChange={(e) => setEditValue(e.target.value)}
-                          onBlur={() => commitEdit(entry.id)}
+                          onBlur={() => {
+                            void commitEdit(entry.id);
+                          }}
                           onKeyDown={(e) => handleKeyDown(e, entry.id)}
                           autoFocus
                         />
@@ -122,10 +204,10 @@ export default function BodegaChilePage() {
                         <button
                           type="button"
                           className="cursor-pointer hover:bg-secondary px-2 py-1 rounded transition-colors"
-                          onClick={() => startEdit(entry.id, entry.precioVenta)}
+                          onClick={() => startEdit(entry.id, entry.salePrice)}
                         >
-                          {entry.precioVenta != null && entry.precioVenta > 0 ? (
-                            <PriceDisplay amount={entry.precioVenta} currency="CLP" />
+                          {entry.salePrice != null && entry.salePrice > 0 ? (
+                            <PriceDisplay amount={entry.salePrice} currency="CLP" />
                           ) : (
                             <span className="text-muted-foreground text-xs italic">Sin precio</span>
                           )}

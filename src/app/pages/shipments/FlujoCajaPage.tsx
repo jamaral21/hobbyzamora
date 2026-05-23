@@ -3,7 +3,7 @@ import { ArrowDownCircle, ArrowUpCircle, Activity } from 'lucide-react';
 import { useShipmentsData } from '../../contexts/ShipmentsDataContext';
 import { Card } from '../../components/design-system/Card';
 import { PriceDisplay } from '../../components/shipments/PriceDisplay';
-import { calcCashFlow } from '../../data/shipmentsMockData';
+import { calcCashFlow } from '../../data/shipmentsDomain';
 
 export default function FlujoCajaPage() {
   const { ventas, boletas, gavChile, comprasChile } = useShipmentsData();

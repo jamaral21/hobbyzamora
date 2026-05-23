@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ShoppingCart, Plus, Trash2 } from 'lucide-react';
+import { ShoppingCart, Plus, Trash2, FileText, Upload, ExternalLink, X } from 'lucide-react';
 import { useShipmentsData } from '../../contexts/ShipmentsDataContext';
 import { Card } from '../../components/design-system/Card';
 import { Button } from '../../components/design-system/Button';
@@ -25,8 +25,22 @@ const emptyProductRow = (): ProductFormRow => ({
 });
 
 export default function ComprasWebPage() {
-  const { pedidosWeb, addPedidoWeb } = useShipmentsData();
+  const {
+    pedidosWeb,
+    addPedidoWeb,
+    updatePedidoWeb,
+    addDocumentoAduaneroWebOrder,
+    removeDocumentoAduaneroWebOrder,
+  } = useShipmentsData();
   const [modalOpen, setModalOpen] = useState(false);
+  const [editOrderId, setEditOrderId] = useState<string | null>(null);
+  const [docsModalOpen, setDocsModalOpen] = useState(false);
+  const [docsOrderId, setDocsOrderId] = useState<string | null>(null);
+  const [docNombre, setDocNombre] = useState('');
+  const [docTipo, setDocTipo] = useState<'DIN' | 'DTE' | 'Otro'>('DIN');
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [docsError, setDocsError] = useState('');
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
 
   // Form state
   const [portal, setPortal] = useState(PORTALS[0]);
@@ -45,6 +59,7 @@ export default function ComprasWebPage() {
     setCostoEnvio('');
     setProductRows([emptyProductRow()]);
     setErrors({});
+    setEditOrderId(null);
   };
 
   const addRow = () => setProductRows(prev => [...prev, emptyProductRow()]);
@@ -83,21 +98,110 @@ export default function ComprasWebPage() {
         costoUnit: 0,
       }));
 
-    addPedidoWeb({
-      portal,
-      orden: orden.trim(),
-      fecha,
-      tc: Number(tc),
-      costoEnvioIntern: Number(costoEnvio) || 0,
-      productos,
-    });
+    if (editOrderId) {
+      updatePedidoWeb(editOrderId, {
+        portal,
+        orden: orden.trim(),
+        fecha,
+        tc: Number(tc),
+        costoEnvioIntern: Number(costoEnvio) || 0,
+        productos,
+      });
+    } else {
+      addPedidoWeb({
+        portal,
+        orden: orden.trim(),
+        fecha,
+        tc: Number(tc),
+        costoEnvioIntern: Number(costoEnvio) || 0,
+        productos,
+      });
+    }
 
     setModalOpen(false);
     resetForm();
   };
 
+  const handleEdit = (order: typeof pedidosWeb[0]) => {
+    setPortal(order.portal);
+    setOrden(order.orden);
+    setFecha(order.fecha);
+    setTc(order.tc ? String(order.tc) : '');
+    setCostoEnvio(order.costoEnvioIntern ? String(order.costoEnvioIntern) : '');
+    setProductRows(order.productos.map(p => ({
+      nombre: p.nombre,
+      ean: p.ean,
+      cant: String(p.cant),
+      precio: p.precioUSD ? String(p.precioUSD) : (p.precioCLP && order.tc ? String(Math.round(p.precioCLP / order.tc)) : ''),
+      pctCosteo: p.pctCosteo ? String(p.pctCosteo) : '0',
+    })));
+    setEditOrderId(order.id);
+    setModalOpen(true);
+  };
+
   const orderTotal = (order: typeof pedidosWeb[0]) =>
     order.productos.reduce((s, p) => s + p.precioCLP * p.cant, 0);
+
+  const selectedOrder = docsOrderId ? pedidosWeb.find(o => o.id === docsOrderId) : undefined;
+
+  const openDocsModal = (orderId: string) => {
+    setDocsOrderId(orderId);
+    setDocsModalOpen(true);
+    setDocNombre('');
+    setDocTipo('DIN');
+    setDocFile(null);
+    setDocsError('');
+  };
+
+  const closeDocsModal = () => {
+    setDocsModalOpen(false);
+    setDocsOrderId(null);
+    setDocNombre('');
+    setDocTipo('DIN');
+    setDocFile(null);
+    setDocsError('');
+    setIsUploadingDoc(false);
+  };
+
+  const handleUploadDocumento = async () => {
+    if (!docsOrderId) return;
+    if (!docNombre.trim()) {
+      setDocsError('El nombre del documento es requerido.');
+      return;
+    }
+    if (!docFile) {
+      setDocsError('Selecciona un archivo para subir.');
+      return;
+    }
+
+    try {
+      setIsUploadingDoc(true);
+      setDocsError('');
+      await addDocumentoAduaneroWebOrder(docsOrderId, {
+        nombre: docNombre.trim(),
+        tipo: docTipo,
+        fileName: docFile.name,
+        file: docFile,
+      });
+      setDocNombre('');
+      setDocTipo('DIN');
+      setDocFile(null);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo subir el documento. Intenta nuevamente.';
+      setDocsError(message);
+    } finally {
+      setIsUploadingDoc(false);
+    }
+  };
+
+  const handleRemoveDocumento = async (orderId: string, fileName: string) => {
+    try {
+      await removeDocumentoAduaneroWebOrder(orderId, fileName);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo eliminar el documento.';
+      setDocsError(message);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -126,6 +230,8 @@ export default function ComprasWebPage() {
                 <TableHead>N° Orden</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="text-right">Total</TableHead>
+                <TableHead>Docs</TableHead>
+                <TableHead>Acciones</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -139,6 +245,17 @@ export default function ComprasWebPage() {
                   <TableCell className="text-right">
                     <PriceDisplay amount={orderTotal(order)} currency="CLP" />
                   </TableCell>
+                  <TableCell>
+                    <Button size="xs" variant="ghost" onClick={() => openDocsModal(order.id)}>
+                      <FileText className="w-4 h-4" />
+                      {(order.documentosAduaneros || []).length}
+                    </Button>
+                  </TableCell>
+                  <TableCell>
+                    <Button size="xs" variant="ghost" onClick={() => handleEdit(order)}>
+                      Editar
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -150,7 +267,7 @@ export default function ComprasWebPage() {
       <Modal
         isOpen={modalOpen}
         onClose={() => { setModalOpen(false); resetForm(); }}
-        title="Nuevo Pedido Web"
+        title={editOrderId ? 'Editar Pedido Web' : 'Nuevo Pedido Web'}
         size="lg"
       >
         <div className="space-y-4">
@@ -256,7 +373,89 @@ export default function ComprasWebPage() {
           <Button variant="ghost" onClick={() => { setModalOpen(false); resetForm(); }}>
             Cancelar
           </Button>
-          <Button onClick={handleSubmit}>Crear Pedido</Button>
+          <Button onClick={handleSubmit}>
+            {editOrderId ? 'Guardar Cambios' : 'Crear Pedido'}
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      <Modal
+        isOpen={docsModalOpen}
+        onClose={closeDocsModal}
+        title={selectedOrder ? `Documentos aduaneros · ${selectedOrder.id}` : 'Documentos aduaneros'}
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              label="Nombre del documento"
+              value={docNombre}
+              onChange={e => setDocNombre(e.target.value)}
+              placeholder="Ej: DIN importación mayo"
+            />
+            <Select
+              label="Tipo"
+              value={docTipo}
+              onChange={e => setDocTipo(e.target.value as 'DIN' | 'DTE' | 'Otro')}
+            >
+              <option value="DIN">DIN</option>
+              <option value="DTE">DTE</option>
+              <option value="Otro">Otro</option>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-foreground">Archivo</label>
+            <input
+              type="file"
+              onChange={e => setDocFile(e.target.files?.[0] || null)}
+              className="w-full px-3 py-2 text-sm rounded-lg border border-border bg-input-background text-foreground"
+            />
+            {docsError && <p className="text-xs text-destructive">{docsError}</p>}
+          </div>
+
+          <div className="border border-border rounded-lg">
+            <div className="px-4 py-3 border-b border-border">
+              <p className="text-sm font-medium text-foreground">Documentos cargados</p>
+            </div>
+            <div className="p-3 space-y-2 max-h-64 overflow-y-auto">
+              {(selectedOrder?.documentosAduaneros || []).length === 0 ? (
+                <p className="text-sm text-muted-foreground">No hay documentos asociados.</p>
+              ) : (
+                (selectedOrder?.documentosAduaneros || []).map((doc) => (
+                  <div key={`${doc.fileName}-${doc.fileUrl}`} className="flex items-center justify-between gap-3 p-2 rounded border border-border">
+                    <div className="min-w-0">
+                      <p className="text-sm text-foreground truncate">{doc.nombre}</p>
+                      <p className="text-xs text-muted-foreground">{doc.tipo} · {doc.fileName}</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <a href={doc.fileUrl} target="_blank" rel="noreferrer">
+                        <Button type="button" size="sm" variant="ghost">
+                          <ExternalLink className="w-4 h-4" />
+                        </Button>
+                      </a>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => selectedOrder && handleRemoveDocumento(selectedOrder.id, doc.fileName)}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+
+        <ModalFooter>
+          <Button variant="ghost" onClick={closeDocsModal}>Cerrar</Button>
+          <Button onClick={handleUploadDocumento} disabled={isUploadingDoc || !selectedOrder}>
+            <Upload className="w-4 h-4" />
+            {isUploadingDoc ? 'Subiendo...' : 'Subir documento'}
+          </Button>
         </ModalFooter>
       </Modal>
     </div>

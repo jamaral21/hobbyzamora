@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
-import { ShipmentsRole, ROLE_PAGES } from '../data/shipmentsMockData';
+import { ShipmentsRole, ROLE_PAGES } from '../data/shipmentsDomain';
 
 const STORAGE_KEY = 'shipments_role';
 
