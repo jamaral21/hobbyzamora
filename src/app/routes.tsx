@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router';
+import { createBrowserRouter, redirect } from 'react-router';
 
 // Navigation
 import NavigationPage from './pages/NavigationPage';
@@ -75,6 +75,10 @@ export const router = createBrowserRouter([
   {
     path: '/store/presales',
     Component: PresalesPage,
+  },
+  {
+    path: '/store/mis-preventas',
+    loader: () => redirect('/store/presales'),
   },
   {
     path: '/store/product/:id',
