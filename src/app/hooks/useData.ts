@@ -126,10 +126,13 @@ export function useDashboardStats(startDate?: string, endDate?: string, productI
   );
 }
 
-export function useSalesChart(days?: number, productIds?: string[], options?: { enabled?: boolean }) {
+export function useSalesChart(
+  params?: { days?: number; startDate?: string; endDate?: string; productIds?: string[] },
+  options?: { enabled?: boolean }
+) {
   return useFetch(
-    () => analyticsAPI.getSalesChart(days, productIds),
-    [days, productIds?.join(',')],
+    () => analyticsAPI.getSalesChart(params),
+    [params?.days, params?.startDate, params?.endDate, params?.productIds?.join(',')],
     options
   );
 }

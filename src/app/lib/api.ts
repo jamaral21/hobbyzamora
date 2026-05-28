@@ -520,7 +520,7 @@ export const ordersAPI = {
     search?: string;
     productIds?: string[];
     page?: number;
-    limit?: number;
+    limit?: number | 'all';
   }) => {
     const searchParams = new URLSearchParams();
     if (params?.status) searchParams.set('status', params.status);
@@ -530,7 +530,7 @@ export const ordersAPI = {
     if (params?.search) searchParams.set('search', params.search);
     if (params?.productIds?.length) searchParams.set('productIds', params.productIds.join(','));
     if (params?.page) searchParams.set('page', String(params.page));
-    if (params?.limit) searchParams.set('limit', String(params.limit));
+    if (params?.limit !== undefined) searchParams.set('limit', String(params.limit));
     
     const query = searchParams.toString();
     return fetchAPI<{
@@ -707,10 +707,12 @@ export const analyticsAPI = {
     return fetchAPI<DashboardStats>(`/analytics/dashboard${query ? `?${query}` : ''}`, undefined, 'admin');
   },
 
-  getSalesChart: (days?: number, productIds?: string[]) => {
+  getSalesChart: (paramsInput?: { days?: number; startDate?: string; endDate?: string; productIds?: string[] }) => {
     const params = new URLSearchParams();
-    if (days) params.set('days', String(days));
-    if (productIds?.length) params.set('productIds', productIds.join(','));
+    if (paramsInput?.days) params.set('days', String(paramsInput.days));
+    if (paramsInput?.startDate) params.set('startDate', paramsInput.startDate);
+    if (paramsInput?.endDate) params.set('endDate', paramsInput.endDate);
+    if (paramsInput?.productIds?.length) params.set('productIds', paramsInput.productIds.join(','));
     const query = params.toString();
     return fetchAPI<Array<{ date: string; sales: number; revenue: number }>>(`/analytics/sales-chart${query ? `?${query}` : ''}`, undefined, 'admin');
   },
@@ -965,10 +967,11 @@ export const presaleAPI = {
     fetchAPI<{ reservations: PresaleReservation[] }>('/presale/my', undefined, 'customer'),
 
   // ── Admin ──
-  adminList: (params?: { productId?: string; status?: string; page?: number; limit?: number }) => {
+  adminList: (params?: { productId?: string; status?: string; search?: string; page?: number; limit?: number }) => {
     const sp = new URLSearchParams();
     if (params?.productId) sp.set('productId', params.productId);
     if (params?.status) sp.set('status', params.status);
+    if (params?.search) sp.set('search', params.search);
     if (params?.page) sp.set('page', String(params.page));
     if (params?.limit) sp.set('limit', String(params.limit));
     const q = sp.toString();

@@ -106,13 +106,22 @@ export default function DashboardPage() {
   const { data: stats, isLoading: statsLoading } = useDashboardStats(range.start, range.end, productIdsParam, {
     enabled: isAuthenticated,
   });
-  const { data: chartData, isLoading: chartLoading } = useSalesChart(
-    datePreset === 'today' ? 1 : datePreset === 'week' ? 7 : 30,
-    productIdsParam,
-    { enabled: isAuthenticated }
-  );
+  const salesChartParams = datePreset === 'custom'
+    ? {
+        startDate: range.start || undefined,
+        endDate: range.end || undefined,
+        productIds: productIdsParam,
+      }
+    : {
+        days: datePreset === 'today' ? 1 : datePreset === 'week' ? 7 : 30,
+        productIds: productIdsParam,
+      };
+
+  const { data: chartData, isLoading: chartLoading } = useSalesChart(salesChartParams, {
+    enabled: isAuthenticated,
+  });
   const { data: ordersData, isLoading: ordersLoading } = useOrders(
-    { startDate: range.start, endDate: range.end, limit: 100, productIds: productIdsParam },
+    { startDate: range.start, endDate: range.end, limit: 'all', productIds: productIdsParam },
     { enabled: isAuthenticated }
   );
   const { data: inventoryData, error: inventoryError } = useInventoryDiscrepancy(selectedProductIds, {

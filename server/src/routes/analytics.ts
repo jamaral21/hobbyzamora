@@ -216,19 +216,36 @@ router.get('/dashboard', authenticate, requireRole('ADMIN', 'STAFF'), async (req
 // Get sales chart data
 router.get('/sales-chart', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) => {
   try {
-    const { days = '10', productIds } = req.query;
+    const { days = '10', startDate, endDate, productIds } = req.query;
     const parsedDays = parseInt(days as string, 10);
     const numDays = Number.isFinite(parsedDays) && parsedDays > 0 ? parsedDays : 10;
+    const parsedStartDate = parseDateParam(startDate);
+    const parsedEndDate = parseDateParam(endDate);
     const filteredProductIds = parseProductIdsParam(productIds);
     const hasProductFilter = filteredProductIds.length > 0;
 
+    if ((startDate && !parsedStartDate) || (endDate && !parsedEndDate)) {
+      return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const rangeEndExclusive = parsedEndDate
+      ? new Date(parsedEndDate.getTime() + 24 * 60 * 60 * 1000)
+      : new Date(today.getTime() + 24 * 60 * 60 * 1000);
+    const rangeStart = parsedStartDate
+      ? parsedStartDate
+      : new Date(rangeEndExclusive.getTime() - numDays * 24 * 60 * 60 * 1000);
+
+    if (rangeStart >= rangeEndExclusive) {
+      return res.status(400).json({ error: 'startDate must be before or equal to endDate' });
+    }
+
     const chartData: Array<{ date: string; sales: number; revenue: number }> = [];
 
-    for (let i = numDays - 1; i >= 0; i--) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      date.setHours(0, 0, 0, 0);
-
+    for (let date = new Date(rangeStart); date < rangeEndExclusive; date.setDate(date.getDate() + 1)) {
+      const currentDate = new Date(date);
       const nextDate = new Date(date);
       nextDate.setDate(nextDate.getDate() + 1);
 
@@ -238,7 +255,7 @@ router.get('/sales-chart', authenticate, requireRole('ADMIN', 'STAFF'), async (r
             productId: { in: filteredProductIds },
             order: {
               createdAt: {
-                gte: date,
+                gte: currentDate,
                 lt: nextDate,
               },
               status: { notIn: ['CANCELLED', 'REFUNDED'] },
@@ -253,7 +270,7 @@ router.get('/sales-chart', authenticate, requireRole('ADMIN', 'STAFF'), async (r
         );
 
         chartData.push({
-          date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          date: currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
           sales: Math.round(filteredRevenue * 100) / 100,
           revenue: Math.round(filteredRevenue * 100) / 100,
         });
@@ -264,7 +281,7 @@ router.get('/sales-chart', authenticate, requireRole('ADMIN', 'STAFF'), async (r
       const orders = await prisma.order.findMany({
         where: {
           createdAt: {
-            gte: date,
+            gte: currentDate,
             lt: nextDate,
           },
           status: { notIn: ['CANCELLED', 'REFUNDED'] },
@@ -276,7 +293,7 @@ router.get('/sales-chart', authenticate, requireRole('ADMIN', 'STAFF'), async (r
       const revenue = orders.reduce((sum, o) => sum + parseFloat(o.total.toString()), 0);
 
       chartData.push({
-        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        date: currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         sales: Math.round(sales * 100) / 100,
         revenue: Math.round(revenue * 100) / 100,
       });

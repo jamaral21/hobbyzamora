@@ -234,6 +234,7 @@ export function PresalesPage() {
     try {
       const data = await presaleAPI.adminList({
         status: statusFilter || undefined,
+        search: search.trim() || undefined,
         page,
         limit: 30,
       });
@@ -244,14 +245,14 @@ export function PresalesPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, search]);
 
-  const loadProducts = async () => {
+  const loadProducts = useCallback(async () => {
     try {
       const data = await productsAPI.getAll({ presale: true, status: 'ALL', limit: 100 }, 'admin');
       setProducts(data.products);
     } catch { /* noop */ }
-  };
+  }, []);
 
   const loadProductReservationCounts = useCallback(async () => {
     try {
@@ -285,11 +286,17 @@ export function PresalesPage() {
   }, []);
 
   useEffect(() => {
-    loadReservations();
+    const timeout = setTimeout(() => {
+      loadReservations(1);
+    }, 1000);
+    return () => clearTimeout(timeout);
+  }, [loadReservations]);
+
+  useEffect(() => {
     loadProducts();
     loadGlobalStats();
     loadProductReservationCounts();
-  }, [loadReservations, loadGlobalStats, loadProductReservationCounts]);
+  }, [loadProducts, loadGlobalStats, loadProductReservationCounts]);
 
   const handleConfirmArrival = async (productId: string) => {
     setConfirmingId(productId);
@@ -444,18 +451,6 @@ export function PresalesPage() {
   // Stats
   const stats = globalStats;
 
-  // Filtered by search
-  const filtered = reservations.filter((r) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      r.user.name.toLowerCase().includes(q) ||
-      r.user.email.toLowerCase().includes(q) ||
-      r.product.name.toLowerCase().includes(q) ||
-      r.product.sku.toLowerCase().includes(q)
-    );
-  });
-
   return (
     <AdminLayout>
     <div className="space-y-6 relative">
@@ -592,7 +587,7 @@ export function PresalesPage() {
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
         </div>
         <button
-          onClick={() => loadReservations()}
+          onClick={() => loadReservations(1)}
           className="px-3 py-2 text-sm rounded-lg border border-border hover:bg-secondary transition-colors"
         >
           Aplicar
@@ -605,7 +600,7 @@ export function PresalesPage() {
           <div className="flex items-center justify-center py-16">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
-        ) : filtered.length === 0 ? (
+        ) : reservations.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground text-sm">
             No hay reservas que coincidan con los filtros.
           </div>
@@ -625,7 +620,7 @@ export function PresalesPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((r) => {
+                {reservations.map((r) => {
                   const cfg = STATUS_CONFIG[r.status] ?? STATUS_CONFIG.PENDING;
                   const img = r.product.images?.[0];
                   const isExpired =

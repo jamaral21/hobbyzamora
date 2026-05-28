@@ -223,12 +223,21 @@ router.get('/admin/list', authenticate, requireRole('ADMIN', 'STAFF'), async (re
   try {
     const productId = req.query.productId as string | undefined;
     const status = req.query.status as string | undefined;
+    const search = (req.query.search as string | undefined)?.trim();
     const page = (req.query.page as string) ?? '1';
     const limit = (req.query.limit as string) ?? '50';
 
     const where: any = {};
     if (productId) where.productId = productId;
     if (status) where.status = status;
+    if (search) {
+      where.OR = [
+        { user: { name: { contains: search } } },
+        { user: { email: { contains: search } } },
+        { product: { name: { contains: search } } },
+        { product: { sku: { contains: search } } },
+      ];
+    }
 
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
 

@@ -65,6 +65,12 @@ router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) =>
       limit = '50' 
     } = req.query;
 
+    const parsedPage = parseInt(page as string, 10);
+    const pageNumber = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
+    const noLimit = limit === 'all';
+    const parsedLimit = parseInt(limit as string, 10);
+    const limitNumber = !noLimit && Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 50;
+
     const baseWhere: any = {};
 
     if (source) {
@@ -103,7 +109,7 @@ router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) =>
       ...(status ? { status } : {}),
     };
 
-    const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
+    const skip = noLimit ? undefined : (pageNumber - 1) * limitNumber;
 
     const [orders, total, groupedStatusCounts] = await Promise.all([
       prisma.order.findMany({
@@ -116,8 +122,8 @@ router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) =>
           },
           payments: true,
         },
-        skip,
-        take: parseInt(limit as string),
+        ...(skip !== undefined ? { skip } : {}),
+        ...(!noLimit ? { take: limitNumber } : {}),
         orderBy: { createdAt: 'desc' },
       }),
       prisma.order.count({ where }),
@@ -166,10 +172,10 @@ router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) =>
         })),
       })),
       pagination: {
-        page: parseInt(page as string),
-        limit: parseInt(limit as string),
+        page: pageNumber,
+        limit: noLimit ? total : limitNumber,
         total,
-        totalPages: Math.ceil(total / parseInt(limit as string)),
+        totalPages: noLimit ? 1 : Math.ceil(total / limitNumber),
       },
       statusCounts,
     });
