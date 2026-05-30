@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import crypto from 'crypto';
 import { prisma } from '../index.js';
 import { getPresaleUnavailableReason } from '../lib/presaleUtils.js';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
@@ -32,24 +31,180 @@ const formatPOSProduct = (product: any) => {
   };
 };
 
-// Getnet Chile (PlacetoPay) configuration
-const GETNET_ENDPOINT = process.env.GETNET_ENDPOINT || 'https://checkout.test.getnet.cl';
-const GETNET_LOGIN = process.env.GETNET_LOGIN || '';
-const GETNET_TRANKEY = process.env.GETNET_TRANKEY || '';
+// Getnet POS Integrado (C2C) configuration
+const GETNET_C2C_BASE_URL = process.env.GETNET_C2C_BASE_URL || 'https://api-uat-getnet-posintegrado.ione.cl';
+const GETNET_C2C_CLIENT_ID = process.env.GETNET_C2C_CLIENT_ID || '';
+const GETNET_C2C_CLIENT_SECRET = process.env.GETNET_C2C_CLIENT_SECRET || '';
+const GETNET_C2C_TERMINAL_ID = process.env.GETNET_C2C_TERMINAL_ID || '';
+const GETNET_C2C_BRANCH_ID = Number(process.env.GETNET_C2C_BRANCH_ID || '0');
+const GETNET_C2C_SERIAL_NUMBER = process.env.GETNET_C2C_SERIAL_NUMBER || '';
+const GETNET_C2C_WEBHOOK = process.env.GETNET_C2C_WEBHOOK || '';
+const GETNET_C2C_EMPLOYEE_ID = Number(process.env.GETNET_C2C_EMPLOYEE_ID || '1');
 
-function generatePlacetoPayAuth() {
-  const rawNonce = crypto.randomBytes(16).toString('hex');
-  const seed = new Date().toISOString();
-  const digest = crypto
-    .createHash('sha256')
-    .update(rawNonce + seed + GETNET_TRANKEY)
-    .digest('base64');
-  return {
-    login: GETNET_LOGIN,
-    tranKey: digest,
-    nonce: Buffer.from(rawNonce).toString('base64'),
-    seed,
+type GetnetPosCommandResult = {
+  raw: any;
+  posTxId: string;
+};
+
+let getnetC2CTokenCache: { token: string; expiresAt: number } | null = null;
+
+function isGetnetC2CConfigured(): boolean {
+  return Boolean(
+    GETNET_C2C_CLIENT_ID
+    && GETNET_C2C_CLIENT_SECRET
+    && GETNET_C2C_TERMINAL_ID
+    && GETNET_C2C_BRANCH_ID > 0
+    && GETNET_C2C_SERIAL_NUMBER
+  );
+}
+
+function extractGetnetToken(payload: any): string {
+  const candidates = [
+    payload?.token,
+    payload?.access_token,
+    payload?.accessToken,
+    payload?.data?.token,
+    payload?.data?.access_token,
+    payload?.data?.accessToken,
+    payload?.result?.token,
+  ];
+
+  const token = candidates.find((value) => typeof value === 'string' && value.trim().length > 0);
+  if (!token) {
+    throw new Error('No fue posible obtener token de autenticacion de Getnet C2C.');
+  }
+
+  return token;
+}
+
+async function getGetnetC2CToken(): Promise<string> {
+  const now = Date.now();
+  if (getnetC2CTokenCache && now < getnetC2CTokenCache.expiresAt) {
+    return getnetC2CTokenCache.token;
+  }
+
+  const body = new URLSearchParams({
+    clientId: GETNET_C2C_CLIENT_ID,
+    clientSecret: GETNET_C2C_CLIENT_SECRET,
+  });
+
+  const response = await fetch(`${GETNET_C2C_BASE_URL}/api/postxs/auth`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: body.toString(),
+  });
+
+  const authJson = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    console.error('Getnet C2C auth error:', authJson);
+    throw new Error('Getnet C2C rechazo la autenticacion.');
+  }
+
+  const token = extractGetnetToken(authJson);
+  getnetC2CTokenCache = {
+    token,
+    expiresAt: now + (50 * 60 * 1000),
   };
+
+  return token;
+}
+
+async function sendGetnetC2CCommand(path: string, payload: Record<string, unknown>): Promise<GetnetPosCommandResult> {
+  const token = await getGetnetC2CToken();
+  const response = await fetch(`${GETNET_C2C_BASE_URL}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const json = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    console.error('Getnet C2C command error:', path, json);
+    throw new Error('Getnet C2C rechazo el comando enviado al POS.');
+  }
+
+  const posTxIdCandidate = [
+    json?.idPosTxs,
+    json?.idpostxs,
+    json?.idPostxs,
+    json?.id,
+    json?.data?.idPosTxs,
+    json?.data?.id,
+  ].find((value) => value !== undefined && value !== null);
+
+  const posTxId = posTxIdCandidate ? String(posTxIdCandidate) : '';
+  if (!posTxId) {
+    console.error('Getnet C2C command without idPosTxs:', path, json);
+    throw new Error('Getnet C2C no devolvio id de operacion.');
+  }
+
+  return { raw: json, posTxId };
+}
+
+function parseGetnetC2CStatus(payload: any): 'APPROVED' | 'DECLINED' | 'PENDING' {
+  const candidateValues = [
+    payload?.status,
+    payload?.txStatus,
+    payload?.transactionStatus,
+    payload?.result,
+    payload?.message,
+    payload?.description,
+    payload?.response?.status,
+    payload?.response?.description,
+    payload?.data?.status,
+    payload?.data?.message,
+  ]
+    .filter((value) => value !== undefined && value !== null)
+    .map((value) => String(value).toUpperCase());
+
+  const responseCodeValues = [
+    payload?.responseCode,
+    payload?.code,
+    payload?.statusCode,
+    payload?.data?.responseCode,
+  ]
+    .filter((value) => value !== undefined && value !== null)
+    .map((value) => String(value));
+
+  if (responseCodeValues.some((code) => code === '0' || code === '00')) {
+    return 'APPROVED';
+  }
+
+  if (candidateValues.some((value) => value.includes('APPROV') || value.includes('APROB') || value.includes('AUTORIZ') || value.includes('SUCCESS') || value.includes('EXITOS'))) {
+    return 'APPROVED';
+  }
+
+  if (candidateValues.some((value) => value.includes('DECLIN') || value.includes('RECHAZ') || value.includes('ERROR') || value.includes('CANCEL') || value.includes('DENEG'))) {
+    return 'DECLINED';
+  }
+
+  return 'PENDING';
+}
+
+async function queryGetnetC2COperation(posTxId: string): Promise<any> {
+  const token = await getGetnetC2CToken();
+  const response = await fetch(`${GETNET_C2C_BASE_URL}/api/PosTxs/${posTxId}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const json = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    console.error('Getnet C2C query error:', posTxId, json);
+    throw new Error('No fue posible consultar la operacion en Getnet C2C.');
+  }
+
+  return json;
 }
 
 const router = Router();
@@ -276,8 +431,8 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
     const tax = 0; // Tax already included in displayed prices
     const total = subtotal;
 
-    // --- Getnet card payment: create a pending order and initiate checkout session ---
-    if (paymentMethod === 'CARD' && GETNET_LOGIN) {
+    // --- Getnet C2C card payment: create pending order and send command to POS terminal ---
+    if (paymentMethod === 'CARD' && isGetnetC2CConfigured()) {
       const orderNumber = generatePOSOrderNumber();
 
       const order = await prisma.order.create({
@@ -297,7 +452,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
           items: { create: orderItems },
           payments: {
             create: {
-              method: 'GETNET',
+              method: 'GETNET_POS',
               status: 'PENDING',
               amount: total,
             },
@@ -306,50 +461,30 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
         include: { items: true, payments: true },
       });
 
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-      const apiUrl = `http://localhost:${process.env.PORT || 3001}`;
-      const expiration = new Date(Date.now() + 30 * 60 * 1000).toISOString();
-
-      const sessionData = {
-        auth: generatePlacetoPayAuth(),
-        payment: {
-          reference: orderNumber,
-          description: `Venta POS ${orderNumber} - HobbyZamora`,
-          amount: { currency: 'CLP', total: Math.round(total) },
-          allowPartial: false,
-        },
-        expiration,
-        returnUrl: `${frontendUrl}/admin/pos`,
-        notificationUrl: `${apiUrl}/api/payments/getnet/callback`,
-        ipAddress: (req.ip === '::1' ? '127.0.0.1' : req.ip) || '127.0.0.1',
-        userAgent: req.headers['user-agent'] || 'HobbyZamora-POS/1.0',
-        buyer: {
-          name: customerName.split(' ')[0],
-          surname: customerName.split(' ').slice(1).join(' ') || 'N/A',
-          email: customerEmail || 'pos@hobbyzamora.cl',
-        },
+      const salePayload: Record<string, unknown> = {
+        idTerminal: GETNET_C2C_TERMINAL_ID,
+        idSucursal: GETNET_C2C_BRANCH_ID,
+        serialNumber: GETNET_C2C_SERIAL_NUMBER,
+        command: 100,
+        amount: Math.round(total),
+        ticketNumber: orderNumber,
+        printOnPos: false,
+        saleType: 0,
+        employeeId: GETNET_C2C_EMPLOYEE_ID,
+        customId: order.id,
       };
 
-      const sessionResp = await fetch(`${GETNET_ENDPOINT}/api/session`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(sessionData),
-      });
-      const sessionJson = await sessionResp.json();
-
-      if (sessionJson.status?.status === 'ERROR' || !sessionJson.processUrl) {
-        console.error('Getnet POS session error:', JSON.stringify(sessionJson));
-        return res.status(500).json({
-          error: 'No se pudo iniciar sesión de pago con Getnet',
-          detail: sessionJson.status?.message || 'Error desconocido',
-        });
+      if (GETNET_C2C_WEBHOOK) {
+        salePayload.webhook = GETNET_C2C_WEBHOOK;
       }
+
+      const saleCommand = await sendGetnetC2CCommand('/api/postxs/sale', salePayload);
 
       await prisma.payment.update({
         where: { id: order.payments[0].id },
         data: {
-          getnetPaymentId: String(sessionJson.requestId),
-          getnetCheckoutUrl: sessionJson.processUrl,
+          getnetPaymentId: saleCommand.posTxId,
+          getnetCheckoutUrl: null,
         },
       });
 
@@ -384,8 +519,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
         subtotal: parseFloat(order.subtotal.toString()),
         total: parseFloat(order.total.toString()),
         change: 0,
-        checkoutUrl: sessionJson.processUrl,
-        requestId: sessionJson.requestId,
+        getnetOperationId: saleCommand.posTxId,
         paymentId: order.payments[0].id,
         items: order.items.map(i => ({
           ...i,
@@ -470,6 +604,117 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
   } catch (error) {
     console.error('Create POS sale error:', error);
     res.status(500).json({ error: 'Failed to create sale' });
+  }
+});
+
+router.post('/getnet/status', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) => {
+  try {
+    const { paymentId } = req.body as { paymentId?: string };
+
+    if (!paymentId) {
+      return res.status(400).json({ error: 'paymentId is required' });
+    }
+
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: { order: { include: { items: true } } },
+    });
+
+    if (!payment || payment.order.source !== 'POS') {
+      return res.status(404).json({ error: 'POS payment not found' });
+    }
+
+    if (payment.method !== 'GETNET_POS' || !payment.getnetPaymentId) {
+      return res.status(400).json({ error: 'Payment is not a Getnet POS operation' });
+    }
+
+    if (payment.status === 'APPROVED') {
+      return res.json({
+        id: payment.id,
+        status: payment.status,
+        orderId: payment.orderId,
+        orderStatus: payment.order.status,
+      });
+    }
+
+    const operation = await queryGetnetC2COperation(payment.getnetPaymentId);
+    const normalizedStatus = parseGetnetC2CStatus(operation);
+
+    if (normalizedStatus === 'APPROVED') {
+      await prisma.$transaction(async (tx) => {
+        await tx.payment.update({
+          where: { id: payment.id },
+          data: {
+            status: 'APPROVED',
+            paidAt: payment.paidAt || new Date(),
+          },
+        });
+
+        if (payment.order.status !== 'DELIVERED') {
+          await tx.order.update({
+            where: { id: payment.orderId },
+            data: { status: 'DELIVERED' },
+          });
+        }
+      });
+
+      return res.json({
+        id: payment.id,
+        status: 'APPROVED',
+        orderId: payment.orderId,
+        orderStatus: 'DELIVERED',
+        getnet: operation,
+      });
+    }
+
+    if (normalizedStatus === 'DECLINED') {
+      await prisma.$transaction(async (tx) => {
+        await tx.payment.update({
+          where: { id: payment.id },
+          data: { status: 'DECLINED' },
+        });
+
+        if (payment.order.status !== 'CANCELLED') {
+          for (const item of payment.order.items) {
+            const product = await tx.product.findUnique({
+              where: { id: item.productId },
+              select: { isPresale: true },
+            });
+
+            if (!product?.isPresale) {
+              await tx.product.update({
+                where: { id: item.productId },
+                data: { stock: { increment: item.quantity } },
+              });
+            }
+          }
+
+          await tx.order.update({
+            where: { id: payment.orderId },
+            data: { status: 'CANCELLED' },
+          });
+        }
+      });
+
+      return res.json({
+        id: payment.id,
+        status: 'DECLINED',
+        orderId: payment.orderId,
+        orderStatus: 'CANCELLED',
+        getnet: operation,
+      });
+    }
+
+    return res.json({
+      id: payment.id,
+      status: 'PENDING',
+      orderId: payment.orderId,
+      orderStatus: payment.order.status,
+      getnet: operation,
+    });
+  } catch (error) {
+    console.error('Getnet POS status error:', error);
+    res.status(500).json({ error: 'No se pudo verificar estado de pago en terminal Getnet' });
   }
 });
 

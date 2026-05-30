@@ -382,8 +382,6 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
         customerEmail,
         customerPhone,
         addressId: savedAddress?.id || null,
-        customerRut: customerRut || null,
-        deliveryMethod: deliveryMethod || null,
         shippingStreet: savedAddress?.street || shippingAddress?.street,
         shippingCity: savedAddress?.city || shippingAddress?.city,
         shippingState: savedAddress?.state || shippingAddress?.state,

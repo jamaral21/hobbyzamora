@@ -677,9 +677,15 @@ export const posAPI = {
     amountPaid?: number;
     notes?: string;
   }) =>
-    fetchAPI<Order & { change: number; checkoutUrl?: string; requestId?: number; paymentId?: string }>('/pos/sale', {
+    fetchAPI<Order & { change: number; paymentId?: string; getnetOperationId?: string }>('/pos/sale', {
       method: 'POST',
       body: JSON.stringify(data),
+    }, 'admin'),
+
+  getGetnetStatus: (paymentId: string) =>
+    fetchAPI<{ id: string; status: string; orderId: string; orderStatus: string }>('/pos/getnet/status', {
+      method: 'POST',
+      body: JSON.stringify({ paymentId }),
     }, 'admin'),
 
   getTodaySales: () =>

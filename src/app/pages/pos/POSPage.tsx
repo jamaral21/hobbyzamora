@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Search, Barcode, Loader2, UserPlus, X, CheckCircle2, ExternalLink } from 'lucide-react';
+import { Search, Barcode, Loader2, UserPlus, X, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent } from '../../components/design-system/Card';
 import { Button } from '../../components/design-system/Button';
 import { POSCart } from '../../components/pos/POSCart';
@@ -7,7 +7,7 @@ import { POSProductGrid } from '../../components/pos/POSProductGrid';
 import { PaymentSelector, PaymentMethod } from '../../components/pos/PaymentSelector';
 import { Modal } from '../../components/design-system/Modal';
 import { usePOSProducts, useCustomers, useMutation } from '../../hooks/useData';
-import { posAPI, paymentsAPI, Customer } from '../../lib/api';
+import { posAPI, Customer } from '../../lib/api';
 
 interface Product {
   id: string;
@@ -39,7 +39,7 @@ export default function POSPage() {
   const [getnetPending, setGetnetPending] = useState<{
     orderNumber: string;
     paymentId: string;
-    checkoutUrl: string;
+    operationId?: string;
     isChecking: boolean;
   } | null>(null);
 
@@ -180,14 +180,14 @@ export default function POSPage() {
       });
 
       if (method === 'card') {
-        if (!result.checkoutUrl || !result.paymentId) {
-          throw new Error('Getnet no devolvió datos de checkout para el pago con tarjeta.');
+        if (!result.paymentId) {
+          throw new Error('Getnet no devolvio datos de operacion para el pago con tarjeta.');
         }
 
         setGetnetPending({
           orderNumber: result.orderNumber,
           paymentId: result.paymentId,
-          checkoutUrl: result.checkoutUrl,
+          operationId: result.getnetOperationId,
           isChecking: false,
         });
         return;
@@ -201,14 +201,16 @@ export default function POSPage() {
     }
   };
 
-  const checkGetnetPayment = async () => {
+  const checkGetnetPayment = async (silent = false) => {
     if (!getnetPending) return;
 
-    setPaymentError(null);
+    if (!silent) {
+      setPaymentError(null);
+    }
     setGetnetPending((prev) => (prev ? { ...prev, isChecking: true } : prev));
 
     try {
-      const status = await paymentsAPI.querySession({ paymentId: getnetPending.paymentId });
+      const status = await posAPI.getGetnetStatus(getnetPending.paymentId);
 
       if (status.status === 'APPROVED') {
         setSaleResult({ orderNumber: getnetPending.orderNumber, change: 0, method: 'card' });
@@ -224,13 +226,29 @@ export default function POSPage() {
         return;
       }
 
-      setPaymentError('El pago aún está pendiente en Getnet. Vuelve a verificar en unos segundos.');
+      if (!silent) {
+        setPaymentError('El pago aun esta pendiente en Getnet. Vuelve a verificar en unos segundos.');
+      }
     } catch (error: any) {
-      setPaymentError(error?.message || 'No se pudo verificar el estado del pago en Getnet.');
+      setPaymentError(error?.message || 'No se pudo verificar el estado del pago en la terminal Getnet.');
     } finally {
       setGetnetPending((prev) => (prev ? { ...prev, isChecking: false } : prev));
     }
   };
+
+  useEffect(() => {
+    if (!isPaymentModalOpen || !getnetPending || getnetPending.isChecking) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      checkGetnetPayment(true);
+    }, 3000);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [isPaymentModalOpen, getnetPending]);
 
   const handleClosePaymentModal = () => {
     setIsPaymentModalOpen(false);
@@ -383,20 +401,18 @@ export default function POSPage() {
             <div className="rounded-xl border border-border p-4 bg-secondary/40">
               <p className="text-sm text-muted-foreground">Orden</p>
               <p className="text-base text-foreground">#{getnetPending.orderNumber}</p>
+              {getnetPending.operationId && (
+                <>
+                  <p className="text-sm text-muted-foreground mt-2">Operacion terminal</p>
+                  <p className="text-base text-foreground">{getnetPending.operationId}</p>
+                </>
+              )}
               <p className="text-sm text-muted-foreground mt-2">
-                Abre Getnet para completar el pago y luego verifica el estado.
+                Cobro enviado a la terminal de Getnet. Completa el pago en el POS y luego verifica estado.
               </p>
             </div>
 
             <div className="space-y-2">
-              <Button
-                fullWidth
-                onClick={() => window.open(getnetPending.checkoutUrl, '_blank', 'noopener,noreferrer')}
-                className="flex items-center justify-center gap-2"
-              >
-                <ExternalLink className="w-4 h-4" />
-                Abrir Checkout Getnet
-              </Button>
               <Button
                 variant="outline"
                 fullWidth
