@@ -10,7 +10,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
-import { calcMargin, marginColor } from './shipmentsMockData';
+import { calcMargin, marginColor } from './shipmentsDomain';
 
 // ============================================================
 // Property 9: Margin calculation and color assignment

@@ -3,7 +3,7 @@ import { Landmark, TrendingUp, TrendingDown } from 'lucide-react';
 import { useShipmentsData } from '../../contexts/ShipmentsDataContext';
 import { Card } from '../../components/design-system/Card';
 import { PriceDisplay } from '../../components/shipments/PriceDisplay';
-import { calcBalanceSheet } from '../../data/shipmentsMockData';
+import { calcBalanceSheet } from '../../data/shipmentsDomain';
 
 export default function BalancePage() {
   const { ventas, boletas, stockChile, compras, cajas, comprasChile } = useShipmentsData();

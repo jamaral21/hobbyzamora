@@ -20,7 +20,7 @@ import {
   type SalesChannel,
   type InternacionData,
   calcDisponibleBySku,
-} from '../data/shipmentsMockData';
+} from '../data/shipmentsDomain';
 
 // ============================================================
 // Pure state transformation functions (mirror context mutations)

@@ -19,7 +19,7 @@ import {
   type BoxState,
   type BoxProduct,
   type ChileStockEntry,
-} from './shipmentsMockData';
+} from './shipmentsDomain';
 
 // ============================================================
 // Generators

@@ -71,6 +71,13 @@ export interface InternacionData {
   total: number;
 }
 
+export interface CustomsDocument {
+  nombre: string;
+  tipo: 'DIN' | 'DTE' | 'Otro';
+  fileName: string;
+  fileUrl: string; // Puede ser base64, blob url o ruta
+}
+
 export interface Box {
   id: string;
   fecha: string;
@@ -82,6 +89,7 @@ export interface Box {
   tc_envio: number;
   internacion: InternacionData | null;
   productos: BoxProduct[];
+  documentosAduaneros?: CustomsDocument[];
 }
 
 // === Stock Chile ===
@@ -116,6 +124,7 @@ export interface WebOrder {
   costoEnvioIntern: number;       // CLP
   tc: number;
   productos: WebOrderProduct[];
+  documentosAduaneros?: CustomsDocument[];
 }
 
 // === Compras Chile (Local Purchases) ===
@@ -325,7 +334,7 @@ export function calcInvoiceTotals(
 ): { subtotalJPY: number; totalJPY: number; totalCLP: number } {
   const subtotalJPY = items.reduce((sum, i) => sum + i.precioU * i.cant, 0);
   const totalJPY = subtotalJPY * (1 + comisionPct / 100);
-  const totalCLP = tc > 0 ? totalJPY / tc : 0;
+  const totalCLP = tc > 0 ? totalJPY * tc : 0;
   return { subtotalJPY, totalJPY, totalCLP };
 }
 
@@ -478,10 +487,10 @@ export function calcBalanceSheet(
   // Inventario Chile: cant * costoUnit
   const invChile = stockChile.reduce((s, e) => s + e.cant * e.costoUnit, 0);
 
-  // Inventario Japón: compras con bodega=japon, precioU * cant / tc
+  // Inventario Japón: compras con bodega=japon, precioU * cant * tc
   const invJapon = compras
     .filter((c) => c.bodega === 'japon' && c.tc && c.tc > 0)
-    .reduce((s, c) => s + (c.precioU * c.cant) / (c.tc as number), 0);
+    .reduce((s, c) => s + (c.precioU * c.cant) * (c.tc as number), 0);
 
   // IVA Crédito: internaciones + compras locales con ivaCredito
   const ivaInternaciones = cajas
@@ -700,22 +709,22 @@ export const mockBoletas: Invoice[] = [
   {
     id: 'BOL-2026-001', fecha: '2026-01-20', productos: 2,
     subtotalJPY: 56800, comision: 13, totalJPY: 64184, tc: 6.2,
-    totalCLP: 10352, estado: 'pagado',
+    totalCLP: 397941, estado: 'pagado',
   },
   {
     id: 'BOL-2026-002', fecha: '2026-02-12', productos: 2,
     subtotalJPY: 40000, comision: 13, totalJPY: 45200, tc: 6.1,
-    totalCLP: 7410, estado: 'sin_pagar',
+    totalCLP: 275720, estado: 'sin_pagar',
   },
   {
     id: 'BOL-2026-003', fecha: '2026-03-08', productos: 1,
     subtotalJPY: 25600, comision: 13, totalJPY: 28928, tc: 6.0,
-    totalCLP: 4821, estado: 'sin_pagar',
+    totalCLP: 173568, estado: 'sin_pagar',
   },
   {
     id: 'BOL-2026-GAV-001', fecha: '2026-01-05', productos: 'GAV Enero 2026',
     subtotalJPY: 25550, comision: 13, totalJPY: 28872, tc: 6.2,
-    totalCLP: 4657, estado: 'pagado',
+    totalCLP: 179006, estado: 'pagado',
   },
 ];
 
