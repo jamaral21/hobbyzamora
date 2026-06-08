@@ -4,7 +4,7 @@ import { StoreLayout } from '../../components/layout/StoreLayout';
 import { CheckoutSummary } from '../../components/store/CheckoutSummary';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/design-system/Card';
 import { Badge } from '../../components/design-system/Badge';
-import { Input } from '../../components/design-system/Input';
+import { Input, Select } from '../../components/design-system/Input';
 import { Button } from '../../components/design-system/Button';
 import { CreditCard, Lock, Loader2, MapPin, ShieldCheck, ChevronRight, AlertCircle, Wallet, Landmark, Package, Truck, Users, Check } from 'lucide-react';
 import { useCartStore } from '../../lib/store';
@@ -62,6 +62,118 @@ const DELIVERY_OPTIONS: Array<{
   },
 ];
 
+type CountryIdentityConfig = {
+  country: string;
+  isoCode: string;
+  dialCode: string;
+  documentLabel: string;
+  placeholder: string;
+};
+
+type PostalCodeConfig = {
+  label: string;
+  placeholder: string;
+};
+
+type RegionConfig = {
+  label: string;
+  placeholder: string;
+};
+
+const DEFAULT_POSTAL_CODE: PostalCodeConfig = {
+  label: 'Código postal',
+  placeholder: 'Ej: 10001',
+};
+
+const POSTAL_CODE_BY_COUNTRY: Record<string, PostalCodeConfig> = {
+  Chile: { label: 'Código postal', placeholder: 'Ej: 8320000' },
+  'Estados Unidos': { label: 'ZIP Code', placeholder: 'Ej: 10001' },
+  Canadá: { label: 'Postal Code', placeholder: 'Ej: K1A 0B1' },
+  Brasil: { label: 'CEP', placeholder: 'Ej: 01001-000' },
+  Argentina: { label: 'Código postal', placeholder: 'Ej: C1000' },
+  México: { label: 'Código postal', placeholder: 'Ej: 03100' },
+  Colombia: { label: 'Código postal', placeholder: 'Ej: 110111' },
+  Perú: { label: 'Código postal', placeholder: 'Ej: 15001' },
+  Uruguay: { label: 'Código postal', placeholder: 'Ej: 11000' },
+  Paraguay: { label: 'Código postal', placeholder: 'Ej: 1209' },
+  Bolivia: { label: 'Código postal', placeholder: 'Ej: 0000' },
+  Ecuador: { label: 'Código postal', placeholder: 'Ej: 170150' },
+  Venezuela: { label: 'Código postal', placeholder: 'Ej: 1010' },
+  Panamá: { label: 'Código postal', placeholder: 'Ej: 0801' },
+  'Costa Rica': { label: 'Código postal', placeholder: 'Ej: 10101' },
+  'República Dominicana': { label: 'Código postal', placeholder: 'Ej: 10101' },
+  Guatemala: { label: 'Código postal', placeholder: 'Ej: 01001' },
+  'El Salvador': { label: 'Código postal', placeholder: 'Ej: 1101' },
+  Honduras: { label: 'Código postal', placeholder: 'Ej: 11101' },
+  Nicaragua: { label: 'Código postal', placeholder: 'Ej: 11001' },
+};
+
+const DEFAULT_REGION: RegionConfig = {
+  label: 'Región',
+  placeholder: 'Ej: Región Metropolitana',
+};
+
+const REGION_BY_COUNTRY: Record<string, RegionConfig> = {
+  Chile: { label: 'Región', placeholder: 'Ej: Región Metropolitana' },
+  'Estados Unidos': { label: 'Estado', placeholder: 'Ej: California' },
+  México: { label: 'Estado', placeholder: 'Ej: Jalisco' },
+  Argentina: { label: 'Provincia', placeholder: 'Ej: Buenos Aires' },
+  Canadá: { label: 'Provincia/Territorio', placeholder: 'Ej: Ontario' },
+  Brasil: { label: 'Estado', placeholder: 'Ej: São Paulo' },
+  Colombia: { label: 'Departamento', placeholder: 'Ej: Antioquia' },
+  Perú: { label: 'Departamento', placeholder: 'Ej: Lima' },
+  Bolivia: { label: 'Departamento', placeholder: 'Ej: La Paz' },
+  Ecuador: { label: 'Provincia', placeholder: 'Ej: Pichincha' },
+  Venezuela: { label: 'Estado', placeholder: 'Ej: Miranda' },
+  Uruguay: { label: 'Departamento', placeholder: 'Ej: Montevideo' },
+  Paraguay: { label: 'Departamento', placeholder: 'Ej: Central' },
+  Panamá: { label: 'Provincia', placeholder: 'Ej: Panamá' },
+  'Costa Rica': { label: 'Provincia', placeholder: 'Ej: San José' },
+  'República Dominicana': { label: 'Provincia', placeholder: 'Ej: Santo Domingo' },
+  Guatemala: { label: 'Departamento', placeholder: 'Ej: Guatemala' },
+  'El Salvador': { label: 'Departamento', placeholder: 'Ej: San Salvador' },
+  Honduras: { label: 'Departamento', placeholder: 'Ej: Cortés' },
+  Nicaragua: { label: 'Departamento', placeholder: 'Ej: Managua' },
+};
+
+const AMERICA_COUNTRIES: CountryIdentityConfig[] = [
+  { country: 'Antigua y Barbuda', isoCode: 'AG', dialCode: '+1-268', documentLabel: 'NIN', placeholder: 'Número de identificación' },
+  { country: 'Argentina', isoCode: 'AR', dialCode: '+54', documentLabel: 'DNI', placeholder: '12.345.678' },
+  { country: 'Bahamas', isoCode: 'BS', dialCode: '+1-242', documentLabel: 'NIN', placeholder: 'Número de identificación' },
+  { country: 'Barbados', isoCode: 'BB', dialCode: '+1-246', documentLabel: 'NID', placeholder: 'Número de identificación' },
+  { country: 'Belice', isoCode: 'BZ', dialCode: '+501', documentLabel: 'TIN', placeholder: 'Número de identificación' },
+  { country: 'Bolivia', isoCode: 'BO', dialCode: '+591', documentLabel: 'CI/NIT', placeholder: '1234567' },
+  { country: 'Brasil', isoCode: 'BR', dialCode: '+55', documentLabel: 'CPF', placeholder: '123.456.789-00' },
+  { country: 'Canadá', isoCode: 'CA', dialCode: '+1', documentLabel: 'SIN', placeholder: '123 456 789' },
+  { country: 'Chile', isoCode: 'CL', dialCode: '+56', documentLabel: 'RUT', placeholder: '12.345.678-9' },
+  { country: 'Colombia', isoCode: 'CO', dialCode: '+57', documentLabel: 'CC/NIT', placeholder: '1.234.567.890' },
+  { country: 'Costa Rica', isoCode: 'CR', dialCode: '+506', documentLabel: 'Cédula', placeholder: '123456789' },
+  { country: 'Cuba', isoCode: 'CU', dialCode: '+53', documentLabel: 'CI', placeholder: 'Número de carné' },
+  { country: 'Dominica', isoCode: 'DM', dialCode: '+1-767', documentLabel: 'NIN', placeholder: 'Número de identificación' },
+  { country: 'Ecuador', isoCode: 'EC', dialCode: '+593', documentLabel: 'Cédula/RUC', placeholder: '0912345678' },
+  { country: 'El Salvador', isoCode: 'SV', dialCode: '+503', documentLabel: 'DUI/NIT', placeholder: '01234567-8' },
+  { country: 'Estados Unidos', isoCode: 'US', dialCode: '+1', documentLabel: 'SSN/EIN', placeholder: '123-45-6789' },
+  { country: 'Granada', isoCode: 'GD', dialCode: '+1-473', documentLabel: 'NID', placeholder: 'Número de identificación' },
+  { country: 'Guatemala', isoCode: 'GT', dialCode: '+502', documentLabel: 'DPI/NIT', placeholder: '1234 56789 0101' },
+  { country: 'Guyana', isoCode: 'GY', dialCode: '+592', documentLabel: 'TIN', placeholder: 'Número de identificación' },
+  { country: 'Haití', isoCode: 'HT', dialCode: '+509', documentLabel: 'NIF', placeholder: 'Número de identificación fiscal' },
+  { country: 'Honduras', isoCode: 'HN', dialCode: '+504', documentLabel: 'RTN/Identidad', placeholder: '0801-1990-12345' },
+  { country: 'Jamaica', isoCode: 'JM', dialCode: '+1-876', documentLabel: 'TRN', placeholder: '123-456-789' },
+  { country: 'México', isoCode: 'MX', dialCode: '+52', documentLabel: 'CURP/RFC', placeholder: 'ABCD901231HDFRRN09' },
+  { country: 'Nicaragua', isoCode: 'NI', dialCode: '+505', documentLabel: 'Cédula/RUC', placeholder: '001-010190-0000A' },
+  { country: 'Panamá', isoCode: 'PA', dialCode: '+507', documentLabel: 'Cédula/RUC', placeholder: '8-123-456' },
+  { country: 'Paraguay', isoCode: 'PY', dialCode: '+595', documentLabel: 'CI/RUC', placeholder: '1234567-8' },
+  { country: 'Perú', isoCode: 'PE', dialCode: '+51', documentLabel: 'DNI/RUC', placeholder: '12345678' },
+  { country: 'República Dominicana', isoCode: 'DO', dialCode: '+1-809', documentLabel: 'Cédula/RNC', placeholder: '001-1234567-8' },
+  { country: 'San Cristóbal y Nieves', isoCode: 'KN', dialCode: '+1-869', documentLabel: 'NID', placeholder: 'Número de identificación' },
+  { country: 'San Vicente y las Granadinas', isoCode: 'VC', dialCode: '+1-784', documentLabel: 'NIN', placeholder: 'Número de identificación' },
+  { country: 'Santa Lucía', isoCode: 'LC', dialCode: '+1-758', documentLabel: 'NIN', placeholder: 'Número de identificación' },
+  { country: 'Surinam', isoCode: 'SR', dialCode: '+597', documentLabel: 'ID', placeholder: 'Número de identificación' },
+  { country: 'Trinidad y Tobago', isoCode: 'TT', dialCode: '+1-868', documentLabel: 'NID/BIR', placeholder: 'Número de identificación' },
+  { country: 'Uruguay', isoCode: 'UY', dialCode: '+598', documentLabel: 'CI/RUT', placeholder: '1.234.567-8' },
+  { country: 'Venezuela', isoCode: 'VE', dialCode: '+58', documentLabel: 'Cédula/RIF', placeholder: 'V-12345678' },
+];
+
 export default function CheckoutPage() {
   return (
     <StoreLayout>
@@ -91,6 +203,9 @@ function CheckoutForm() {
     firstName: '', lastName: '', email: '', phone: '', rut: '',
     address: '', city: '', state: '', zipCode: '', country: 'Chile'
   });
+  const selectedCountryConfig = AMERICA_COUNTRIES.find((item) => item.country === shippingData.country) || AMERICA_COUNTRIES.find((item) => item.country === 'Chile')!;
+  const selectedPostalCodeConfig = POSTAL_CODE_BY_COUNTRY[shippingData.country] || DEFAULT_POSTAL_CODE;
+  const selectedRegionConfig = REGION_BY_COUNTRY[shippingData.country] || DEFAULT_REGION;
   const navigate = useNavigate();
   const { items: cartItems, clearCart, getSubtotal } = useCartStore();
 
@@ -172,8 +287,8 @@ function CheckoutForm() {
     if (selectedOption?.needsAddress && !selectedSavedAddress) {
       if (!shippingData.address.trim()) errors.address = 'Dirección requerida';
       if (!shippingData.city.trim()) errors.city = 'Ciudad requerida';
-      if (!shippingData.state.trim()) errors.state = 'Región requerida';
-      if (!shippingData.zipCode.trim()) errors.zipCode = 'Código postal requerido';
+      if (!shippingData.state.trim()) errors.state = `${selectedRegionConfig.label} requerido`;
+      if (!shippingData.zipCode.trim()) errors.zipCode = `${selectedPostalCodeConfig.label} requerido`;
     }
 
     if (deliveryMethod === 'starken-sucursal' && !starkenCity.trim()) {
@@ -242,7 +357,7 @@ function CheckoutForm() {
             city: shippingData.city,
             state: shippingData.state,
             zipCode: shippingData.zipCode,
-            country: 'Chile',
+            country: shippingData.country,
           },
         } : {}),
         paymentMethod,
@@ -486,7 +601,28 @@ function CheckoutForm() {
                         {shippingErrors.phone && <p className="text-xs text-red-400 mt-1">{shippingErrors.phone}</p>}
                       </div>
                       <div>
-                        <Input label="RUT *" placeholder="12.345.678-9" value={shippingData.rut} onChange={(e) => updateField('rut', e.target.value)} />
+                        <Select
+                          label="País *"
+                          value={shippingData.country}
+                          onChange={(e) => updateField('country', e.target.value)}
+                        >
+                          {AMERICA_COUNTRIES.map((item) => (
+                            <option key={item.isoCode} value={item.country}>
+                              {item.country}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                      <div>
+                        <Input
+                          label={`${selectedCountryConfig.documentLabel} *`}
+                          placeholder={selectedCountryConfig.placeholder}
+                          value={shippingData.rut}
+                          onChange={(e) => updateField('rut', e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Código país: {selectedCountryConfig.dialCode} ({selectedCountryConfig.isoCode})
+                        </p>
                         {shippingErrors.rut && <p className="text-xs text-red-400 mt-1">{shippingErrors.rut}</p>}
                       </div>
 
@@ -524,17 +660,17 @@ function CheckoutForm() {
                               {shippingErrors.city && <p className="text-xs text-red-400 mt-1">{shippingErrors.city}</p>}
                             </div>
                             <div>
-                              <Input label="Región *" placeholder="RM" value={shippingData.state} onChange={(e) => updateField('state', e.target.value)} />
+                              <Input label={`${selectedRegionConfig.label} *`} placeholder={selectedRegionConfig.placeholder} value={shippingData.state} onChange={(e) => updateField('state', e.target.value)} />
                               {shippingErrors.state && <p className="text-xs text-red-400 mt-1">{shippingErrors.state}</p>}
                             </div>
                           </div>
                           <div className="grid grid-cols-2 gap-4">
                             <div>
-                              <Input label="Código Postal" placeholder="8320000" value={shippingData.zipCode} onChange={(e) => updateField('zipCode', e.target.value)} />
+                              <Input label={`${selectedPostalCodeConfig.label} *`} placeholder={selectedPostalCodeConfig.placeholder} value={shippingData.zipCode} onChange={(e) => updateField('zipCode', e.target.value)} />
                               {shippingErrors.zipCode && <p className="text-xs text-red-400 mt-1">{shippingErrors.zipCode}</p>}
                             </div>
                             <div>
-                              <Input label="País" value="Chile" disabled />
+                              <Input label="País" value={shippingData.country} disabled />
                             </div>
                           </div>
                         </>
@@ -796,7 +932,7 @@ function CheckoutForm() {
                             {shippingData.firstName} {shippingData.lastName}
                           </p>
                           <p className="text-xs text-muted-foreground">{shippingData.email} · {shippingData.phone}</p>
-                          <p className="text-xs text-muted-foreground">RUT: {shippingData.rut}</p>
+                          <p className="text-xs text-muted-foreground">{selectedCountryConfig.documentLabel}: {shippingData.rut} ({selectedCountryConfig.isoCode})</p>
                         </>
                       );
                     })()}
