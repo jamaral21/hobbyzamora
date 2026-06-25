@@ -20,7 +20,7 @@ import {
   type PurchaseRecord,
   type SalesChannel,
   type InternacionData,
-} from './shipmentsMockData';
+} from './shipmentsDomain';
 
 // ============================================================
 // Generators (fast-check arbitraries)

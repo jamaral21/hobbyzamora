@@ -15,7 +15,7 @@ import {
   type PurchaseRecord,
   type PaymentState,
   type LocationState,
-} from './shipmentsMockData';
+} from './shipmentsDomain';
 
 // ============================================================
 // Generators

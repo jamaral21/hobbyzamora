@@ -13,8 +13,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
-import { calcCostoUnitario, validateCosteoPercentages } from './shipmentsMockData';
-import type { Box, BoxProduct, InternacionData } from './shipmentsMockData';
+import { calcCostoUnitario, validateCosteoPercentages } from './shipmentsDomain';
+import type { Box, BoxProduct, InternacionData } from './shipmentsDomain';
 
 // ============================================================
 // Generators

@@ -23,9 +23,9 @@ const mockContextValue = {
     { id: 'SC-002', _sku: 'JP-0001', nombre: 'Product A', ean: '', caja: 'Caja0', cant: 2, costoUnit: 8000, precioVenta: 12990 },
   ],
   boletas: [
-    { id: 'BOL-2026-001', fecha: '2026-01-20', productos: 2, subtotalJPY: 50000, comision: 13, totalJPY: 56500, tc: 6.0, totalCLP: 9417, estado: 'pagado' as const },
-    { id: 'BOL-2026-002', fecha: '2026-02-12', productos: 1, subtotalJPY: 30000, comision: 13, totalJPY: 33900, tc: 6.0, totalCLP: 5650, estado: 'sin_pagar' as const },
-    { id: 'BOL-2026-003', fecha: '2026-03-08', productos: 1, subtotalJPY: 20000, comision: 13, totalJPY: 22600, tc: 6.0, totalCLP: 3767, estado: 'sin_pagar' as const },
+    { id: 'BOL-2026-001', fecha: '2026-01-20', productos: 2, subtotalJPY: 50000, comision: 13, totalJPY: 56500, tc: 6.0, totalCLP: 339000, estado: 'pagado' as const },
+    { id: 'BOL-2026-002', fecha: '2026-02-12', productos: 1, subtotalJPY: 30000, comision: 13, totalJPY: 33900, tc: 6.0, totalCLP: 203400, estado: 'sin_pagar' as const },
+    { id: 'BOL-2026-003', fecha: '2026-03-08', productos: 1, subtotalJPY: 20000, comision: 13, totalJPY: 22600, tc: 6.0, totalCLP: 135600, estado: 'sin_pagar' as const },
   ],
   ventas: [] as any[],
   calcDisponibleBySku: (sku: string) => {
@@ -41,7 +41,7 @@ vi.mock('../../contexts/ShipmentsDataContext', () => ({
 }));
 
 // Mock formatCLP
-vi.mock('../../data/shipmentsMockData', async (importOriginal) => {
+vi.mock('../../data/shipmentsDomain', async (importOriginal) => {
   const actual = await importOriginal() as any;
   return {
     ...actual,
@@ -148,7 +148,7 @@ describe('DashboardPage', () => {
     const originalBoletas = mockContextValue.boletas;
     mockContextValue.boletas = [
       ...originalBoletas,
-      { id: 'BOL-2026-GAV-001', fecha: '2026-01-05', productos: 'GAV Enero', subtotalJPY: 25550, comision: 13, totalJPY: 28872, tc: 6.0, totalCLP: 4812, estado: 'pagado' as const },
+      { id: 'BOL-2026-GAV-001', fecha: '2026-01-05', productos: 'GAV Enero', subtotalJPY: 25550, comision: 13, totalJPY: 28872, tc: 6.0, totalCLP: 173232, estado: 'pagado' as const },
     ];
     render(<DashboardPage />);
     expect(screen.queryByText('Boleta GAV pendiente')).toBeNull();

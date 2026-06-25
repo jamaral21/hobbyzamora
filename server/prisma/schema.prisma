@@ -65,7 +65,7 @@ model Product {
   price       Decimal
   cost        Decimal
   stock       Int      @default(0)
-  initialStock Int     @default(0)
+  initialStock Int      @default(0)
   images      String
   status      String   @default("ACTIVE")
 
@@ -89,20 +89,6 @@ model Product {
   presaleReservations PresaleReservation[]
 
   @@map("products")
-}
-
-model ProductSection {
-  id             String   @id @default(uuid())
-  parentCategory String
-  name           String
-  slug           String
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  @@unique([parentCategory, name])
-  @@unique([parentCategory, slug])
-  @@map("product_sections")
 }
 
 model ProductVariant {
@@ -366,4 +352,264 @@ model PresaleReservation {
   // 1 reservation per user per product
   @@unique([userId, productId])
   @@map("presale_reservations")
+}
+
+// ==================== SHIPMENTS ERP ====================
+
+// 1. Registro de Compras en Japón
+model ShipmentsPurchase {
+  id        String   @id @default(uuid())
+  sku       String   @unique                    // AUTO-GENERADO: JP-0001, JP-0002, etc.
+  fecha     DateTime
+  tipo      String                             // 'Producto' | 'Arriendo/App' | etc.
+  nombre    String
+  ean       String?
+  tarjeta   String                             // método de pago
+  precioU   Decimal                            // precio unitario en ¥
+  cant      Int                                // cantidad TOTAL comprada (nunca se modifica)
+  total     Decimal                            // precioU * cant
+  estado    String   @default("por_pagar")     // 'por_pagar' | 'esp_pago' | 'pagado'
+  bodega    String   @default("japon")         // 'japon' | 'transito' | 'chile'
+  tc        Decimal?                           // tipo de cambio ¥→CLP al momento de compra
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  boxProducts     ShipmentsBoxProduct[]
+  gavMonthControl ShipmentsGavMonthControl?    // link a GAV si es gasto fijo
+  
+  @@index([sku])
+  @@index([estado])
+  @@index([bodega])
+  @@map("shipments_purchases")
+}
+
+// 2. Boletas (Invoices)
+model ShipmentsInvoice {
+  id          String   @id @default(uuid())
+  invoiceId   String   @unique                 // 'BOL-2026-001', 'BOL-2026-GAV-001', 'BOL-ENVIO-*'
+  fecha       DateTime
+  subtotalJPY Decimal
+  comision    Decimal                          // % comisión aplicada
+  totalJPY    Decimal
+  tc          Decimal                          // tipo de cambio al momento de la boleta
+  totalCLP    Decimal
+  estado      String   @default("sin_pagar")   // 'sin_pagar' | 'pagado'
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  items ShipmentsInvoiceItem[]
+  
+  @@index([invoiceId])
+  @@index([estado])
+  @@map("shipments_invoices")
+}
+
+// 3. Líneas de Boletas
+model ShipmentsInvoiceItem {
+  id        String   @id @default(uuid())
+  invoiceId String
+  invoice   ShipmentsInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  
+  fecha     DateTime
+  tipo      String
+  nombre    String
+  ean       String?
+  precioU   Decimal                            // precio unitario en ¥
+  cant      Int
+  comPct    Decimal                            // % comisión de esta línea
+  tc        Decimal
+  createdAt DateTime @default(now())
+
+  @@index([invoiceId])
+  @@map("shipments_invoice_items")
+}
+
+// 4. Cajas / Envíos
+model ShipmentsBox {
+  id         String   @id @default(uuid())
+  boxId      String   @unique                  // nombre único: 'Caja_1_Abr26'
+  fecha      DateTime
+  estado     String   @default("transito")     // 'transito' | 'llegada' | 'costeada'
+  fleJpy     Decimal?                          // flete en ¥
+  moHoras    Decimal?                          // horas de mano de obra
+  moTarifa   Decimal?                          // CLP por hora
+  matJpy     Decimal?                          // materiales en ¥
+  tcEnvio    Decimal?                          // tipo de cambio para envío
+  pesoTotal  Decimal?                          // peso total de la caja
+  
+  // Internación (puede ser null o tener datos)
+  internacionArancel   Decimal?                // arancel en CLP
+  internacionIva       Decimal?                // IVA en CLP
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  productos ShipmentsBoxProduct[]
+  
+  @@index([boxId])
+  @@index([estado])
+  @@map("shipments_boxes")
+}
+
+// 5. Productos dentro de Cajas
+model ShipmentsBoxProduct {
+  id        String   @id @default(uuid())
+  boxId     String
+  box       ShipmentsBox @relation(fields: [boxId], references: [id], onDelete: Cascade)
+  compraId  String
+  compra    ShipmentsPurchase @relation(fields: [compraId], references: [id])
+  
+  sku       String                             // referencia al SKU original
+  nombre    String
+  ean       String?
+  cant      Int                                // cantidad enviada en esta caja
+  precioU   Decimal                            // precio unitario en ¥
+  tc        Decimal?                           // tipo de cambio
+  pesoUnit  Decimal?                           // peso unitario
+  fromManual Boolean @default(false)           // true si fue ingresado manualmente
+  createdAt DateTime @default(now())
+
+  @@index([boxId])
+  @@index([sku])
+  @@map("shipments_box_products")
+}
+
+// 6. Inventario en Chile después del Costeo
+model ShipmentsChileStock {
+  id         String   @id @default(uuid())
+  sku        String                           // referencia al SKU original
+  nombre     String
+  ean        String?
+  cajaId     String?                          // puede venir de una caja o de un pedido web
+  cant       Int
+  costoUnit  Decimal                          // costo unitario en CLP (calculado en costeo)
+  precioVenta Decimal?                        // precio de venta en CLP (editable)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([sku])
+  @@map("shipments_chile_stock")
+}
+
+// 7. Pedidos Web
+model ShipmentsWebOrder {
+  id              String   @id @default(uuid())
+  orderId         String   @unique            // 'WEB-001'
+  fecha           DateTime
+  portal          String                      // 'Amazon Japan' | 'Amazon USA' | 'Rakuten' | etc.
+  orden           String
+  estado          String   @default("pendiente")  // 'pendiente' | 'costeado'
+  costoEnvioIntern Decimal                   // costo envío internacional en CLP
+  tc              Decimal                    // tipo de cambio usado
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  productos ShipmentsWebOrderProduct[]
+  
+  @@index([orderId])
+  @@index([portal])
+  @@map("shipments_web_orders")
+}
+
+// 8. Productos de Pedidos Web
+model ShipmentsWebOrderProduct {
+  id          String   @id @default(uuid())
+  webOrderId  String
+  webOrder    ShipmentsWebOrder @relation(fields: [webOrderId], references: [id], onDelete: Cascade)
+  
+  nombre      String
+  ean         String?
+  cant        Int
+  precioUSD   Decimal
+  precioCLP   Decimal
+  pctCosteo   Decimal                         // % de costos fijos asignado
+  costoUnit   Decimal                         // costo unitario en CLP (calculado)
+  createdAt   DateTime @default(now())
+
+  @@index([webOrderId])
+  @@map("shipments_web_order_products")
+}
+
+// 9. Compras y Gastos Locales en Chile
+model ShipmentsLocalPurchase {
+  id          String   @id @default(uuid())
+  purchaseId  String   @unique                // 'CC-001'
+  fecha       DateTime
+  tipo        String                          // 'producto' | 'gasto'
+  docTipo     String                          // 'factura' | 'boleta'
+  proveedor   String
+  descripcion String
+  monto       Decimal                         // monto total en CLP
+  iva         Decimal?                        // IVA separado (solo facturas)
+  ivaCredito  Boolean @default(false)         // true si genera IVA crédito fiscal
+  estado      String   @default("pagado")     // 'pagado' | 'pendiente'
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([purchaseId])
+  @@index([tipo])
+  @@map("shipments_local_purchases")
+}
+
+// 10. Ventas Realizadas
+model ShipmentsSale {
+  id          String   @id @default(uuid())
+  saleId      String   @unique
+  fecha       DateTime
+  producto    String
+  ean         String?
+  cant        Int
+  precioVenta Decimal                         // precio de venta en CLP
+  costo       Decimal                         // costo unitario en CLP
+  total       Decimal                         // total en CLP
+  canal       String                          // 'Instagram' | 'TikTok' | 'Mercado Libre' | 'Web' | 'Local'
+  createdAt   DateTime @default(now())
+
+  @@index([fecha])
+  @@index([canal])
+  @@map("shipments_sales")
+}
+
+// 11. Gastos Fijos Mensuales de Chile
+model ShipmentsGavChile {
+  id          String   @id @default(uuid())
+  concepto    String                          // 'Arriendo bodega Chile' | 'Contador' | etc.
+  monto       Decimal                         // monto en CLP
+  adjunto     Boolean @default(false)         // true si se subió comprobante
+  estado      String   @default("pendiente")  // 'pendiente' | 'pagado'
+  docTipo     String?                         // 'factura' | 'boleta'
+  ivaCredito  Boolean @default(false)         // true si genera IVA crédito fiscal
+  fechaPago   DateTime?                       // fecha al confirmar
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([estado])
+  @@map("shipments_gav_chile")
+}
+
+// 12. Configuración del Sistema
+model ShipmentsConfig {
+  id            String   @id @default(uuid())
+  cuentas       String                        // JSON array de nombres de cuentas
+  metodosPago   String                        // JSON array de métodos de pago
+  arrBodegaJP   Decimal  @default(25000)      // arriendo bodega en ¥/mes
+  appBeyblade   Decimal  @default(550)        // app Beyblade en ¥/mes
+  comisionPct   Decimal  @default(13)         // % comisión habitual
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("shipments_config")
+}
+
+// Control de GAV mensual (genera alerta si no se creó boleta)
+model ShipmentsGavMonthControl {
+  id         String   @id @default(uuid())
+  mes        String   @unique                 // 'Abril 2026'
+  boletaId   String?                          // referencia a ShipmentsInvoice si fue generada
+  compraId   String   @unique
+  compra     ShipmentsPurchase @relation(fields: [compraId], references: [id])
+  createdAt  DateTime @default(now())
+
+  @@index([mes])
+  @@map("shipments_gav_month_control")
 }

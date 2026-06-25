@@ -11,7 +11,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
-import { calcInvoiceTotals } from './shipmentsMockData';
+import { calcInvoiceTotals } from './shipmentsDomain';
 
 // ============================================================
 // Generators
