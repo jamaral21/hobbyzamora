@@ -1,10 +1,13 @@
 import { createBrowserRouter, redirect } from 'react-router';
+import type { ComponentType } from 'react';
+import { Loader2 } from 'lucide-react';
 
 // Navigation
 import NavigationPage from './pages/NavigationPage';
 
 // Store Pages
 import HomePage from './pages/store/HomePage';
+import MaintenancePage from './pages/store/MaintenancePage';
 import ProductListingPage from './pages/store/ProductListingPage';
 import ProductDetailPage from './pages/store/ProductDetailPage';
 import CartPage from './pages/store/CartPage';
@@ -51,6 +54,27 @@ import EstadoResultadosPage from './pages/shipments/EstadoResultadosPage';
 import BalancePage from './pages/shipments/BalancePage';
 import FlujoCajaPage from './pages/shipments/FlujoCajaPage';
 import ConfiguracionPage from './pages/shipments/ConfiguracionPage';
+import { useAdminAuth } from './contexts/AdminAuthContext';
+
+function withStoreMaintenance(Page: ComponentType) {
+  return function StoreMaintenanceRoute() {
+    const { user, isLoading } = useAdminAuth();
+
+    if (isLoading) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
+          <Loader2 className="h-8 w-8 animate-spin text-amber-300" />
+        </div>
+      );
+    }
+
+    if (user) {
+      return <Page />;
+    }
+
+    return <MaintenancePage />;
+  };
+}
 
 export const router = createBrowserRouter([
   // Navigation Overview
@@ -62,19 +86,19 @@ export const router = createBrowserRouter([
   // Store Routes
   {
     path: '/',
-    Component: HomePage,
+    Component: withStoreMaintenance(HomePage),
   },
   {
     path: '/store',
-    Component: HomePage,
+    Component: withStoreMaintenance(HomePage),
   },
   {
     path: '/store/products',
-    Component: ProductListingPage,
+    Component: withStoreMaintenance(ProductListingPage),
   },
   {
     path: '/store/presales',
-    Component: PresalesPage,
+    Component: withStoreMaintenance(PresalesPage),
   },
   {
     path: '/store/mis-preventas',
@@ -82,23 +106,23 @@ export const router = createBrowserRouter([
   },
   {
     path: '/store/product/:id',
-    Component: ProductDetailPage,
+    Component: withStoreMaintenance(ProductDetailPage),
   },
   {
     path: '/store/cart',
-    Component: CartPage,
+    Component: withStoreMaintenance(CartPage),
   },
   {
     path: '/store/checkout',
-    Component: CheckoutPage,
+    Component: withStoreMaintenance(CheckoutPage),
   },
   {
     path: '/store/order-confirmation',
-    Component: OrderConfirmationPage,
+    Component: withStoreMaintenance(OrderConfirmationPage),
   },
   {
     path: '/store/account',
-    Component: AccountPage,
+    Component: withStoreMaintenance(AccountPage),
   },
   {
     path: '/reset-password',
