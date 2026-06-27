@@ -77,6 +77,47 @@ function extractGetnetToken(payload: any): string {
   return token;
 }
 
+async function readResponseBody(response: Response): Promise<{ parsed: any; rawText: string }> {
+  const rawText = await response.text();
+  let parsed: any = null;
+
+  if (rawText) {
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      parsed = rawText;
+    }
+  }
+
+  return { parsed, rawText };
+}
+
+function extractGetnetPosTxId(payload: any): string | null {
+  const candidates = [
+    payload?.idPosTxs,
+    payload?.idpostxs,
+    payload?.idPostxs,
+    payload?.id,
+    payload?.data?.idPosTxs,
+    payload?.data?.idPostxs,
+    payload?.data?.idpostxs,
+    payload?.data?.id,
+    payload?.data?.response?.idPosTxs,
+    payload?.data?.response?.id,
+    payload?.response?.idPosTxs,
+    payload?.response?.id,
+    payload?.response?.operationId,
+    payload?.data?.response?.operationId,
+    payload?.data?.operationId,
+    payload?.operationId,
+    payload?.transactionId,
+    payload?.data?.transactionId,
+  ];
+
+  const match = candidates.find((value) => value !== undefined && value !== null && String(value).trim().length > 0);
+  return match !== undefined ? String(match) : null;
+}
+
 async function getGetnetC2CToken(): Promise<string> {
   const now = Date.now();
   if (getnetC2CTokenCache && now < getnetC2CTokenCache.expiresAt) {
@@ -96,11 +137,11 @@ async function getGetnetC2CToken(): Promise<string> {
     body: body.toString(),
   });
 
-  const authJson = await response.json().catch(() => null);
+  const { parsed: authJson, rawText } = await readResponseBody(response);
 
   if (!response.ok) {
-    console.error('Getnet C2C auth error:', authJson);
-    throw new Error('Getnet C2C rechazo la autenticacion.');
+    console.error('Getnet C2C auth error:', { status: response.status, body: rawText, payload: authJson });
+    throw new Error(`Getnet C2C rechazo la autenticacion. Detalle: ${rawText || 'sin cuerpo'}`);
   }
 
   const token = extractGetnetToken(authJson);
@@ -123,26 +164,17 @@ async function sendGetnetC2CCommand(path: string, payload: Record<string, unknow
     body: JSON.stringify(payload),
   });
 
-  const json = await response.json().catch(() => null);
+  const { parsed: json, rawText } = await readResponseBody(response);
 
   if (!response.ok) {
-    console.error('Getnet C2C command error:', path, json);
-    throw new Error('Getnet C2C rechazo el comando enviado al POS.');
+    console.error('Getnet C2C command error:', { path, status: response.status, body: rawText, payload: json });
+    throw new Error(`Getnet C2C rechazo el comando enviado al POS. Detalle: ${rawText || 'sin cuerpo'}`);
   }
 
-  const posTxIdCandidate = [
-    json?.idPosTxs,
-    json?.idpostxs,
-    json?.idPostxs,
-    json?.id,
-    json?.data?.idPosTxs,
-    json?.data?.id,
-  ].find((value) => value !== undefined && value !== null);
-
-  const posTxId = posTxIdCandidate ? String(posTxIdCandidate) : '';
+  const posTxId = extractGetnetPosTxId(json);
   if (!posTxId) {
-    console.error('Getnet C2C command without idPosTxs:', path, json);
-    throw new Error('Getnet C2C no devolvio id de operacion.');
+    console.error('Getnet C2C command without idPosTxs:', { path, body: rawText, payload: json });
+    throw new Error(`Getnet C2C no devolvio id de operacion. Respuesta: ${rawText || 'sin cuerpo'}`);
   }
 
   return { raw: json, posTxId };
@@ -197,11 +229,11 @@ async function queryGetnetC2COperation(posTxId: string): Promise<any> {
     },
   });
 
-  const json = await response.json().catch(() => null);
+  const { parsed: json, rawText } = await readResponseBody(response);
 
   if (!response.ok) {
-    console.error('Getnet C2C query error:', posTxId, json);
-    throw new Error('No fue posible consultar la operacion en Getnet C2C.');
+    console.error('Getnet C2C query error:', { posTxId, status: response.status, body: rawText, payload: json });
+    throw new Error(`No fue posible consultar la operacion en Getnet C2C. Detalle: ${rawText || 'sin cuerpo'}`);
   }
 
   return json;
@@ -603,7 +635,9 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
     });
   } catch (error) {
     console.error('Create POS sale error:', error);
-    res.status(500).json({ error: 'Failed to create sale' });
+    const message = error instanceof Error ? error.message : 'Failed to create sale';
+    const statusCode = message.includes('Getnet C2C') ? 502 : 500;
+    res.status(statusCode).json({ error: message });
   }
 });
 
