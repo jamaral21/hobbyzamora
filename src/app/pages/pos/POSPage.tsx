@@ -35,6 +35,7 @@ export default function POSPage() {
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [paymentFlowState, setPaymentFlowState] = useState<'idle' | 'sending' | 'pending' | 'completed'>('idle');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [getnetPending, setGetnetPending] = useState<{
     orderNumber: string;
@@ -166,6 +167,8 @@ export default function POSPage() {
       card: 'CARD', cash: 'CASH', digital: 'TRANSFER',
     };
     setPaymentError(null);
+    setPaymentFlowState('sending');
+
     try {
       const result = await createSale.mutate({
         items: cartItems.map(item => ({ productId: item.id, quantity: item.quantity, price: item.price })),
@@ -190,13 +193,16 @@ export default function POSPage() {
           operationId: result.getnetOperationId,
           isChecking: false,
         });
+        setPaymentFlowState('pending');
         return;
       }
 
       setSaleResult({ orderNumber: result.orderNumber, change: result.change ?? 0, method });
       setCartItems([]);
       setSelectedCustomer(null);
+      setPaymentFlowState('completed');
     } catch (error: any) {
+      setPaymentFlowState('idle');
       setPaymentError(error?.message || 'Error en el pago. Intenta de nuevo.');
     }
   };
@@ -217,12 +223,14 @@ export default function POSPage() {
         setCartItems([]);
         setSelectedCustomer(null);
         setGetnetPending(null);
+        setPaymentFlowState('completed');
         return;
       }
 
       if (status.status === 'DECLINED' || status.status === 'CANCELLED') {
         setPaymentError('Pago rechazado en Getnet. Puedes reintentar o cambiar método de pago.');
         setGetnetPending(null);
+        setPaymentFlowState('idle');
         return;
       }
 
@@ -254,6 +262,7 @@ export default function POSPage() {
     setIsPaymentModalOpen(false);
     setSaleResult(null);
     setPaymentError(null);
+    setPaymentFlowState('idle');
     setGetnetPending(null);
   };
 
@@ -372,7 +381,7 @@ export default function POSPage() {
       <Modal
         isOpen={isPaymentModalOpen}
         onClose={handleClosePaymentModal}
-        title={saleResult ? 'Venta Completada' : getnetPending ? 'Pago con Getnet' : 'Método de Pago'}
+        title={saleResult ? 'Venta Completada' : paymentFlowState === 'sending' ? 'Enviando pago a la terminal' : getnetPending ? 'Pago con Getnet' : 'Método de Pago'}
         size="md"
       >
         {saleResult ? (
@@ -389,6 +398,18 @@ export default function POSPage() {
               </div>
             )}
             <Button fullWidth onClick={handleClosePaymentModal}>Nueva Venta</Button>
+          </div>
+        ) : paymentFlowState === 'sending' ? (
+          <div className="text-center py-6 space-y-4">
+            <div className="flex justify-center">
+              <Loader2 className="w-10 h-10 animate-spin text-primary" />
+            </div>
+            <div>
+              <h3 className="text-lg text-foreground">Enviando la compra a la terminal</h3>
+              <p className="text-sm text-muted-foreground mt-2">
+                El pago ya se está enviando a Getnet. Espera unos segundos mientras se confirma el estado.
+              </p>
+            </div>
           </div>
         ) : getnetPending ? (
           <div className="space-y-4">
