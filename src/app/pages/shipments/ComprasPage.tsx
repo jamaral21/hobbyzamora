@@ -171,24 +171,25 @@ export default function ComprasPage() {
                 const unitsInJapan = Math.max(0, c.cant - unitsInTransito - unitsInLlegada - unitsInChile);
 
                 return (
-                <TableRow key={c.id}>
-                  <TableCell className="font-[family-name:var(--font-mono)] text-xs">{c.sku}</TableCell>
-                  <TableCell>{c.fecha}</TableCell>
-                  <TableCell>{c.tipo}</TableCell>
-                  <TableCell className="max-w-[200px] truncate">{c.nombre}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{c.ean || '—'}</TableCell>
-                  <TableCell>{c.tarjeta}</TableCell>
-                  <TableCell className="text-right"><PriceDisplay amount={c.precioU} currency="JPY" /></TableCell>
-                  <TableCell className="text-right">{c.cant}</TableCell>
-                  <TableCell className="text-right"><PriceDisplay amount={c.total} currency="JPY" /></TableCell>
-                  <TableCell><StatusBadge status={c.estado} /></TableCell>
-                  <TableCell className="flex items-center gap-2">
-                    {unitsInJapan > 0 && <StatusBadge status={'japon'} />}
-                    {unitsInTransito > 0 && <StatusBadge status={'transito'} />}
-                    {unitsInLlegada > 0 && <StatusBadge status={'llegada'} />}
-                    {unitsInChile > 0 && <StatusBadge status={'chile'} />}
-                  </TableCell>
-                </TableRow>
+                  <TableRow key={c.id}>
+                    <TableCell className="font-[family-name:var(--font-mono)] text-xs">{c.sku}</TableCell>
+                    <TableCell>{c.fecha}</TableCell>
+                    <TableCell>{c.tipo}</TableCell>
+                    <TableCell className="max-w-[200px] truncate">{c.nombre}</TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{c.ean || '—'}</TableCell>
+                    <TableCell>{c.tarjeta}</TableCell>
+                    <TableCell className="text-right"><PriceDisplay amount={c.precioU} currency="JPY" /></TableCell>
+                    <TableCell className="text-right">{c.cant}</TableCell>
+                    <TableCell className="text-right"><PriceDisplay amount={c.total} currency="JPY" /></TableCell>
+                    <TableCell><StatusBadge status={c.estado} /></TableCell>
+                    <TableCell className="flex items-center gap-2">
+                      {unitsInJapan > 0 && <StatusBadge status={'japon'} />}
+                      {unitsInTransito > 0 && <StatusBadge status={'transito'} />}
+                      {unitsInLlegada > 0 && <StatusBadge status={'llegada'} />}
+                      {unitsInChile > 0 && <StatusBadge status={'chile'} />}
+                    </TableCell>
+                  </TableRow>
+                );
               })}
             </TableBody>
           </Table>
