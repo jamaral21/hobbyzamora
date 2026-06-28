@@ -248,12 +248,12 @@ export function calcCostoUnitario(box: Box, productPct: number, productCant: num
   if (productCant <= 0) return 0;
 
   const subtotalCLP = box.productos.reduce(
-    (sum, p) => sum + p.precioU * p.cant * (1 / box.tc_envio),
+    (sum, p) => sum + p.precioU * p.cant * box.tc_envio,
     0,
   );
-  const fleteCLP = box.flete_jpy / box.tc_envio;
+  const fleteCLP = box.flete_jpy * box.tc_envio;
   const moCLP = box.mo_horas * box.mo_tarifa;
-  const matCLP = box.mat_jpy / box.tc_envio;
+  const matCLP = box.mat_jpy * box.tc_envio;
   const internCLP = box.internacion ? box.internacion.arancel + box.internacion.iva : 0;
 
   const pctFraction = productPct / 100;
@@ -274,7 +274,7 @@ export function calcInvoiceTotals(
 ): { subtotalJPY: number; totalJPY: number; totalCLP: number } {
   const subtotalJPY = items.reduce((sum, i) => sum + i.precioU * i.cant, 0);
   const totalJPY = subtotalJPY * (1 + comisionPct / 100);
-  const totalCLP = tc > 0 ? totalJPY / tc : 0;
+  const totalCLP = tc > 0 ? totalJPY * tc : 0;
   return { subtotalJPY, totalJPY, totalCLP };
 }
 
@@ -327,7 +327,7 @@ export function calcIncomeStatement(
     .reduce((sum, g) => sum + g.monto, 0);
 
   const gavComprasLocalesTotal = comprasChile
-    .filter((c) => c.estado === 'pagado' && c.tipo === 'gasto')
+    .filter((c) => c.estado === 'pagado')
     .reduce((sum, c) => sum + c.monto, 0);
 
   const gavTotal = gavJaponTotal + gavChileTotal + gavComprasLocalesTotal;

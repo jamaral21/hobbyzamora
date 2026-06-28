@@ -204,7 +204,7 @@ describe('Property 5: Payment confirmation transitions invoice and related purch
         estado: 'sin_pagar',
       };
       invoice.totalJPY = Math.round(invoice.subtotalJPY * 1.13);
-      invoice.totalCLP = tc > 0 ? Math.round(invoice.totalJPY / tc) : 0;
+      invoice.totalCLP = tc > 0 ? Math.round(invoice.totalJPY * tc) : 0;
 
       const boletaItems: Record<string, InvoiceItem[]> = { [boletaId]: items };
 

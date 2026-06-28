@@ -68,12 +68,12 @@ function calculateCostoUnit(
   cant: number
 ): number {
   const pctFraction = pct / 100;
+  // internCLP (internación) NO se incluye en el prorrateo entre productos
   const totalCost =
     totals.subtotalCLP * pctFraction +
     totals.fleteCLP * pctFraction +
     totals.moCLP * pctFraction +
-    totals.matCLP * pctFraction +
-    totals.internCLP * pctFraction;
+    totals.matCLP * pctFraction;
 
   return Math.round(totalCost / cant);
 }
@@ -257,13 +257,16 @@ export async function confirmCosteoCaja(
 
       const tcEnvio = Number(box.tcEnvio);
       const totals = {
+        // subtotal en CLP: precioU * cant * tc (multiplicar, no dividir)
         subtotalCLP: box.productos.reduce(
-          (sum, p) => sum + Number(p.precioU) * p.cant * (1 / tcEnvio),
+          (sum, p) => sum + Number(p.precioU) * p.cant * tcEnvio,
           0
         ),
-        fleteCLP: safeNumber(box.fleJpy) / tcEnvio,
+        // flete y materiales vienen en JPY, convertir multiplicando por tc
+        fleteCLP: safeNumber(box.fleJpy) * tcEnvio,
         moCLP: safeNumber(box.moHoras) * safeNumber(box.moTarifa),
-        matCLP: safeNumber(box.matJpy) / tcEnvio,
+        matCLP: safeNumber(box.matJpy) * tcEnvio,
+        // internación ya está en CLP (arancel + IVA), NO se prorratea
         internCLP: safeNumber(box.internacionArancel) + safeNumber(box.internacionIva),
       };
 
@@ -303,8 +306,17 @@ export async function confirmCosteoCaja(
         })) as ShipmentsPurchase[];
 
         for (const purchase of purchases) {
+          // Recompute breakdown and also check total units in Chile stock for this SKU.
           const breakdown = await getStockBreakdownByPurchaseTx(tx, purchase);
-          if (breakdown.disponible <= 0) {
+
+          const chileAgg = await tx.shipmentsChileStock.aggregate({
+            where: { sku: purchase.sku },
+            _sum: { cant: true },
+          });
+          const totalInChile = Number(chileAgg._sum.cant) || 0;
+
+          // Mark as 'chile' if no disponible left or total units in Chile cover the purchase.
+          if (breakdown.disponible <= 0 || totalInChile >= Number(purchase.cant)) {
             await tx.shipmentsPurchase.update({
               where: { id: purchase.id },
               data: { bodega: 'chile' },

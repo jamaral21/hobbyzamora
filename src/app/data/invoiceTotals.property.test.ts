@@ -5,7 +5,7 @@
  * Property 4: Invoice total calculation follows the commission formula
  * - subtotalJPY = Σ(precioU × cant)
  * - totalJPY = subtotalJPY × (1 + comision/100)
- * - totalCLP = totalJPY / tc
+ * - totalCLP = totalJPY * tc
  *
  * Validates: Requirements 6.3
  */
@@ -56,11 +56,11 @@ describe('Feature: shipments-erp, Property 4: Invoice total calculation follows 
     );
   });
 
-  it('totalCLP equals totalJPY / tc for positive tc', () => {
+  it('totalCLP equals totalJPY * tc for positive tc', () => {
     fc.assert(
       fc.property(arbItems, arbComision, arbTc, (items, comision, tc) => {
         const result = calcInvoiceTotals(items, comision, tc);
-        const expectedCLP = result.totalJPY / tc;
+        const expectedCLP = result.totalJPY * tc;
         expect(result.totalCLP).toBeCloseTo(expectedCLP, 6);
       }),
       { numRuns: 200 },

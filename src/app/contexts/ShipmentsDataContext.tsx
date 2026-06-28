@@ -686,7 +686,7 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
     const id = nextBoletaId(boletas);
     const subtotalJPY = data.items.reduce((s, i) => s + i.precioU * i.cant, 0);
     const totalJPY = subtotalJPY * (1 + data.comisionPct / 100);
-    const totalCLP = data.tc > 0 ? Math.round(totalJPY / data.tc) : 0;
+    const totalCLP = data.tc > 0 ? Math.round(totalJPY * data.tc) : 0;
     const invoice: Invoice = {
       id,
       fecha: new Date().toISOString().split('T')[0],
@@ -702,6 +702,7 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
     setBoletaItems(prev => ({
       ...prev,
       [id]: data.items.map(i => ({
+        compraId: i.compraId,
         fecha: new Date().toISOString().split('T')[0],
         tipo: i.tipo,
         nombre: i.nombre,
@@ -736,13 +737,41 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
 
   const confirmPayment = useCallback((boletaId: string, payload?: PaymentConfirmationPayload) => {
     setBoletas(prev => prev.map(b => b.id === boletaId ? { ...b, estado: 'pagado' as const } : b));
-    // Also update related purchases
-    const items = boletaItems[boletaId];
+    // Also update related purchases, attempting to honor partial quantities
+    const items = boletaItems[boletaId] as (InvoiceItem & { compraId?: number })[] | undefined;
     if (items) {
-      setCompras(prev => prev.map(c => {
-        const matched = items.some(i => i.nombre === c.nombre && i.ean === c.ean);
-        return matched ? { ...c, estado: 'pagado' as const } : c;
-      }));
+      setCompras(prev => {
+        const byId = new Map(prev.map(c => [c.id, c] as const));
+        const updated = prev.map((c) => ({ ...c }));
+
+        items.forEach((it) => {
+          if (it.compraId != null) {
+            const compra = byId.get(it.compraId);
+            if (compra) {
+              const targetIndex = updated.findIndex(u => u.id === compra.id);
+              if (targetIndex >= 0) {
+                if (it.cant >= compra.cant) {
+                  updated[targetIndex].estado = 'pagado';
+                } else if (it.cant > 0) {
+                  updated[targetIndex].estado = 'esp_pago';
+                }
+              }
+            }
+            return;
+          }
+
+          // Fallback: match by nombre+ean as before (assume full)
+          for (let i = 0; i < updated.length; i++) {
+            const c = updated[i];
+            if (c.nombre === it.nombre && c.ean === it.ean) {
+              updated[i] = { ...c, estado: 'pagado' };
+              break;
+            }
+          }
+        });
+
+        return updated;
+      });
     }
     void shipmentsFetch(`/pagos/${encodeURIComponent(boletaId)}/confirmar`, {
       method: 'POST',
@@ -1039,7 +1068,7 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
     const subtotalJPY = config.arrBodegaJP + config.appBeyblade;
     const totalJPY = Math.round(subtotalJPY * (1 + config.comisionPct / 100));
     const tc = period?.tc ?? (compras.length > 0 ? compras[compras.length - 1].tc || 6.0 : 6.0);
-    const totalCLP = Math.round(totalJPY / tc);
+    const totalCLP = Math.round(totalJPY * tc);
     const monthLabel = targetDate.toLocaleString('es-CL', { month: 'long', year: 'numeric' });
     const targetDateOnly = targetDate.toISOString().split('T')[0];
     const invoice: Invoice = {

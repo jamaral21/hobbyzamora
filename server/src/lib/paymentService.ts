@@ -60,43 +60,71 @@ export async function confirmPayment(
       };
     }
 
-    // 3. Encontrar todas las compras que coincidan con los items de la boleta
-    // Usamos el nombre del producto + ean + precioU como criterio de búsqueda
-    const purchasesToUpdate: { id: string }[] = [];
+    // 3. Encontrar y actualizar compras respetando cantidades de las líneas
+    const purchasesToMarkPaid: string[] = [];
+    const purchasesToMarkEspPago: string[] = [];
 
     for (const item of invoice.items) {
+      // Remaining units to allocate from this invoice line
+      let remaining = item.cant;
+
+      // Find matching purchases ordered by createdAt (oldest first)
       const matchingPurchases = await prisma.shipmentsPurchase.findMany({
         where: {
           nombre: item.nombre,
           ean: item.ean || undefined,
           precioU: item.precioU,
         },
-        select: { id: true },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true, cant: true },
       });
 
-      purchasesToUpdate.push(...matchingPurchases);
+      for (const p of matchingPurchases) {
+        if (remaining <= 0) break;
+        const purchaseQty = Number(p.cant);
+        if (remaining >= purchaseQty) {
+          purchasesToMarkPaid.push(p.id);
+          remaining -= purchaseQty;
+        } else if (remaining > 0) {
+          // Partial payment for this purchase
+          purchasesToMarkEspPago.push(p.id);
+          remaining = 0;
+        }
+      }
     }
 
-    // Deduplicar IDs
-    const uniquePurchaseIds = Array.from(new Set(purchasesToUpdate.map((p) => p.id)));
+    // Deduplicate ids
+    const uniquePaid = Array.from(new Set(purchasesToMarkPaid));
+    const uniqueEspPago = Array.from(new Set(purchasesToMarkEspPago)).filter(id => !uniquePaid.includes(id));
 
-    // 4. Ejecutar transacción: actualizar boleta y compras
+    // 4. Ejecutar transacción: actualizar boleta y compras (pagado y esp_pago)
     const result = await prisma.$transaction(async (tx) => {
-      // Actualizar boleta a pagado
       const updatedInvoice = await tx.shipmentsInvoice.update({
         where: { id: invoice.id },
         data: { estado: 'pagado' },
       });
 
-      // Actualizar todas las compras a pagado
-      const updateResult = await tx.shipmentsPurchase.updateMany({
-        where: { id: { in: uniquePurchaseIds } },
-        data: { estado: 'pagado' },
-      });
+      let purchasesUpdated = 0;
+
+      if (uniquePaid.length > 0) {
+        const r = await tx.shipmentsPurchase.updateMany({
+          where: { id: { in: uniquePaid } },
+          data: { estado: 'pagado' },
+        });
+        purchasesUpdated += r.count;
+      }
+
+      if (uniqueEspPago.length > 0) {
+        const r2 = await tx.shipmentsPurchase.updateMany({
+          where: { id: { in: uniqueEspPago } },
+          data: { estado: 'esp_pago' },
+        });
+        purchasesUpdated += r2.count;
+      }
 
       return {
         invoice: updatedInvoice,
-        purchasesUpdated: updateResult.count,
+        purchasesUpdated,
       };
     });
 

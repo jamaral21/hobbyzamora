@@ -34,7 +34,7 @@ const emptyForm: FormData = {
 };
 
 export default function ComprasPage() {
-  const { compras, config, addCompra } = useShipmentsData();
+  const { compras, config, addCompra, cajas, stockChile } = useShipmentsData();
   const metodosPagoDisponibles = (config.metodosPago || []).filter(Boolean);
   const metodosPago = metodosPagoDisponibles.length > 0 ? metodosPagoDisponibles : ['Efectivo'];
   const [showModal, setShowModal] = useState(false);
@@ -154,7 +154,23 @@ export default function ComprasPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((c) => (
+              {filtered.map((c) => {
+                // compute units per location for this compra
+                const unitsInTransito = cajas
+                  .filter((b) => b.estado === 'transito')
+                  .reduce((sum, box) => sum + (box.productos.filter((p) => p._sku === c.sku).reduce((s, p) => s + p.cant, 0)), 0);
+
+                const unitsInLlegada = cajas
+                  .filter((b) => b.estado === 'llegada')
+                  .reduce((sum, box) => sum + (box.productos.filter((p) => p._sku === c.sku).reduce((s, p) => s + p.cant, 0)), 0);
+
+                const unitsInChile = stockChile
+                  .filter((s) => s._sku === c.sku)
+                  .reduce((sum, s) => sum + s.cant, 0);
+
+                const unitsInJapan = Math.max(0, c.cant - unitsInTransito - unitsInLlegada - unitsInChile);
+
+                return (
                 <TableRow key={c.id}>
                   <TableCell className="font-[family-name:var(--font-mono)] text-xs">{c.sku}</TableCell>
                   <TableCell>{c.fecha}</TableCell>
@@ -166,9 +182,14 @@ export default function ComprasPage() {
                   <TableCell className="text-right">{c.cant}</TableCell>
                   <TableCell className="text-right"><PriceDisplay amount={c.total} currency="JPY" /></TableCell>
                   <TableCell><StatusBadge status={c.estado} /></TableCell>
-                  <TableCell><StatusBadge status={c.bodega} /></TableCell>
+                  <TableCell className="flex items-center gap-2">
+                    {unitsInJapan > 0 && <StatusBadge status={'japon'} />}
+                    {unitsInTransito > 0 && <StatusBadge status={'transito'} />}
+                    {unitsInLlegada > 0 && <StatusBadge status={'llegada'} />}
+                    {unitsInChile > 0 && <StatusBadge status={'chile'} />}
+                  </TableCell>
                 </TableRow>
-              ))}
+              })}
             </TableBody>
           </Table>
         )}

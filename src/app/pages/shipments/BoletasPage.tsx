@@ -47,16 +47,35 @@ export default function BoletasPage() {
   const [editLines, setEditLines] = useState<EditLineItem[]>([]);
 
   function openModal() {
-    const selectable = compras.map((c) => ({
-      compraId: c.id,
-      nombre: c.nombre,
-      ean: c.ean,
-      tipo: c.tipo,
-      precioU: c.precioU,
-      maxCant: c.cant,
-      cant: c.cant,
-      selected: false,
-    }));
+    // Build a map of already-used quantities per compraId from existing boletaItems
+    const usedQuantities = new Map<number, number>();
+    Object.values(boletaItems).forEach((lines) => {
+      (lines || []).forEach((li: any) => {
+        if (li.compraId != null) {
+          const id = Number(li.compraId);
+          const prev = usedQuantities.get(id) || 0;
+          usedQuantities.set(id, prev + (Number(li.cant) || 0));
+        }
+      });
+    });
+
+    // Only include compras that are not fully pagadas
+    const selectable = compras
+      .filter((c) => c.estado !== 'pagado')
+      .map((c) => {
+        const used = usedQuantities.get(c.id) || 0;
+        const remaining = Math.max(0, c.cant - used);
+        return {
+          compraId: c.id,
+          nombre: c.nombre,
+          ean: c.ean,
+          tipo: c.tipo,
+          precioU: c.precioU,
+          maxCant: remaining,
+          cant: remaining > 0 ? remaining : 0,
+          selected: false,
+        };
+      });
     setItems(selectable);
     setComision(String(config.comisionPct));
     setTc('6.0');
@@ -112,7 +131,10 @@ export default function BoletasPage() {
   }
 
   function updateCant(idx: number, val: string) {
-    const n = Math.max(1, Math.min(items[idx].maxCant, Number(val) || 1));
+    const max = items[idx].maxCant;
+    let n = Number(val) || 0;
+    if (max <= 0) n = 0;
+    else n = Math.max(1, Math.min(max, n));
     setItems((prev) => prev.map((it, i) => i === idx ? { ...it, cant: n } : it));
   }
 
@@ -319,6 +341,7 @@ export default function BoletasPage() {
                           checked={it.selected}
                           onChange={() => toggleItem(idx)}
                           className="rounded"
+                          disabled={it.maxCant <= 0}
                         />
                       </td>
                       <td className="p-2 font-[family-name:var(--font-mono)] text-xs">{compra?.sku}</td>
@@ -327,11 +350,11 @@ export default function BoletasPage() {
                       <td className="p-2 text-right">
                         <input
                           type="number"
-                          min="1"
+                          min={it.maxCant > 0 ? 1 : 0}
                           max={it.maxCant}
                           value={it.cant}
                           onChange={(e) => updateCant(idx, e.target.value)}
-                          disabled={!it.selected}
+                          disabled={!it.selected || it.maxCant <= 0}
                           className="w-16 px-2 py-1 text-right rounded bg-input-background border border-border text-foreground text-sm disabled:opacity-40"
                         />
                       </td>

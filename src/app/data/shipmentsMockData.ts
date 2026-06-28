@@ -559,6 +559,25 @@ export function calcCashFlow(
 
 // --- Compras (12 purchases) ---
 export const mockCompras: PurchaseRecord[] = [
+  // Tres compras de prueba para probar boletas y pagos parciales
+  {
+    id: 100, sku: 'JP-0100', fecha: '2026-06-26', tipo: 'Producto',
+    nombre: 'TEST Producto A', ean: '9990001000010',
+    tarjeta: 'JCB', precioU: 1000, cant: 3, total: 3000,
+    estado: 'por_pagar', bodega: 'japon', tc: 6.0,
+  },
+  {
+    id: 101, sku: 'JP-0101', fecha: '2026-06-26', tipo: 'Producto',
+    nombre: 'TEST Producto B', ean: '9990001000027',
+    tarjeta: 'Rakuten', precioU: 2000, cant: 2, total: 4000,
+    estado: 'por_pagar', bodega: 'japon', tc: 6.0,
+  },
+  {
+    id: 102, sku: 'JP-0102', fecha: '2026-06-26', tipo: 'Producto',
+    nombre: 'TEST Producto C', ean: '9990001000034',
+    tarjeta: 'PayPay', precioU: 1500, cant: 1, total: 1500,
+    estado: 'por_pagar', bodega: 'japon', tc: 6.0,
+  },
   {
     id: 1, sku: 'JP-0001', fecha: '2026-01-15', tipo: 'Producto',
     nombre: 'Pokémon TCG Booster Box SV10', ean: '4521329400013',
