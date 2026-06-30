@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import {
   ShoppingCart, FileText, CreditCard, Building, Warehouse,
   Package, Truck, Globe, Shield, Calculator,
@@ -6,10 +6,12 @@ import {
   BarChart3, Scale, ArrowUpDown,
   LayoutDashboard, Settings,
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
+  LogOut,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useState } from 'react';
 import { useShipmentsRole } from '../../contexts/ShipmentsRoleContext';
+import { useAdminAuth } from '../../contexts/AdminAuthContext';
 import type { ShipmentsRole } from '../../data/shipmentsDomain';
 import type { LucideIcon } from 'lucide-react';
 
@@ -87,7 +89,9 @@ const roleLabels: Record<ShipmentsRole, string> = {
 
 export function ShipmentsSidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { role, setRole, hasAccess } = useShipmentsRole();
+  const { logout } = useAdminAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(
     () => Object.fromEntries(sections.map(s => [s.label, s.defaultOpen])),
@@ -195,7 +199,7 @@ export function ShipmentsSidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="p-3 border-t border-border">
+      <div className="p-3 border-t border-border space-y-1.5">
         <Link
           to="/"
           className="flex items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
@@ -203,6 +207,17 @@ export function ShipmentsSidebar() {
           <Store className="w-5 h-5 flex-shrink-0" />
           {!isCollapsed && <span className="text-sm">Ver Tienda</span>}
         </Link>
+        <button
+          type="button"
+          onClick={() => {
+            logout();
+            navigate('/shipments');
+          }}
+          className="flex w-full items-center gap-3 px-3 py-2 rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+        >
+          <LogOut className="w-5 h-5 flex-shrink-0" />
+          {!isCollapsed && <span className="text-sm">Cerrar sesión</span>}
+        </button>
       </div>
     </aside>
   );
