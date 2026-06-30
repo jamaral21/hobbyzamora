@@ -60,42 +60,89 @@ export async function confirmPayment(
       };
     }
 
-    // 3. Encontrar y actualizar compras respetando cantidades de las líneas
-    const purchasesToMarkPaid: string[] = [];
-    const purchasesToMarkEspPago: string[] = [];
+    // 3. Calcular estado de compras usando pago ACUMULADO por producto
+    // (suma de todas las boletas ya pagadas + la boleta que estamos confirmando).
+    type GroupedItem = {
+      nombre: string;
+      ean: string | null;
+      precioU: typeof invoice.items[number]['precioU'];
+      cantActual: number;
+    };
 
+    const groupedByProduct = new Map<string, GroupedItem>();
     for (const item of invoice.items) {
-      // Remaining units to allocate from this invoice line
-      let remaining = item.cant;
+      const ean = item.ean ?? null;
+      const key = `${item.nombre}__${ean ?? 'NULL'}__${item.precioU.toString()}`;
+      const current = groupedByProduct.get(key);
 
-      // Find matching purchases ordered by createdAt (oldest first)
-      const matchingPurchases = await prisma.shipmentsPurchase.findMany({
-        where: {
+      if (!current) {
+        groupedByProduct.set(key, {
           nombre: item.nombre,
-          ean: item.ean || undefined,
+          ean,
           precioU: item.precioU,
-        },
-        orderBy: { createdAt: 'asc' },
-        select: { id: true, cant: true },
-      });
-
-      for (const p of matchingPurchases) {
-        if (remaining <= 0) break;
-        const purchaseQty = Number(p.cant);
-        if (remaining >= purchaseQty) {
-          purchasesToMarkPaid.push(p.id);
-          remaining -= purchaseQty;
-        } else if (remaining > 0) {
-          // Partial payment for this purchase
-          purchasesToMarkEspPago.push(p.id);
-          remaining = 0;
-        }
+          cantActual: item.cant,
+        });
+      } else {
+        current.cantActual += item.cant;
       }
     }
 
-    // Deduplicate ids
+    const purchasesToMarkPaid: string[] = [];
+    const purchasesToMarkEspPago: string[] = [];
+    const purchasesToMarkPorPagar: string[] = [];
+
+    for (const grouped of groupedByProduct.values()) {
+      const paidBefore = await prisma.shipmentsInvoiceItem.aggregate({
+        where: {
+          nombre: grouped.nombre,
+          ean: grouped.ean,
+          precioU: grouped.precioU,
+          invoice: {
+            estado: 'pagado',
+          },
+        },
+        _sum: {
+          cant: true,
+        },
+      });
+
+      const paidQtyBefore = Number(paidBefore._sum.cant ?? 0);
+      let paidQtyAfter = paidQtyBefore + grouped.cantActual;
+
+      const matchingPurchases = await prisma.shipmentsPurchase.findMany({
+        where: {
+          nombre: grouped.nombre,
+          ean: grouped.ean,
+          precioU: grouped.precioU,
+        },
+        orderBy: [{ fecha: 'asc' }, { createdAt: 'asc' }],
+        select: { id: true, cant: true },
+      });
+
+      for (const purchase of matchingPurchases) {
+        const purchaseQty = Number(purchase.cant);
+
+        if (paidQtyAfter >= purchaseQty) {
+          purchasesToMarkPaid.push(purchase.id);
+          paidQtyAfter -= purchaseQty;
+          continue;
+        }
+
+        if (paidQtyAfter > 0) {
+          purchasesToMarkEspPago.push(purchase.id);
+          paidQtyAfter = 0;
+          continue;
+        }
+
+        purchasesToMarkPorPagar.push(purchase.id);
+      }
+    }
+
     const uniquePaid = Array.from(new Set(purchasesToMarkPaid));
-    const uniqueEspPago = Array.from(new Set(purchasesToMarkEspPago)).filter(id => !uniquePaid.includes(id));
+    const uniqueEspPago = Array.from(new Set(purchasesToMarkEspPago)).filter((id) => !uniquePaid.includes(id));
+    const uniquePorPagar = Array.from(new Set(purchasesToMarkPorPagar)).filter(
+      (id) => !uniquePaid.includes(id) && !uniqueEspPago.includes(id),
+    );
 
     // 4. Ejecutar transacción: actualizar boleta y compras (pagado y esp_pago)
     const result = await prisma.$transaction(async (tx) => {
@@ -120,6 +167,14 @@ export async function confirmPayment(
           data: { estado: 'esp_pago' },
         });
         purchasesUpdated += r2.count;
+      }
+
+      if (uniquePorPagar.length > 0) {
+        const r3 = await tx.shipmentsPurchase.updateMany({
+          where: { id: { in: uniquePorPagar } },
+          data: { estado: 'por_pagar' },
+        });
+        purchasesUpdated += r3.count;
       }
 
       return {

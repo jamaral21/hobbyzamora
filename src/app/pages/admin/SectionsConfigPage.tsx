@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, Loader2 } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { Button } from '../../components/design-system/Button';
 import { Card } from '../../components/design-system/Card';
-import { productsAPI } from '../../lib/api';
+import { maintenanceAPI, productsAPI } from '../../lib/api';
 import { useStoreSections } from '../../hooks/useData';
 import { buildSectionGroups } from '../../lib/sections';
 
@@ -12,9 +12,47 @@ export default function SectionsConfigPage() {
   const [draftByParent, setDraftByParent] = useState<Record<string, string>>({});
   const [savingParent, setSavingParent] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [maintenance, setMaintenance] = useState<boolean | null>(null);
+  const [maintenanceBusy, setMaintenanceBusy] = useState(false);
   const [error, setError] = useState('');
 
   const groups = useMemo(() => buildSectionGroups(data || []), [data]);
+
+  useEffect(() => {
+    let cancelled = false;
+    maintenanceAPI.getStatus()
+      .then((result) => {
+        if (!cancelled) {
+          setMaintenance(Boolean(result.maintenance));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setError('No se pudo cargar el estado de mantenimiento');
+          setMaintenance(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleToggleMaintenance = async () => {
+    if (maintenance === null) return;
+
+    setError('');
+    setMaintenanceBusy(true);
+    try {
+      const nextValue = !maintenance;
+      const result = await maintenanceAPI.setStatus(nextValue);
+      setMaintenance(Boolean(result.maintenance));
+    } catch (err: any) {
+      setError(err?.message || 'No se pudo actualizar mantenimiento');
+    } finally {
+      setMaintenanceBusy(false);
+    }
+  };
 
   const handleCreate = async (parentCategory: string) => {
     const value = String(draftByParent[parentCategory] || '').trim();
@@ -64,6 +102,30 @@ export default function SectionsConfigPage() {
             {error}
           </div>
         )}
+
+        <Card className="p-5 space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Mantenimiento del sitio</h2>
+            <p className="text-sm text-muted-foreground">
+              Activa o desactiva el acceso público a la tienda. Los usuarios admin pueden seguir entrando.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <span
+              className={`text-sm font-medium ${
+                maintenance ? 'text-amber-500' : 'text-[#00e676]'
+              }`}
+            >
+              Estado actual: {maintenance ? 'Mantenimiento activo' : 'Sitio habilitado'}
+            </span>
+
+            <Button onClick={handleToggleMaintenance} disabled={maintenanceBusy || maintenance === null}>
+              {maintenanceBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              {maintenance ? 'Desactivar mantenimiento' : 'Activar mantenimiento'}
+            </Button>
+          </div>
+        </Card>
 
         {isLoading ? (
           <div className="flex items-center justify-center h-48">

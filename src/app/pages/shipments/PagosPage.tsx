@@ -19,6 +19,7 @@ export default function PagosPage() {
   const [allocations, setAllocations] = useState<PaymentAllocation[]>([{ cuentaIndex: '', monto: '' }]);
   const [fechaTransf, setFechaTransf] = useState(new Date().toISOString().split('T')[0]);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const pendientes = useMemo(
@@ -106,19 +107,26 @@ export default function PagosPage() {
     setTimeout(() => setSuccessMsg(null), 4000);
   }
 
-  function handleDelete(boletaId: string) {
+  async function handleDelete(boletaId: string) {
     const isGAV = boletaId.includes('GAV');
-    deleteBoleta(boletaId);
-    if (selectedId === boletaId) {
-      setSelectedId(null);
-      setAllocations([{ cuentaIndex: '', monto: '' }]);
+    setErrorMsg(null);
+    try {
+      await deleteBoleta(boletaId);
+      if (selectedId === boletaId) {
+        setSelectedId(null);
+        setAllocations([{ cuentaIndex: '', monto: '' }]);
+      }
+      setConfirmDeleteId(null);
+      const msg = isGAV
+        ? `Boleta GAV ${boletaId} eliminada. Puede generarse nuevamente desde GAV Japón.`
+        : `Boleta ${boletaId} eliminada. Productos revertidos a "por pagar".`;
+      setSuccessMsg(msg);
+      setTimeout(() => setSuccessMsg(null), 5000);
+    } catch (error: any) {
+      setConfirmDeleteId(null);
+      setErrorMsg(error?.message || `No se pudo eliminar la boleta ${boletaId}`);
+      setTimeout(() => setErrorMsg(null), 5000);
     }
-    setConfirmDeleteId(null);
-    const msg = isGAV
-      ? `Boleta GAV ${boletaId} eliminada. Puede generarse nuevamente desde GAV Japón.`
-      : `Boleta ${boletaId} eliminada. Productos revertidos a "por pagar".`;
-    setSuccessMsg(msg);
-    setTimeout(() => setSuccessMsg(null), 5000);
   }
 
   return (
@@ -130,6 +138,15 @@ export default function PagosPage() {
           <div className="flex items-center gap-2 text-[#00e676]">
             <CheckCircle className="w-5 h-5" />
             <span className="text-sm font-medium">{successMsg}</span>
+          </div>
+        </Card>
+      )}
+
+      {errorMsg && (
+        <Card padding="sm" className="border-destructive/30 bg-destructive/10">
+          <div className="flex items-center gap-2 text-destructive">
+            <AlertTriangle className="w-5 h-5" />
+            <span className="text-sm font-medium">{errorMsg}</span>
           </div>
         </Card>
       )}

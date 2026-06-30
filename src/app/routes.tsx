@@ -1,5 +1,5 @@
 import { createBrowserRouter, redirect } from 'react-router';
-import type { ComponentType } from 'react';
+import { useEffect, useState, type ComponentType } from 'react';
 import { Loader2 } from 'lucide-react';
 
 // Navigation
@@ -59,8 +59,35 @@ import { useAdminAuth } from './contexts/AdminAuthContext';
 function withStoreMaintenance(Page: ComponentType) {
   return function StoreMaintenanceRoute() {
     const { user, isLoading } = useAdminAuth();
+    const [maintenance, setMaintenance] = useState<boolean | null>(null);
 
-    if (isLoading) {
+    useEffect(() => {
+      let cancelled = false;
+
+      fetch('/api/site-maintenance')
+        .then(async (response) => {
+          if (!response.ok) {
+            throw new Error('No se pudo consultar mantenimiento');
+          }
+
+          const data = await response.json() as { maintenance?: boolean };
+          if (!cancelled) {
+            setMaintenance(Boolean(data.maintenance));
+          }
+        })
+        .catch(() => {
+          // Safe fallback: keep store in maintenance if endpoint fails.
+          if (!cancelled) {
+            setMaintenance(true);
+          }
+        });
+
+      return () => {
+        cancelled = true;
+      };
+    }, []);
+
+    if (isLoading || maintenance === null) {
       return (
         <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
           <Loader2 className="h-8 w-8 animate-spin text-amber-300" />
@@ -72,7 +99,11 @@ function withStoreMaintenance(Page: ComponentType) {
       return <Page />;
     }
 
-    return <MaintenancePage />;
+    if (maintenance) {
+      return <MaintenancePage />;
+    }
+
+    return <Page />;
   };
 }
 

@@ -366,6 +366,19 @@ export const authAPI = {
   },
 };
 
+export const maintenanceAPI = {
+  getStatus: () => fetchAPI<{ maintenance: boolean }>('/site-maintenance', undefined, 'public'),
+  setStatus: (maintenance: boolean) =>
+    fetchAPI<{ maintenance: boolean }>(
+      '/site-maintenance',
+      {
+        method: 'PUT',
+        body: JSON.stringify({ maintenance }),
+      },
+      'admin',
+    ),
+};
+
 export const addressesAPI = authAPI.addresses;
 
 // Products API

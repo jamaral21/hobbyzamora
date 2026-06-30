@@ -97,6 +97,7 @@ interface ShipmentsDataContextType {
   updateCompra: (id: number, data: Partial<PurchaseRecord>) => void;
   addBoleta: (data: NewBoletaInput) => Invoice;
   confirmPayment: (boletaId: string, payload?: PaymentConfirmationPayload) => void;
+  deleteBoleta: (boletaId: string) => Promise<void>;
   addCaja: (data: Omit<Box, 'internacion'>) => Box;
   updateCaja: (id: string, data: Partial<Box>) => void;
   deleteCaja: (id: string) => void;
@@ -779,6 +780,29 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
     }).then(() => syncFromApi()).catch(() => undefined);
   }, [boletaItems, syncFromApi]);
 
+  const deleteBoleta = useCallback(async (boletaId: string): Promise<void> => {
+    const previousBoletas = boletas;
+    const previousItems = boletaItems;
+
+    setBoletas((prev) => prev.filter((b) => b.id !== boletaId));
+    setBoletaItems((prev) => {
+      const next = { ...prev };
+      delete next[boletaId];
+      return next;
+    });
+
+    try {
+      await shipmentsFetch(`/boletas/${encodeURIComponent(boletaId)}`, {
+        method: 'DELETE',
+      });
+      await syncFromApi();
+    } catch (error) {
+      setBoletas(previousBoletas);
+      setBoletaItems(previousItems);
+      throw error;
+    }
+  }, [boletas, boletaItems, syncFromApi]);
+
   const addCaja = useCallback((data: Omit<Box, 'internacion'>): Box => {
     const box: Box = { ...data, internacion: null };
     setCajas(prev => [...prev, box]);
@@ -1101,7 +1125,7 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
         compras, boletas, boletaItems, cajas, stockChile,
         pedidosWeb, comprasChile, ventas, gavChile, config,
         calcDisponibleBySku: calcDisponible,
-        addCompra, updateCompra, addBoleta, confirmPayment,
+        addCompra, updateCompra, addBoleta, confirmPayment, deleteBoleta,
         addCaja, updateCaja, deleteCaja, saveInternacion,
         confirmCosteo, updatePrecioVenta, addVenta, confirmGAV,
         updateConfig, addPedidoWeb, updatePedidoWeb,
