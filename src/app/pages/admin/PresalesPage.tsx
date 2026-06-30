@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router';
 import {
   Plus,
@@ -15,6 +15,8 @@ import {
   Trash2,
   Edit,
   Ban,
+  Upload,
+  Download,
 } from 'lucide-react';
 import { presaleAPI, productsAPI, AdminPresaleReservation, Product } from '../../lib/api';
 import { ImageWithFallback } from '../../components/figma/ImageWithFallback';
@@ -223,10 +225,121 @@ export function PresalesPage() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [editorMode, setEditorMode] = useState<'edit' | 'convert'>('edit');
   const [savingProduct, setSavingProduct] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ created: number; updated: number; skipped: number; errors: string[] } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const showToast = (msg: string, type: 'ok' | 'err' = 'ok') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
+  };
+
+  const parseCSV = (text: string): Record<string, string>[] => {
+    const normalized = text.replace(/^\uFEFF/, '');
+    const rows: string[][] = [];
+    let currentRow: string[] = [];
+    let currentCell = '';
+    let inQuotes = false;
+
+    for (let i = 0; i < normalized.length; i++) {
+      const char = normalized[i];
+      const next = normalized[i + 1];
+
+      if (char === '"') {
+        if (inQuotes && next === '"') {
+          currentCell += '"';
+          i++;
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        currentRow.push(currentCell.trim());
+        currentCell = '';
+      } else if ((char === '\n' || char === '\r') && !inQuotes) {
+        if (char === '\r' && next === '\n') i++;
+        currentRow.push(currentCell.trim());
+        currentCell = '';
+
+        const hasContent = currentRow.some((cell) => cell.length > 0);
+        if (hasContent) rows.push(currentRow);
+        currentRow = [];
+      } else {
+        currentCell += char;
+      }
+    }
+
+    if (currentCell.length > 0 || currentRow.length > 0) {
+      currentRow.push(currentCell.trim());
+      const hasContent = currentRow.some((cell) => cell.length > 0);
+      if (hasContent) rows.push(currentRow);
+    }
+
+    if (rows.length < 2) return [];
+
+    const headers = rows[0].map((header) => header.trim().replace(/^"|"$/g, ''));
+    return rows.slice(1).map((values) => {
+      const row: Record<string, string> = {};
+      headers.forEach((header, index) => {
+        row[header] = (values[index] || '').trim();
+      });
+      return row;
+    });
+  };
+
+  const handleImportCSV = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    setImportResult(null);
+
+    try {
+      const text = await file.text();
+      const rows = parseCSV(text);
+      if (rows.length === 0) {
+        setImportResult({ created: 0, updated: 0, skipped: 0, errors: ['El archivo CSV está vacío o no tiene datos.'] });
+        return;
+      }
+
+      const result = await productsAPI.importPresalesCSV(rows);
+      setImportResult(result);
+      await loadProducts();
+    } catch (err: any) {
+      setImportResult({ created: 0, updated: 0, skipped: 0, errors: [err?.message || 'Error al importar preventas'] });
+    } finally {
+      setIsImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const downloadTemplate = () => {
+    const rows = products.map((product) => [
+      product.sku || '',
+      product.ean || '',
+      product.name || '',
+      product.category || '',
+      (product.description || '').replace(/\n/g, ' '),
+      Number(product.price ?? 0).toFixed(2),
+      Number(product.cost ?? 0).toFixed(2),
+      Number(product.presaleMaxQty ?? '').toString(),
+      Number(product.presaleAvailQty ?? '').toString(),
+      product.presaleEndDate ? new Date(product.presaleEndDate).toISOString().split('T')[0] : '',
+      (Array.isArray(product.images) ? product.images : []).join('|'),
+    ]);
+
+    const header = 'sku,EAN,name,category,description,price,cost,presaleMaxQty,presaleAvailQty,presaleEndDate,images';
+    const csvRows = rows.length > 0
+      ? rows.map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      : ['"","","Preventa Ejemplo","Pokémon TCG","Descripción de la preventa","29.99","15.00","100","100","2026-06-30","https://example.com/img1.jpg|https://example.com/img2.jpg"'];
+
+    const csv = [header, ...csvRows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'plantilla-preventas.csv';
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const loadReservations = useCallback(async (page = 1) => {
@@ -474,6 +587,22 @@ export function PresalesPage() {
           <p className="text-muted-foreground text-sm">Gestiona reservas de preventa y confirmación de llegada</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleImportCSV} />
+          <button
+            onClick={downloadTemplate}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm hover:bg-secondary transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            Plantilla CSV
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isImporting}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm hover:bg-secondary disabled:opacity-60 transition-colors"
+          >
+            {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            {isImporting ? 'Importando...' : 'Importar CSV'}
+          </button>
           <button
             onClick={handleReleaseExpired}
             disabled={releasingExpired}
@@ -500,6 +629,25 @@ export function PresalesPage() {
           </Link>
         </div>
       </div>
+
+      {importResult && (
+        <div className={`rounded-xl border p-4 ${importResult.errors.length > 0 && importResult.created === 0 && importResult.updated === 0 ? 'border-red-500/20 bg-red-500/10' : importResult.errors.length > 0 ? 'border-amber-500/20 bg-amber-500/10' : 'border-emerald-500/20 bg-emerald-500/10'}`}>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                {importResult.created} creada(s), {importResult.updated} actualizada(s){importResult.skipped > 0 ? `, ${importResult.skipped} omitida(s)` : ''}
+              </p>
+              {importResult.errors.length > 0 && (
+                <ul className="mt-2 text-sm text-muted-foreground list-disc list-inside">
+                  {importResult.errors.slice(0, 5).map((error, index) => <li key={index}>{error}</li>)}
+                  {importResult.errors.length > 5 && <li>...y {importResult.errors.length - 5} error(es) más</li>}
+                </ul>
+              )}
+            </div>
+            <button onClick={() => setImportResult(null)} className="text-muted-foreground hover:text-foreground text-lg leading-none">&times;</button>
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">

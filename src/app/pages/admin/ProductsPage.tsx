@@ -183,13 +183,37 @@ export default function ProductsPage() {
   };
 
   const downloadTemplate = () => {
+    const currentProducts = (products || [])
+      .filter((p: any) => isPresalesView ? p.isPresale : !p.isPresale)
+      .map((p: any) => {
+        const stockValue = Number(p.stock ?? 0);
+        const initialStockValue = Number(p.initialStock ?? p.stock ?? 0);
+        return [
+          p.sku || '',
+          p.ean || '',
+          p.name || '',
+          p.category || '',
+          (p.description || '').replace(/\n/g, ' '),
+          Number(p.price ?? 0).toFixed(2),
+          Number(p.cost ?? 0).toFixed(2),
+          stockValue.toString(),
+          initialStockValue.toString(),
+          p.status || 'ACTIVE',
+          (Array.isArray(p.images) ? p.images : []).join('|'),
+        ];
+      });
+
     const header = isPresalesView
       ? 'sku,EAN,name,category,description,price,cost,presaleMaxQty,presaleAvailQty,presaleEndDate,images'
-      : 'sku,EAN,name,category,description,price,cost,stock,status,images';
-    const example = isPresalesView
-      ? ',"Preventa Ejemplo","Pokémon TCG","Descripción",29.99,15.00,,100,100,2026-06-30,'
-      : ',7891234567890,"Producto Ejemplo","Pokémon TCG","Descripción del producto",29.99,15.00,50,ACTIVE,https://example.com/img1.jpg|https://example.com/img2.jpg';
-    const csv = `${header}\n${example}`;
+      : 'sku,EAN,name,category,description,price,cost,stock,initialStock,status,images';
+
+    const rows = currentProducts.length > 0
+      ? currentProducts.map((row: string[]) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      : [
+          '"","","Producto Ejemplo","Pokémon TCG","Descripción del producto","29.99","15.00","50","50","ACTIVE","https://example.com/img1.jpg|https://example.com/img2.jpg"',
+        ];
+
+    const csv = [header, ...rows].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

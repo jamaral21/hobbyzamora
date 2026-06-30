@@ -8,6 +8,8 @@ import AdmZip from 'adm-zip';
 import { prisma } from '../index.js';
 import { syncHistoricalCostForProduct } from '../lib/costSync.js';
 import { generateUniqueSku, getSkuPrefix, isOfficialStoreCategory, normalizeStoreCategory } from '../lib/sku.js';
+import { normalizeProductImportRow } from '../lib/productImport.js';
+import { matchesProductImageName, sanitizeProductImageName } from '../lib/productImageMatching.js';
 import { authenticate, optionalAuth, requireRole, AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
@@ -699,6 +701,120 @@ router.delete('/:id', authenticate, requireRole('ADMIN'), async (req: AuthReques
   }
 });
 
+// Import presale products from CSV using a dedicated endpoint
+router.post('/import-presales', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
+  try {
+    const { products: rows } = req.body;
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: 'No products provided' });
+    }
+
+    if (rows.length > 500) {
+      return res.status(400).json({ error: 'Maximum 500 products per import' });
+    }
+
+    const results: { created: number; updated: number; skipped: number; errors: string[] } = {
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      errors: [],
+    };
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const lineNum = i + 2;
+
+      if (!row.name || !row.category || row.price == null || row.cost == null) {
+        results.errors.push(`Línea ${lineNum}: faltan campos requeridos (name, category, price, cost)`);
+        results.skipped++;
+        continue;
+      }
+
+      const { category: normalizedCategory, valid: isValidCategory } = await resolveValidCategoryInput(String(row.category || ''));
+      if (!isValidCategory) {
+        results.errors.push(`Línea ${lineNum}: la categoría debe existir como sección principal o subsección activa`);
+        results.skipped++;
+        continue;
+      }
+
+      const normalizedRow = normalizeProductImportRow(row as Record<string, string | undefined>);
+      const requestedSku = String(normalizedRow.sku || '').trim();
+      const resolvedSku = requestedSku || await generateUniqueSku(prisma, normalizedCategory);
+      const price = normalizedRow.price;
+      const cost = normalizedRow.cost;
+      const stock = 0;
+      const initialStock = 0;
+
+      if (price == null || cost == null || price < 0 || cost < 0) {
+        results.errors.push(`Línea ${lineNum} (${resolvedSku}): precio o costo inválido`);
+        results.skipped++;
+        continue;
+      }
+
+      const presaleMaxQty = normalizedRow.presaleMaxQty ?? (row.presaleMaxQty ? parseInt(row.presaleMaxQty) : null);
+      const presaleAvailQty = normalizedRow.presaleAvailQty ?? (row.presaleAvailQty ? parseInt(row.presaleAvailQty) : null);
+      const presaleEndDate = row.presaleEndDate ? new Date(row.presaleEndDate) : null;
+
+      const productData = {
+        name: normalizedRow.name || row.name,
+        description: normalizedRow.description || row.description || null,
+        category: normalizedCategory,
+        price,
+        cost,
+        stock,
+        initialStock,
+        ean: normalizedRow.ean ? String(normalizedRow.ean) : ((row.EAN || row.ean || row.barcode) ? String(row.EAN || row.ean || row.barcode) : null),
+        images: JSON.stringify(normalizedRow.images.length > 0 ? normalizedRow.images : (row.images ? String(row.images).split('|').map((s: string) => s.trim()) : [])),
+        status: ['ACTIVE', 'ARCHIVED'].includes((normalizedRow.status || row.status || 'ACTIVE').toUpperCase())
+          ? (normalizedRow.status || row.status || 'ACTIVE').toUpperCase()
+          : 'ACTIVE',
+        isPresale: true,
+        presaleMaxQty,
+        presaleAvailQty,
+        presaleEndDate,
+      };
+
+      try {
+        const existing = requestedSku
+          ? await prisma.product.findUnique({ where: { sku: requestedSku } })
+          : null;
+
+        if (existing) {
+          await prisma.$transaction(async (tx) => {
+            const updatedProduct = await tx.product.update({
+              where: { sku: requestedSku },
+              data: { ...productData, isPresale: true },
+            });
+
+            if (Number(existing.cost) !== Number(cost)) {
+              await syncHistoricalCostForProduct(tx, {
+                productId: updatedProduct.id,
+                sku: updatedProduct.sku,
+                cost,
+              });
+            }
+          });
+          results.updated++;
+        } else {
+          await prisma.product.create({
+            data: { sku: resolvedSku, ...productData },
+          });
+          results.created++;
+        }
+      } catch (err) {
+        results.errors.push(`Línea ${lineNum} (${resolvedSku}): error al procesar preventa`);
+        results.skipped++;
+      }
+    }
+
+    res.status(201).json(results);
+  } catch (error) {
+    console.error('Import presales error:', error);
+    res.status(500).json({ error: 'Failed to import presales' });
+  }
+});
+
 // Bulk import products from CSV
 router.post('/import', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
   try {
@@ -738,37 +854,36 @@ router.post('/import', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
         continue;
       }
 
-      const requestedSku = String(row.sku || '').trim();
+      const normalizedRow = normalizeProductImportRow(row as Record<string, string | undefined>);
+      const requestedSku = String(normalizedRow.sku || '').trim();
       const resolvedSku = requestedSku || await generateUniqueSku(prisma, normalizedCategory);
-      const price = parseFloat(row.price);
-      const cost = parseFloat(row.cost);
-      const stock = parseInt(row.stock) || 0;
-      const initialStock = row.initialStock != null && String(row.initialStock).trim() !== ''
-        ? (parseInt(row.initialStock) || 0)
-        : stock;
+      const price = normalizedRow.price;
+      const cost = normalizedRow.cost;
+      const stock = normalizedRow.stock ?? 0;
+      const initialStock = normalizedRow.initialStock ?? stock;
 
-      if (isNaN(price) || isNaN(cost) || price < 0 || cost < 0) {
+      if (price == null || cost == null || price < 0 || cost < 0) {
         results.errors.push(`Línea ${lineNum} (${resolvedSku}): precio o costo inválido`);
         results.skipped++;
         continue;
       }
 
       const isPresale = forcePresale;
-      const presaleMaxQty = row.presaleMaxQty ? parseInt(row.presaleMaxQty) : null;
-      const presaleAvailQty = row.presaleAvailQty ? parseInt(row.presaleAvailQty) : null;
+      const presaleMaxQty = normalizedRow.presaleMaxQty ?? (row.presaleMaxQty ? parseInt(row.presaleMaxQty) : null);
+      const presaleAvailQty = normalizedRow.presaleAvailQty ?? (row.presaleAvailQty ? parseInt(row.presaleAvailQty) : null);
 
       const productData = {
-        name: row.name,
-        description: row.description || null,
+        name: normalizedRow.name || row.name,
+        description: normalizedRow.description || row.description || null,
         category: normalizedCategory,
         price,
         cost,
         stock,
         initialStock,
-        ean: (row.EAN || row.ean || row.barcode) ? String(row.EAN || row.ean || row.barcode) : null,
-        images: JSON.stringify(row.images ? row.images.split('|').map((s: string) => s.trim()) : []),
-        status: ['ACTIVE', 'ARCHIVED'].includes((row.status || 'ACTIVE').toUpperCase())
-          ? (row.status || 'ACTIVE').toUpperCase()
+        ean: normalizedRow.ean ? String(normalizedRow.ean) : ((row.EAN || row.ean || row.barcode) ? String(row.EAN || row.ean || row.barcode) : null),
+        images: JSON.stringify(normalizedRow.images.length > 0 ? normalizedRow.images : (row.images ? String(row.images).split('|').map((s: string) => s.trim()) : [])),
+        status: ['ACTIVE', 'ARCHIVED'].includes((normalizedRow.status || row.status || 'ACTIVE').toUpperCase())
+          ? (normalizedRow.status || row.status || 'ACTIVE').toUpperCase()
           : 'ACTIVE', // HIDDEN no se puede importar desde CSV, solo se asigna manualmente
         isPresale,
         presaleMaxQty,
@@ -1037,23 +1152,28 @@ router.post('/upload-images/complete', authenticate, requireRole('ADMIN', 'STAFF
     // Update products
     let updated = 0;
     if (extracted.length > 0) {
-      const allProducts = await prisma.product.findMany({ select: { id: true, images: true } });
+      const allProducts = await prisma.product.findMany({ select: { id: true, sku: true, name: true, images: true } });
+      const matchedFiles = new Set<string>();
+
       for (const product of allProducts) {
+        const productImages = [] as string[];
         let images: string[];
         try { images = JSON.parse(product.images); } catch { images = product.images ? [product.images] : []; }
 
-        let changed = false;
-        const updatedImages = images.map((img: string) => {
-          const basename = img.split('/').pop() || img;
-          const safeBasename = basename.replace(/[^a-zA-Z0-9._-]/g, '_');
-          if (extracted.includes(safeBasename) && !img.startsWith('/uploads/')) {
-            changed = true;
-            return `/uploads/products/${safeBasename}`;
-          }
-          return img;
-        });
+        for (const extractedFile of extracted) {
+          const shouldMatch = matchesProductImageName(extractedFile, product);
+          if (!shouldMatch) continue;
 
-        if (changed) {
+          if (!matchedFiles.has(extractedFile)) {
+            matchedFiles.add(extractedFile);
+            productImages.push(`/uploads/products/${extractedFile}`);
+          }
+        }
+
+        const existingImages = images.filter((img: string) => !img.startsWith('/uploads/'));
+        const updatedImages = [...existingImages, ...productImages];
+
+        if (productImages.length > 0 || existingImages.length !== images.length) {
           await prisma.product.update({
             where: { id: product.id },
             data: { images: JSON.stringify(updatedImages) },
@@ -1122,7 +1242,8 @@ router.post('/upload-images', authenticate, requireRole('ADMIN', 'STAFF'), uploa
     // Update products: replace bare filenames with served URLs
     let updated = 0;
     if (extracted.length > 0) {
-      const allProducts = await prisma.product.findMany({ select: { id: true, images: true } });
+      const allProducts = await prisma.product.findMany({ select: { id: true, sku: true, name: true, images: true } });
+      const matchedFiles = new Set<string>();
 
       for (const product of allProducts) {
         let images: string[];
@@ -1132,19 +1253,21 @@ router.post('/upload-images', authenticate, requireRole('ADMIN', 'STAFF'), uploa
           images = product.images ? [product.images] : [];
         }
 
-        let changed = false;
-        const updatedImages = images.map((img: string) => {
-          const basename = img.split('/').pop() || img;
-          // Sanitize the same way as extracted files
-          const safeBasename = basename.replace(/[^a-zA-Z0-9._-]/g, '_');
-          if (extracted.includes(safeBasename) && !img.startsWith('/uploads/')) {
-            changed = true;
-            return `/uploads/products/${safeBasename}`;
-          }
-          return img;
-        });
+        const productImages = [] as string[];
+        for (const extractedFile of extracted) {
+          const shouldMatch = matchesProductImageName(extractedFile, product);
+          if (!shouldMatch) continue;
 
-        if (changed) {
+          if (!matchedFiles.has(extractedFile)) {
+            matchedFiles.add(extractedFile);
+            productImages.push(`/uploads/products/${extractedFile}`);
+          }
+        }
+
+        const existingImages = images.filter((img: string) => !img.startsWith('/uploads/'));
+        const updatedImages = [...existingImages, ...productImages];
+
+        if (productImages.length > 0 || existingImages.length !== images.length) {
           await prisma.product.update({
             where: { id: product.id },
             data: { images: JSON.stringify(updatedImages) },

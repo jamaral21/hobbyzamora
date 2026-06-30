@@ -444,6 +444,12 @@ export const productsAPI = {
       body: JSON.stringify({ products }),
     }, 'admin'),
 
+  importPresalesCSV: (products: Record<string, string>[]) =>
+    fetchAPI<{ created: number; updated: number; skipped: number; errors: string[] }>('/products/import-presales', {
+      method: 'POST',
+      body: JSON.stringify({ products }),
+    }, 'admin'),
+
   uploadImages: async (file: File, onProgress?: (pct: number) => void) => {
     const token = localStorage.getItem('adminToken') || localStorage.getItem('token');
     const CHUNK_SIZE = 1 * 1024 * 1024; // 1MB per chunk (safe for most proxy limits)
