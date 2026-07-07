@@ -17,6 +17,7 @@ import {
   Ban,
   Upload,
   Download,
+  Link2,
 } from 'lucide-react';
 import { presaleAPI, productsAPI, AdminPresaleReservation, Product } from '../../lib/api';
 import { ImageWithFallback } from '../../components/figma/ImageWithFallback';
@@ -227,6 +228,9 @@ export function PresalesPage() {
   const [savingProduct, setSavingProduct] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ created: number; updated: number; skipped: number; errors: string[] } | null>(null);
+  const [isDriveModalOpen, setIsDriveModalOpen] = useState(false);
+  const [driveFolderUrl, setDriveFolderUrl] = useState('');
+  const [isImportingDriveImages, setIsImportingDriveImages] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const showToast = (msg: string, type: 'ok' | 'err' = 'ok') => {
@@ -340,6 +344,29 @@ export function PresalesPage() {
     a.download = 'plantilla-preventas.csv';
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const handleImportDriveImages = async () => {
+    const trimmedUrl = driveFolderUrl.trim();
+    if (!trimmedUrl) return;
+
+    setIsImportingDriveImages(true);
+    try {
+      const result = await productsAPI.uploadImagesFromDrive(trimmedUrl);
+      if (result.extracted === 0) {
+        showToast(result.message || 'No se encontraron imágenes para importar desde Drive', 'err');
+      } else {
+        showToast(`${result.extracted} imagen(es) importada(s), ${result.productsUpdated} producto(s) actualizado(s)`);
+      }
+
+      setIsDriveModalOpen(false);
+      setDriveFolderUrl('');
+      await loadProducts();
+    } catch (err: any) {
+      showToast(err?.message || 'Error al importar imágenes desde Google Drive', 'err');
+    } finally {
+      setIsImportingDriveImages(false);
+    }
   };
 
   const loadReservations = useCallback(async (page = 1) => {
@@ -602,6 +629,14 @@ export function PresalesPage() {
           >
             {isImporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
             {isImporting ? 'Importando...' : 'Importar CSV'}
+          </button>
+          <button
+            onClick={() => setIsDriveModalOpen(true)}
+            disabled={isImportingDriveImages}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm hover:bg-secondary disabled:opacity-60 transition-colors"
+          >
+            {isImportingDriveImages ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+            {isImportingDriveImages ? 'Importando Drive...' : 'Importar imágenes Drive'}
           </button>
           <button
             onClick={handleReleaseExpired}
@@ -990,6 +1025,48 @@ export function PresalesPage() {
           </div>
         </Modal>
       )}
+
+      <Modal
+        isOpen={isDriveModalOpen}
+        onClose={() => {
+          if (isImportingDriveImages) return;
+          setIsDriveModalOpen(false);
+        }}
+        title="Importar imágenes desde Google Drive"
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Pega la URL de la carpeta compartida de Google Drive con imágenes (JPG, PNG, WEBP o GIF).
+          </p>
+          <input
+            type="url"
+            placeholder="https://drive.google.com/drive/folders/..."
+            value={driveFolderUrl}
+            onChange={(e) => setDriveFolderUrl(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-border bg-input-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsDriveModalOpen(false)}
+              disabled={isImportingDriveImages}
+              className="px-3 py-2 text-sm rounded-lg border border-border hover:bg-secondary transition-colors disabled:opacity-60"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleImportDriveImages}
+              disabled={isImportingDriveImages || !driveFolderUrl.trim()}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-60 transition-colors"
+            >
+              {isImportingDriveImages ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+              {isImportingDriveImages ? 'Importando...' : 'Confirmar importación'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </AdminLayout>
   );
 }
