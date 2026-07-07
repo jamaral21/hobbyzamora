@@ -91,6 +91,200 @@ const parseOptions = (options: string): string[] => {
   }
 };
 
+const DRIVE_IMAGE_MIME_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/jpg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'image/gif': '.gif',
+};
+
+function extractGoogleDriveFolderReference(input: string) {
+  const value = String(input || '').trim();
+  if (!value) return null;
+
+  if (/^[a-zA-Z0-9_-]{10,}$/.test(value)) {
+    return { folderId: value, resourceKey: '' };
+  }
+
+  try {
+    const url = new URL(value);
+    const resourceKey = String(url.searchParams.get('resourcekey') || url.searchParams.get('resourceKey') || '').trim();
+    const folderMatch = url.pathname.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+    if (folderMatch?.[1]) return { folderId: folderMatch[1], resourceKey };
+
+    const id = url.searchParams.get('id');
+    if (id && /^[a-zA-Z0-9_-]{10,}$/.test(id)) return { folderId: id, resourceKey };
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function normalizeImportedImageReferences(images: string[]) {
+  return images
+    .map((img) => String(img || '').trim())
+    .filter(Boolean)
+    .map((img) => {
+      if (/^https?:\/\//i.test(img) || img.startsWith('/')) {
+        return img;
+      }
+
+      const normalized = sanitizeProductImageName(img);
+      const localPath = path.join(productUploadsDir, normalized);
+      if (fs.existsSync(localPath)) {
+        return `/uploads/products/${normalized}`;
+      }
+
+      return img;
+    });
+}
+
+async function attachExtractedImagesToProducts(extracted: string[]) {
+  if (extracted.length === 0) return 0;
+
+  const allProducts = await prisma.product.findMany({
+    select: { id: true, sku: true, name: true, images: true },
+  });
+
+  const matchedFiles = new Set<string>();
+  let updated = 0;
+
+  for (const product of allProducts) {
+    const productImages = [] as string[];
+    let images: string[];
+    try {
+      images = JSON.parse(product.images);
+    } catch {
+      images = product.images ? [product.images] : [];
+    }
+
+    for (const extractedFile of extracted) {
+      const shouldMatch = matchesProductImageName(extractedFile, product);
+      if (!shouldMatch) continue;
+
+      if (!matchedFiles.has(extractedFile)) {
+        matchedFiles.add(extractedFile);
+        productImages.push(`/uploads/products/${extractedFile}`);
+      }
+    }
+
+    const existingImages = images.filter((img: string) => !img.startsWith('/uploads/'));
+    const updatedImages = [...existingImages, ...productImages];
+
+    if (productImages.length > 0 || existingImages.length !== images.length) {
+      await prisma.product.update({
+        where: { id: product.id },
+        data: { images: JSON.stringify(updatedImages) },
+      });
+      updated++;
+    }
+  }
+
+  return updated;
+}
+
+async function listGoogleDriveFolderImages(folderId: string, apiKey: string, folderResourceKey?: string) {
+  const files: Array<{ id: string; name: string; mimeType: string; resourceKey?: string }> = [];
+  const stack: string[] = [folderId];
+  const visited = new Set<string>();
+  const baseHeaders = folderResourceKey
+    ? { 'X-Goog-Drive-Resource-Keys': `${folderId}/${folderResourceKey}` }
+    : undefined;
+
+  // Validate folder access first to return a clear error early.
+  {
+    const params = new URLSearchParams({
+      fields: 'id,name,mimeType',
+      supportsAllDrives: 'true',
+      key: apiKey,
+    });
+    const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(folderId)}?${params.toString()}`, {
+      headers: baseHeaders,
+    });
+    if (!response.ok) {
+      const details = await response.text().catch(() => '');
+      throw new Error(`No se pudo acceder a la carpeta de Google Drive (${response.status}) ${details}`);
+    }
+  }
+
+  while (stack.length > 0) {
+    const currentFolderId = String(stack.pop());
+    if (!currentFolderId || visited.has(currentFolderId)) continue;
+    visited.add(currentFolderId);
+
+    let pageToken = '';
+    do {
+      const params = new URLSearchParams({
+        q: `'${currentFolderId}' in parents and trashed = false`,
+        fields: 'nextPageToken,files(id,name,mimeType,resourceKey)',
+        pageSize: '1000',
+        includeItemsFromAllDrives: 'true',
+        supportsAllDrives: 'true',
+        key: apiKey,
+      });
+      if (pageToken) {
+        params.set('pageToken', pageToken);
+      }
+
+      const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, {
+        headers: baseHeaders,
+      });
+      if (!response.ok) {
+        const details = await response.text().catch(() => '');
+        throw new Error(`No se pudo listar la carpeta de Google Drive (${response.status}) ${details}`);
+      }
+
+      const data = await response.json() as {
+        nextPageToken?: string;
+        files?: Array<{ id?: string; name?: string; mimeType?: string; resourceKey?: string }>;
+      };
+
+      for (const file of data.files || []) {
+        if (!file.id || !file.name || !file.mimeType) continue;
+
+        if (file.mimeType === 'application/vnd.google-apps.folder') {
+          stack.push(file.id);
+          continue;
+        }
+
+        if (!file.mimeType.startsWith('image/')) continue;
+        files.push({ id: file.id, name: file.name, mimeType: file.mimeType, resourceKey: file.resourceKey });
+      }
+
+      pageToken = data.nextPageToken || '';
+    } while (pageToken);
+  }
+
+  return files;
+}
+
+async function downloadGoogleDriveImage(fileId: string, apiKey: string, resourceKey?: string) {
+  const mediaUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media&key=${encodeURIComponent(apiKey)}`;
+  const response = await fetch(mediaUrl, {
+    headers: resourceKey ? { 'X-Goog-Drive-Resource-Keys': `${fileId}/${resourceKey}` } : undefined,
+  });
+  if (!response.ok) {
+    throw new Error(`Descarga fallida (${response.status})`);
+  }
+
+  const data = await response.arrayBuffer();
+  return Buffer.from(data);
+}
+
+function resolveDriveImageFilename(name: string, mimeType: string) {
+  const sanitized = sanitizeProductImageName(name || '');
+  const ext = path.extname(sanitized).toLowerCase();
+  if (ext && ALLOWED_IMAGE_EXTENSIONS.has(ext)) {
+    return sanitized;
+  }
+
+  const fallbackExt = DRIVE_IMAGE_MIME_EXTENSIONS[mimeType] || '.jpg';
+  const stem = path.basename(sanitized || `drive_${Date.now()}`, path.extname(sanitized));
+  return `${stem}${fallbackExt}`;
+}
+
 const slugifyText = (value: string) =>
   String(value || '')
     .toLowerCase()
@@ -765,7 +959,11 @@ router.post('/import-presales', authenticate, requireRole('ADMIN', 'STAFF'), asy
         stock,
         initialStock,
         ean: normalizedRow.ean ? String(normalizedRow.ean) : ((row.EAN || row.ean || row.barcode) ? String(row.EAN || row.ean || row.barcode) : null),
-        images: JSON.stringify(normalizedRow.images.length > 0 ? normalizedRow.images : (row.images ? String(row.images).split('|').map((s: string) => s.trim()) : [])),
+        images: JSON.stringify(normalizeImportedImageReferences(
+          normalizedRow.images.length > 0
+            ? normalizedRow.images
+            : (row.images ? String(row.images).split('|').map((s: string) => s.trim()) : [])
+        )),
         status: ['ACTIVE', 'ARCHIVED'].includes((normalizedRow.status || row.status || 'ACTIVE').toUpperCase())
           ? (normalizedRow.status || row.status || 'ACTIVE').toUpperCase()
           : 'ACTIVE',
@@ -881,7 +1079,11 @@ router.post('/import', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
         stock,
         initialStock,
         ean: normalizedRow.ean ? String(normalizedRow.ean) : ((row.EAN || row.ean || row.barcode) ? String(row.EAN || row.ean || row.barcode) : null),
-        images: JSON.stringify(normalizedRow.images.length > 0 ? normalizedRow.images : (row.images ? String(row.images).split('|').map((s: string) => s.trim()) : [])),
+        images: JSON.stringify(normalizeImportedImageReferences(
+          normalizedRow.images.length > 0
+            ? normalizedRow.images
+            : (row.images ? String(row.images).split('|').map((s: string) => s.trim()) : [])
+        )),
         status: ['ACTIVE', 'ARCHIVED'].includes((normalizedRow.status || row.status || 'ACTIVE').toUpperCase())
           ? (normalizedRow.status || row.status || 'ACTIVE').toUpperCase()
           : 'ACTIVE', // HIDDEN no se puede importar desde CSV, solo se asigna manualmente
@@ -1050,6 +1252,65 @@ router.post('/upload-image', authenticate, requireRole('ADMIN', 'STAFF'), single
   }
 });
 
+router.post('/upload-images-drive', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
+  try {
+    const folderUrl = String(req.body?.folderUrl || '').trim();
+    if (!folderUrl) {
+      return res.status(400).json({ error: 'Debes enviar la URL de la carpeta de Google Drive' });
+    }
+
+    const folderRef = extractGoogleDriveFolderReference(folderUrl);
+    if (!folderRef) {
+      return res.status(400).json({ error: 'No se pudo leer el ID de la carpeta de Google Drive' });
+    }
+
+    const apiKey = String(process.env.GOOGLE_DRIVE_API_KEY || '').trim();
+    if (!apiKey) {
+      return res.status(503).json({ error: 'Falta configurar GOOGLE_DRIVE_API_KEY en el servidor' });
+    }
+
+    const driveFiles = await listGoogleDriveFolderImages(folderRef.folderId, apiKey, folderRef.resourceKey);
+    if (driveFiles.length === 0) {
+      return res.json({
+        extracted: 0,
+        skipped: 0,
+        productsUpdated: 0,
+        files: [],
+        message: 'No se encontraron imágenes en la carpeta (ni en subcarpetas) o no hay permisos de lectura públicos.',
+      });
+    }
+
+    fs.mkdirSync(productUploadsDir, { recursive: true });
+
+    const extracted: string[] = [];
+    let skipped = 0;
+
+    for (const driveFile of driveFiles) {
+      try {
+        const filename = resolveDriveImageFilename(driveFile.name, driveFile.mimeType);
+        const ext = path.extname(filename).toLowerCase();
+        if (!ALLOWED_IMAGE_EXTENSIONS.has(ext)) {
+          skipped++;
+          continue;
+        }
+
+        const data = await downloadGoogleDriveImage(driveFile.id, apiKey, driveFile.resourceKey);
+        fs.writeFileSync(path.join(productUploadsDir, filename), data);
+        extracted.push(filename);
+      } catch (downloadError) {
+        console.error('Drive image download skipped:', downloadError);
+        skipped++;
+      }
+    }
+
+    const productsUpdated = await attachExtractedImagesToProducts(extracted);
+    return res.json({ extracted: extracted.length, skipped, productsUpdated, files: extracted });
+  } catch (error) {
+    console.error('Upload Drive images error:', error);
+    return res.status(500).json({ error: 'Error al importar imágenes desde Google Drive' });
+  }
+});
+
 // Upload ZIP with product images — chunked upload support
 // 1. POST /upload-images/init   → start session
 // 2. POST /upload-images/chunk  → send each 20MB chunk
@@ -1150,38 +1411,7 @@ router.post('/upload-images/complete', authenticate, requireRole('ADMIN', 'STAFF
     }
 
     // Update products
-    let updated = 0;
-    if (extracted.length > 0) {
-      const allProducts = await prisma.product.findMany({ select: { id: true, sku: true, name: true, images: true } });
-      const matchedFiles = new Set<string>();
-
-      for (const product of allProducts) {
-        const productImages = [] as string[];
-        let images: string[];
-        try { images = JSON.parse(product.images); } catch { images = product.images ? [product.images] : []; }
-
-        for (const extractedFile of extracted) {
-          const shouldMatch = matchesProductImageName(extractedFile, product);
-          if (!shouldMatch) continue;
-
-          if (!matchedFiles.has(extractedFile)) {
-            matchedFiles.add(extractedFile);
-            productImages.push(`/uploads/products/${extractedFile}`);
-          }
-        }
-
-        const existingImages = images.filter((img: string) => !img.startsWith('/uploads/'));
-        const updatedImages = [...existingImages, ...productImages];
-
-        if (productImages.length > 0 || existingImages.length !== images.length) {
-          await prisma.product.update({
-            where: { id: product.id },
-            data: { images: JSON.stringify(updatedImages) },
-          });
-          updated++;
-        }
-      }
-    }
+    const updated = await attachExtractedImagesToProducts(extracted);
 
     res.json({ extracted: extracted.length, skipped: skipped.length, productsUpdated: updated, files: extracted });
   } catch (error) {
@@ -1240,42 +1470,7 @@ router.post('/upload-images', authenticate, requireRole('ADMIN', 'STAFF'), uploa
     }
 
     // Update products: replace bare filenames with served URLs
-    let updated = 0;
-    if (extracted.length > 0) {
-      const allProducts = await prisma.product.findMany({ select: { id: true, sku: true, name: true, images: true } });
-      const matchedFiles = new Set<string>();
-
-      for (const product of allProducts) {
-        let images: string[];
-        try {
-          images = JSON.parse(product.images);
-        } catch {
-          images = product.images ? [product.images] : [];
-        }
-
-        const productImages = [] as string[];
-        for (const extractedFile of extracted) {
-          const shouldMatch = matchesProductImageName(extractedFile, product);
-          if (!shouldMatch) continue;
-
-          if (!matchedFiles.has(extractedFile)) {
-            matchedFiles.add(extractedFile);
-            productImages.push(`/uploads/products/${extractedFile}`);
-          }
-        }
-
-        const existingImages = images.filter((img: string) => !img.startsWith('/uploads/'));
-        const updatedImages = [...existingImages, ...productImages];
-
-        if (productImages.length > 0 || existingImages.length !== images.length) {
-          await prisma.product.update({
-            where: { id: product.id },
-            data: { images: JSON.stringify(updatedImages) },
-          });
-          updated++;
-        }
-      }
-    }
+    const updated = await attachExtractedImagesToProducts(extracted);
 
     res.json({
       extracted: extracted.length,

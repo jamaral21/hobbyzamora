@@ -501,11 +501,21 @@ export const productsAPI = {
     }
 
     // 3. Complete — process the ZIP
-    return fetchAPI<{ extracted: number; skipped: number; productsUpdated: number; files: string[] }>(
+    return fetchAPI<{ extracted: number; skipped: number; productsUpdated: number; files: string[]; message?: string }>(
       '/products/upload-images/complete',
       { method: 'POST', body: JSON.stringify({ uploadId }) },
     );
   },
+
+  uploadImagesFromDrive: (folderUrl: string) =>
+    fetchAPI<{ extracted: number; skipped: number; productsUpdated: number; files: string[]; message?: string }>(
+      '/products/upload-images-drive',
+      {
+        method: 'POST',
+        body: JSON.stringify({ folderUrl }),
+      },
+      'admin'
+    ),
 
   uploadImage: async (file: File) => {
     const token = localStorage.getItem('adminToken') || localStorage.getItem('token');

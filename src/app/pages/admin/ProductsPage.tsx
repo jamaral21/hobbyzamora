@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { Plus, Search, Filter, MoreVertical, Edit, Trash2, Eye, Loader2, Upload, Download, CheckCircle, AlertCircle, ImagePlus } from 'lucide-react';
+import { Plus, Search, Filter, MoreVertical, Edit, Trash2, Eye, Loader2, Upload, Download, CheckCircle, AlertCircle, ImagePlus, Link2 } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { Button } from '../../components/design-system/Button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/design-system/Table';
@@ -29,7 +29,11 @@ export default function ProductsPage() {
   const [importResult, setImportResult] = useState<{ created: number; updated: number; skipped: number; errors: string[] } | null>(null);
   const [isUploadingImages, setIsUploadingImages] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [imageUploadResult, setImageUploadResult] = useState<{ extracted: number; skipped: number; productsUpdated: number } | null>(null);
+  const [imageUploadResult, setImageUploadResult] = useState<{ extracted: number; skipped: number; productsUpdated: number; message?: string } | null>(null);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
+  const [isDriveModalOpen, setIsDriveModalOpen] = useState(false);
+  const [driveFolderUrl, setDriveFolderUrl] = useState('');
+  const [isImportingDriveImages, setIsImportingDriveImages] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
   
@@ -229,17 +233,38 @@ export default function ProductsPage() {
     setIsUploadingImages(true);
     setUploadProgress(0);
     setImageUploadResult(null);
+    setImageUploadError(null);
     try {
       const result = await productsAPI.uploadImages(file, (pct) => setUploadProgress(pct));
       console.log('ZIP upload result:', result);
       setImageUploadResult(result);
       refetch();
     } catch (err: any) {
-      setImageUploadResult({ extracted: 0, skipped: 0, productsUpdated: 0 });
+      setImageUploadError(err?.message || 'Error al subir imágenes ZIP');
     } finally {
       setIsUploadingImages(false);
       setUploadProgress(0);
       if (zipInputRef.current) zipInputRef.current.value = '';
+    }
+  };
+
+  const handleImportDriveImages = async () => {
+    const trimmedUrl = driveFolderUrl.trim();
+    if (!trimmedUrl) return;
+
+    setIsImportingDriveImages(true);
+    setImageUploadResult(null);
+    setImageUploadError(null);
+    try {
+      const result = await productsAPI.uploadImagesFromDrive(trimmedUrl);
+      setImageUploadResult(result);
+      refetch();
+      setIsDriveModalOpen(false);
+      setDriveFolderUrl('');
+    } catch (err: any) {
+      setImageUploadError(err?.message || 'Error al importar imágenes desde Google Drive');
+    } finally {
+      setIsImportingDriveImages(false);
     }
   };
 
@@ -290,6 +315,10 @@ export default function ProductsPage() {
               {isUploadingImages ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImagePlus className="w-4 h-4" />}
               {isUploadingImages ? `Subiendo... ${uploadProgress}%` : 'Subir Imágenes ZIP'}
             </Button>
+            <Button variant="outline" onClick={() => setIsDriveModalOpen(true)} disabled={isImportingDriveImages}>
+              {isImportingDriveImages ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+              {isImportingDriveImages ? 'Importando desde Drive...' : 'Importar desde Drive'}
+            </Button>
             <Button onClick={() => { setEditingProduct(null); setIsEditorOpen(true); }}>
               <Plus className="w-4 h-4" />
               Agregar Producto
@@ -333,6 +362,18 @@ export default function ProductsPage() {
         )}
 
         {/* Image Upload Result Banner */}
+        {imageUploadError && (
+          <div className="mb-4 p-4 rounded-lg border bg-destructive/10 border-destructive/20">
+            <div className="flex items-start justify-between">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-destructive mt-0.5" />
+                <p className="text-sm text-foreground">{imageUploadError}</p>
+              </div>
+              <button onClick={() => setImageUploadError(null)} className="text-muted-foreground hover:text-foreground text-lg leading-none">&times;</button>
+            </div>
+          </div>
+        )}
+
         {imageUploadResult && (
           <div className={`mb-4 p-4 rounded-lg border ${
             imageUploadResult.extracted === 0
@@ -350,6 +391,9 @@ export default function ProductsPage() {
                   <p className="text-sm font-medium text-foreground">
                     {imageUploadResult.extracted} imagen(es) extraída(s), {imageUploadResult.productsUpdated} producto(s) actualizado(s)
                   </p>
+                  {imageUploadResult.message && (
+                    <p className="text-sm text-muted-foreground mt-1">{imageUploadResult.message}</p>
+                  )}
                   {imageUploadResult.skipped > 0 && (
                     <p className="text-sm text-muted-foreground mt-1">
                       {imageUploadResult.skipped} archivo(s) omitido(s) (formato no soportado)
@@ -550,6 +594,45 @@ export default function ProductsPage() {
             return result.url;
           }}
         />
+      </Modal>
+
+      <Modal
+        isOpen={isDriveModalOpen}
+        onClose={() => {
+          if (isImportingDriveImages) return;
+          setIsDriveModalOpen(false);
+        }}
+        title="Importar imágenes desde Google Drive"
+        size="md"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Pega la URL de la carpeta compartida de Google Drive con imágenes (JPG, PNG, WEBP o GIF).
+          </p>
+          <input
+            type="url"
+            placeholder="https://drive.google.com/drive/folders/..."
+            value={driveFolderUrl}
+            onChange={(e) => setDriveFolderUrl(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-border bg-input-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+          />
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsDriveModalOpen(false)}
+              disabled={isImportingDriveImages}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleImportDriveImages}
+              disabled={isImportingDriveImages || !driveFolderUrl.trim()}
+            >
+              {isImportingDriveImages ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
+              {isImportingDriveImages ? 'Importando...' : 'Confirmar importación'}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </AdminLayout>
   );
