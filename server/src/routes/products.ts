@@ -159,6 +159,9 @@ async function attachExtractedImagesToProducts(extracted: string[]) {
     } catch {
       images = product.images ? [product.images] : [];
     }
+    images = Array.isArray(images)
+      ? images.map((img) => String(img || '').trim()).filter(Boolean)
+      : [];
 
     for (const extractedFile of extracted) {
       const shouldMatch = matchesProductImageName(extractedFile, product);
@@ -170,10 +173,16 @@ async function attachExtractedImagesToProducts(extracted: string[]) {
       }
     }
 
-    const existingImages = images.filter((img: string) => !img.startsWith('/uploads/'));
-    const updatedImages = [...existingImages, ...productImages];
+    if (productImages.length === 0) continue;
 
-    if (productImages.length > 0 || existingImages.length !== images.length) {
+    const updatedImages = [...images];
+    for (const newImage of productImages) {
+      if (!updatedImages.includes(newImage)) {
+        updatedImages.push(newImage);
+      }
+    }
+
+    if (updatedImages.length !== images.length) {
       await prisma.product.update({
         where: { id: product.id },
         data: { images: JSON.stringify(updatedImages) },
