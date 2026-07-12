@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import { prisma } from '../index.js';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
 
@@ -121,6 +123,23 @@ type ConfigRow = {
 
 function getConfigDelegate() {
   return (prisma as any).shipmentsConfig;
+}
+
+function resolveSqliteDatabasePath() {
+  const raw = String(process.env.DATABASE_URL || '').trim();
+  if (!raw.startsWith('file:')) return null;
+
+  const withoutProtocol = raw.slice('file:'.length);
+  const [rawPath] = withoutProtocol.split('?');
+  if (!rawPath) return null;
+
+  const decoded = decodeURIComponent(rawPath);
+
+  if (decoded.startsWith('/')) {
+    return path.resolve(decoded);
+  }
+
+  return path.resolve(process.cwd(), decoded);
 }
 
 async function findFirstConfigRow(): Promise<ConfigRow | null> {
@@ -304,6 +323,46 @@ router.put('/', authenticate, requireRole('ADMIN', 'STAFF', 'admin', 'staff'), a
   } catch (error) {
     console.error('PUT /shipments/config error:', error);
     return res.status(500).json({ error: 'No se pudo actualizar la configuracion' });
+  }
+});
+
+router.post('/backup', authenticate, requireRole('ADMIN', 'STAFF', 'admin', 'staff'), async (_req: AuthRequest, res) => {
+  try {
+    const dbPath = resolveSqliteDatabasePath();
+    if (!dbPath) {
+      return res.status(400).json({ error: 'Solo se soportan backups manuales para SQLite (DATABASE_URL=file:...)' });
+    }
+
+    if (!fs.existsSync(dbPath)) {
+      return res.status(404).json({ error: `No se encontró la base de datos en ${dbPath}` });
+    }
+
+    const backupDir = process.env.SHIPMENTS_BACKUP_DIR
+      ? path.resolve(process.env.SHIPMENTS_BACKUP_DIR)
+      : path.join(path.dirname(dbPath), 'backups', 'manual');
+
+    fs.mkdirSync(backupDir, { recursive: true });
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const ext = path.extname(dbPath) || '.db';
+    const base = path.basename(dbPath, ext);
+    const fileName = `${base}.manual-${timestamp}${ext}`;
+    const outputPath = path.join(backupDir, fileName);
+
+    fs.copyFileSync(dbPath, outputPath);
+
+    const stat = fs.statSync(outputPath);
+    return res.json({
+      data: {
+        fileName,
+        path: outputPath,
+        sizeBytes: stat.size,
+        createdAt: new Date(stat.mtimeMs).toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error('POST /shipments/config/backup error:', error);
+    return res.status(500).json({ error: 'No se pudo crear el backup de la base de datos' });
   }
 });
 

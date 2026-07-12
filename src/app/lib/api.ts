@@ -395,7 +395,7 @@ export const productsAPI = {
     if (params?.category) searchParams.set('category', params.category);
     if (params?.status) searchParams.set('status', params.status);
     if (params?.search) searchParams.set('search', params.search);
-    if (params?.presale) searchParams.set('presale', 'true');
+    if (params?.presale !== undefined) searchParams.set('presale', String(params.presale));
     if (params?.page) searchParams.set('page', String(params.page));
     if (params?.limit) searchParams.set('limit', String(params.limit));
     

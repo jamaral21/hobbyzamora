@@ -418,6 +418,8 @@ router.get('/', optionalAuth, async (req: AuthRequest, res) => {
 
     if (presale === 'true') {
       where.isPresale = true;
+    } else if (presale === 'false') {
+      where.isPresale = false;
     }
 
     // Usuarios no autenticados no pueden ver productos de preventa

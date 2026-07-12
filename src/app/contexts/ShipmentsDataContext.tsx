@@ -107,6 +107,10 @@ interface ShipmentsDataContextType {
   addVenta: (data: NewVentaInput) => SaleRecord;
   confirmGAV: (id: number) => void;
   updateConfig: (data: Partial<ERPConfig>) => Promise<{ ok: true } | { ok: false; error: string }>;
+  createBackup: () => Promise<
+    | { ok: true; data: { fileName: string; path: string; sizeBytes: number; createdAt: string } }
+    | { ok: false; error: string }
+  >;
   addPedidoWeb: (data: NewWebOrderInput) => WebOrder;
   updatePedidoWeb: (id: string, data: Partial<WebOrder>) => void;
   addDocumentoAduaneroCaja: (cajaId: string, data: NewCustomsDocumentInput) => Promise<void>;
@@ -249,6 +253,13 @@ type ApiConfig = {
   arrBodegaJP: number;
   appBeyblade: number;
   comisionPct: number;
+};
+
+type ApiBackupResult = {
+  fileName: string;
+  path: string;
+  sizeBytes: number;
+  createdAt: string;
 };
 
 const DEFAULT_METODOS_PAGO = ['Efectivo', 'JCB Bandai', 'Rakuten', 'PayPay', 'View Card', '', '', '', '', ''];
@@ -983,6 +994,26 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
     }
   }, [config, applyConfigResponse, syncFromApi]);
 
+  const createBackup = useCallback(async (): Promise<
+    | { ok: true; data: ApiBackupResult }
+    | { ok: false; error: string }
+  > => {
+    try {
+      const response = await shipmentsFetch<{ data: ApiBackupResult }>('/config/backup', {
+        method: 'POST',
+      });
+
+      if (!response?.data) {
+        return { ok: false, error: 'Respuesta inválida al crear backup' };
+      }
+
+      return { ok: true, data: response.data };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo crear el backup';
+      return { ok: false, error: message };
+    }
+  }, []);
+
   const addPedidoWeb = useCallback((data: NewWebOrderInput): WebOrder => {
     const id = `WEB-${String(pedidosWeb.length + 1).padStart(3, '0')}`;
     const order: WebOrder = { ...data, id, estado: 'pendiente' };
@@ -1128,7 +1159,7 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
         addCompra, updateCompra, addBoleta, confirmPayment, deleteBoleta,
         addCaja, updateCaja, deleteCaja, saveInternacion,
         confirmCosteo, updatePrecioVenta, addVenta, confirmGAV,
-        updateConfig, addPedidoWeb, updatePedidoWeb,
+        updateConfig, createBackup, addPedidoWeb, updatePedidoWeb,
         addDocumentoAduaneroCaja, removeDocumentoAduaneroCaja,
         addDocumentoAduaneroWebOrder, removeDocumentoAduaneroWebOrder,
         addCompraChile, generateGAVBoleta,

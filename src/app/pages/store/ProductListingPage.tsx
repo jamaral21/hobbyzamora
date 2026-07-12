@@ -25,7 +25,7 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
   const categoryParam = searchParams.get('category') || 'all';
   const { data: sectionData } = useStoreSections();
 
-  const { data: products, isLoading } = useProducts(undefined, {
+  const { data: products, isLoading } = useProducts({ limit: 500 }, {
     authMode: isAuthenticated ? 'customer' : 'public',
   });
 

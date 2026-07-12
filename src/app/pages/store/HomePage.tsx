@@ -68,7 +68,7 @@ const heroSlides: HeroSlide[] = [
 
 export default function HomePage() {
   const { isAuthenticated } = useAuth();
-  const { data: products, isLoading } = useProducts(undefined, {
+  const { data: products, isLoading } = useProducts({ limit: 500 }, {
     authMode: isAuthenticated ? 'customer' : 'public',
   });
   const scrollRef = useRef<HTMLDivElement>(null);

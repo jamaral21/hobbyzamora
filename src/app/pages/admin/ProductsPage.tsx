@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { Plus, Search, Filter, MoreVertical, Edit, Trash2, Eye, Loader2, Upload, Download, CheckCircle, AlertCircle, ImagePlus, Link2 } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
@@ -8,8 +8,9 @@ import { Badge } from '../../components/design-system/Badge';
 import { Dropdown, DropdownItem } from '../../components/design-system/Dropdown';
 import { Modal } from '../../components/design-system/Modal';
 import { ProductEditor } from '../../components/admin/ProductEditor';
-import { useProducts, useMutation } from '../../hooks/useData';
+import { useMutation } from '../../hooks/useData';
 import { productsAPI } from '../../lib/api';
+import type { Product } from '../../lib/api';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
 import { orderSectionLabels } from '../../lib/sections';
 
@@ -34,17 +35,62 @@ export default function ProductsPage() {
   const [isDriveModalOpen, setIsDriveModalOpen] = useState(false);
   const [driveFolderUrl, setDriveFolderUrl] = useState('');
   const [isImportingDriveImages, setIsImportingDriveImages] = useState(false);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 1 });
+  const [searchTerm, setSearchTerm] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
-  
-  const { data: products, isLoading, refetch } = useProducts(
-    {
-      status: statusFilter === 'ALL' ? 'ALL' : statusFilter,
-    },
-    { enabled: isAuthenticated, authMode: 'admin' }
-  );
+
   const createProduct = useMutation(productsAPI.create);
   const updateProduct = useMutation(productsAPI.update);
+
+  const loadProducts = useCallback(async () => {
+    if (!isAuthenticated) return;
+
+    setIsLoading(true);
+    try {
+      const response = await productsAPI.getAll(
+        {
+          status: statusFilter === 'ALL' ? 'ALL' : statusFilter,
+          category: categoryFilter === 'ALL' ? undefined : categoryFilter,
+          search: searchTerm.trim() || undefined,
+          presale: isPresalesView ? true : false,
+          page: currentPage,
+          limit: 50,
+        },
+        'admin'
+      );
+      setProducts(response.products || []);
+      setPagination({
+        page: Number(response.pagination?.page || currentPage),
+        limit: Number(response.pagination?.limit || 50),
+        total: Number(response.pagination?.total || 0),
+        totalPages: Math.max(1, Number(response.pagination?.totalPages || 1)),
+      });
+    } catch {
+      setProducts([]);
+      setPagination({ page: 1, limit: 50, total: 0, totalPages: 1 });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isAuthenticated, statusFilter, categoryFilter, searchTerm, isPresalesView, currentPage]);
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      void loadProducts();
+    }, 250);
+    return () => clearTimeout(timeout);
+  }, [loadProducts]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, categoryFilter, isPresalesView]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
 
   const categoryOptions = useMemo(() => {
     const categories = new Set<string>();
@@ -59,20 +105,12 @@ export default function ProductsPage() {
     return ['ALL', ...orderSectionLabels(categories)];
   }, [products, isPresalesView]);
 
-  const filteredProducts = useMemo(() => {
-    return (products || [])
-      .filter((p: any) => isPresalesView ? p.isPresale : !p.isPresale)
-      .filter((p: any) => categoryFilter === 'ALL' || p.category === categoryFilter)
-      .filter((p: any) =>
-        String(p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        String(p.sku || '').toLowerCase().includes(searchQuery.toLowerCase())
-      );
-  }, [products, searchQuery, isPresalesView, categoryFilter]);
+  const filteredProducts = products || [];
 
   const handleDeactivate = async (id: string) => {
     if (confirm('¿Estás seguro de que quieres desactivar este producto?')) {
       await updateProduct.mutate(id, { status: 'ARCHIVED' });
-      refetch();
+      await loadProducts();
     }
   };
 
@@ -101,7 +139,7 @@ export default function ProductsPage() {
       } else {
         await createProduct.mutate(apiData);
       }
-      refetch();
+      await loadProducts();
       setIsEditorOpen(false);
       if (isPresalesView) {
         navigate('/admin/presales');
@@ -177,7 +215,7 @@ export default function ProductsPage() {
       }
       const result = await productsAPI.importCSV(rows, isPresalesView);
       setImportResult(result);
-      refetch();
+      await loadProducts();
     } catch (err: any) {
       setImportResult({ created: 0, updated: 0, skipped: 0, errors: [err?.message || 'Error al importar'] });
     } finally {
@@ -238,7 +276,7 @@ export default function ProductsPage() {
       const result = await productsAPI.uploadImages(file, (pct) => setUploadProgress(pct));
       console.log('ZIP upload result:', result);
       setImageUploadResult(result);
-      refetch();
+      await loadProducts();
     } catch (err: any) {
       setImageUploadError(err?.message || 'Error al subir imágenes ZIP');
     } finally {
@@ -258,7 +296,7 @@ export default function ProductsPage() {
     try {
       const result = await productsAPI.uploadImagesFromDrive(trimmedUrl);
       setImageUploadResult(result);
-      refetch();
+      await loadProducts();
       setIsDriveModalOpen(false);
       setDriveFolderUrl('');
     } catch (err: any) {
@@ -414,7 +452,10 @@ export default function ProductsPage() {
               type="text"
               placeholder="Buscar productos..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setSearchTerm(e.target.value);
+              }}
               className="w-full pl-10 pr-4 py-2 rounded-lg border border-border bg-input-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
@@ -555,13 +596,13 @@ export default function ProductsPage() {
                     Editar
                   </DropdownItem>
                   {product.status !== 'HIDDEN' && (
-                    <DropdownItem onClick={async () => { await updateProduct.mutate((product as any).id, { status: 'HIDDEN' }); refetch(); }}>
+                    <DropdownItem onClick={async () => { await updateProduct.mutate((product as any).id, { status: 'HIDDEN' }); await loadProducts(); }}>
                       <Eye className="w-4 h-4 inline mr-2" />
                       Ocultar
                     </DropdownItem>
                   )}
                   {product.status === 'HIDDEN' && (
-                    <DropdownItem onClick={async () => { await updateProduct.mutate((product as any).id, { status: 'ACTIVE' }); refetch(); }}>
+                    <DropdownItem onClick={async () => { await updateProduct.mutate((product as any).id, { status: 'ACTIVE' }); await loadProducts(); }}>
                       <Eye className="w-4 h-4 inline mr-2" />
                       Mostrar
                     </DropdownItem>
@@ -576,6 +617,31 @@ export default function ProductsPage() {
           ))}
         </TableBody>
       </Table>
+      </div>
+
+      <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <p className="text-sm text-muted-foreground">
+          Mostrando {filteredProducts.length} de {pagination.total} producto(s)
+        </p>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+            disabled={currentPage <= 1 || isLoading}
+          >
+            Anterior
+          </Button>
+          <span className="text-sm text-muted-foreground px-2">
+            Página {pagination.page} de {pagination.totalPages}
+          </span>
+          <Button
+            variant="outline"
+            onClick={() => setCurrentPage((prev) => Math.min(pagination.totalPages, prev + 1))}
+            disabled={currentPage >= pagination.totalPages || isLoading}
+          >
+            Siguiente
+          </Button>
+        </div>
       </div>
 
       {/* Product Editor Modal */}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Save, CheckCircle } from 'lucide-react';
+import { Save, CheckCircle, Database, Loader2 } from 'lucide-react';
 import { useShipmentsData } from '../../contexts/ShipmentsDataContext';
 import { Card } from '../../components/design-system/Card';
 import { Input } from '../../components/design-system/Input';
@@ -7,7 +7,7 @@ import { Button } from '../../components/design-system/Button';
 import type { BankAccount } from '../../data/shipmentsDomain';
 
 export default function ConfiguracionPage() {
-  const { config, updateConfig } = useShipmentsData();
+  const { config, updateConfig, createBackup } = useShipmentsData();
   const emptyCuenta: BankAccount = { titular: '', rut: '', banco: '', tipo: '', numero: '' };
   const emptyMetodos = Array.from({ length: 10 }, () => '');
 
@@ -21,6 +21,9 @@ export default function ConfiguracionPage() {
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCreatingBackup, setIsCreatingBackup] = useState(false);
+  const [backupSuccess, setBackupSuccess] = useState<string | null>(null);
+  const [backupError, setBackupError] = useState<string | null>(null);
 
   const metodosPadded = [
     ...(metodos || []),
@@ -83,6 +86,24 @@ export default function ConfiguracionPage() {
     setTimeout(() => setSaved(false), 3000);
   }
 
+  async function handleCreateBackup() {
+    setBackupError(null);
+    setBackupSuccess(null);
+    setIsCreatingBackup(true);
+
+    const result = await createBackup();
+
+    setIsCreatingBackup(false);
+
+    if (!result.ok) {
+      setBackupError(result.error || 'No se pudo crear el backup');
+      return;
+    }
+
+    const sizeMb = (result.data.sizeBytes / (1024 * 1024)).toFixed(2);
+    setBackupSuccess(`Backup creado: ${result.data.fileName} (${sizeMb} MB)`);
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -104,6 +125,35 @@ export default function ConfiguracionPage() {
           {saveError}
         </div>
       )}
+
+      {backupSuccess && (
+        <div className="fixed top-16 right-4 z-50 bg-[#00e676]/90 text-black px-4 py-3 rounded-lg shadow-lg text-sm flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
+          <CheckCircle className="w-4 h-4" /> {backupSuccess}
+        </div>
+      )}
+
+      {backupError && (
+        <div className="fixed top-16 right-4 z-50 bg-red-600/90 text-white px-4 py-3 rounded-lg shadow-lg text-sm animate-in fade-in slide-in-from-top-2">
+          {backupError}
+        </div>
+      )}
+
+      {/* Backups */}
+      <Card>
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-4">
+          Backups
+        </h3>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <p className="text-sm text-muted-foreground max-w-2xl">
+            Crea un respaldo manual de la base de datos antes de cambios grandes. Se guarda en el servidor
+            y no modifica datos existentes.
+          </p>
+          <Button type="button" variant="outline" onClick={handleCreateBackup} disabled={isCreatingBackup}>
+            {isCreatingBackup ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+            {isCreatingBackup ? 'Creando backup...' : 'Crear backup ahora'}
+          </Button>
+        </div>
+      </Card>
 
       {/* Métodos de Pago */}
       <Card>
