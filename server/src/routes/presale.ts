@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../index.js';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
 import {
@@ -24,6 +25,52 @@ function parseImages(images: unknown): string[] {
     if (Array.isArray(parsed)) return parsed.filter((i): i is string => typeof i === 'string');
   } catch { /* noop */ }
   return [images];
+}
+
+type ReservationWithUserAndProduct = {
+  id: string;
+  userId: string;
+  productId: string;
+  status: string;
+  notifiedAt: Date | null;
+  expiresAt: Date | null;
+  paidAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  user: { id: string; name: string; email: string };
+  product: { id: string; name: string };
+};
+
+async function promotePendingReservationsFIFO(
+  tx: Prisma.TransactionClient,
+  productId: string,
+  slots: number,
+  now: Date,
+  expiresAt: Date,
+): Promise<ReservationWithUserAndProduct[]> {
+  if (slots <= 0) return [];
+
+  const pendingToNotify = await tx.presaleReservation.findMany({
+    where: { productId, status: 'PENDING' },
+    orderBy: { createdAt: 'asc' },
+    take: slots,
+    include: {
+      user: { select: { id: true, name: true, email: true } },
+      product: { select: { id: true, name: true } },
+    },
+  }) as ReservationWithUserAndProduct[];
+
+  if (pendingToNotify.length === 0) return [];
+
+  await tx.presaleReservation.updateMany({
+    where: {
+      id: { in: pendingToNotify.map((r) => r.id) },
+      status: 'PENDING',
+    },
+    data: { status: 'NOTIFIED', notifiedAt: now, expiresAt },
+  });
+
+  return pendingToNotify;
 }
 
 // ─── Customer routes ──────────────────────────────────────────────────────────
@@ -319,8 +366,8 @@ router.get('/admin/product-reservation-counts', authenticate, requireRole('ADMIN
 
 /**
  * POST /api/presale/admin/confirm-arrival/:productId
- * Admin: mark a presale product as arrived, notify all PENDING reservers by email.
- * This transitions their status to NOTIFIED and sets expiresAt = now + 24h.
+ * Admin: register arrived quantity and notify FIFO subset of PENDING reservers.
+ * This transitions only selected reservations to NOTIFIED with expiresAt = now + payment window.
  */
 router.post(
   '/admin/confirm-arrival/:productId',
@@ -329,20 +376,22 @@ router.post(
   async (req, res) => {
     try {
       const productId = req.params.productId as string;
+      const rawArrivedQty = req.body?.arrivedQty;
+      const hasArrivedQty = rawArrivedQty !== undefined && rawArrivedQty !== null && `${rawArrivedQty}`.trim() !== '';
+
+      let arrivedQty = Number.POSITIVE_INFINITY;
+      if (hasArrivedQty) {
+        const parsedQty = Number.parseInt(String(rawArrivedQty), 10);
+        if (!Number.isFinite(parsedQty) || parsedQty <= 0) {
+          return res.status(400).json({ error: 'arrivedQty debe ser un entero mayor a 0' });
+        }
+        arrivedQty = parsedQty;
+      }
 
       const product = await prisma.product.findUnique({ where: { id: productId } });
       if (!product || !product.isPresale) {
         return res.status(404).json({ error: 'Producto preventa no encontrado' });
       }
-
-      if (product.presaleArrivedAt) {
-        return res.json({ message: 'La llegada de esta preventa ya fue confirmada', notified: 0, confirmed: true });
-      }
-
-      const pendingReservations = await prisma.presaleReservation.findMany({
-        where: { productId, status: 'PENDING' },
-        include: { user: { select: { id: true, name: true, email: true } } },
-      }) as Array<{ id: string; userId: string; productId: string; status: string; notifiedAt: Date | null; expiresAt: Date | null; paidAt: Date | null; createdAt: Date; updatedAt: Date; user: { id: string; name: string; email: string } }>;
 
       const now = new Date();
       const expiresAt = getPresalePaymentExpiry(now);
@@ -350,21 +399,37 @@ router.post(
         ? `${PRESALE_EXPIRATION_SECONDS / 3600}h`
         : `${PRESALE_EXPIRATION_SECONDS} segundos`;
 
-      // Update all PENDING → NOTIFIED in one batch + mark product as arrived
-      await Promise.all([
-        prisma.presaleReservation.updateMany({
-          where: { productId, status: 'PENDING' },
-          data: { status: 'NOTIFIED', notifiedAt: now, expiresAt },
-        }),
-        prisma.product.update({
-          where: { id: productId },
-          data: { presaleArrivedAt: now, presaleEndDate: expiresAt },
-        }),
-      ]);
+      const pendingCount = await prisma.presaleReservation.count({
+        where: { productId, status: 'PENDING' },
+      });
+
+      if (pendingCount === 0) {
+        return res.json({
+          message: 'No hay reservas pendientes para notificar.',
+          notified: 0,
+          pendingBefore: 0,
+          pendingAfter: 0,
+        });
+      }
+
+      const slots = Math.min(hasArrivedQty ? arrivedQty : pendingCount, pendingCount);
+
+      const notifiedReservations = await prisma.$transaction(async (tx) => {
+        const promoted = await promotePendingReservationsFIFO(tx, productId, slots, now, expiresAt);
+
+        if (!product.presaleArrivedAt) {
+          await tx.product.update({
+            where: { id: productId },
+            data: { presaleArrivedAt: now },
+          });
+        }
+
+        return promoted;
+      });
 
       // Send emails concurrently
-      if (pendingReservations.length > 0) {
-        const emailPromises = pendingReservations.map((r) =>
+      if (notifiedReservations.length > 0) {
+        const emailPromises = notifiedReservations.map((r) =>
           sendPresaleArrivalEmail(
             r.user.email,
             r.user.name,
@@ -377,11 +442,16 @@ router.post(
         await Promise.all(emailPromises);
       }
 
+      const pendingAfter = Math.max(0, pendingCount - notifiedReservations.length);
+
       return res.json({
-        message: pendingReservations.length > 0
-          ? `Se notificó a ${pendingReservations.length} cliente(s). Tienen ${expiryLabel} para pagar.`
-          : `Llegada confirmada. Esta preventa expirará en ${expiryLabel}.`,
-        notified: pendingReservations.length,
+        message: notifiedReservations.length > 0
+          ? `Se notificó a ${notifiedReservations.length} cliente(s) por FIFO. Tienen ${expiryLabel} para pagar.`
+          : 'No se pudieron notificar reservas en esta operación.',
+        notified: notifiedReservations.length,
+        pendingBefore: pendingCount,
+        pendingAfter,
+        partial: notifiedReservations.length < pendingCount,
       });
     } catch (error) {
       console.error('Presale confirm arrival error:', error);
@@ -468,8 +538,9 @@ router.patch(
 
 /**
  * POST /api/presale/admin/release-expired
- * Admin (or scheduled job): find NOTIFIED reservations past their expiresAt,
- * mark them EXPIRED, and restore stock on the (now regular) product.
+ * Admin (or scheduled job): expire overdue NOTIFIED reservations.
+ * For active presales, released slots are reassigned FIFO to PENDING reservations.
+ * Any remaining released slots are restored to sellable stock.
  */
 router.post(
   '/admin/release-expired',
@@ -478,6 +549,8 @@ router.post(
   async (req, res) => {
     try {
       const now = new Date();
+      const reassignNow = new Date();
+      const reassignExpiresAt = getPresalePaymentExpiry(reassignNow);
 
       const expired = await prisma.presaleReservation.findMany({
         where: {
@@ -498,19 +571,39 @@ router.post(
       }
 
       const expiredIds = expired.map((r) => r.id);
+      const promotedByProduct: Record<string, number> = {};
+      let promotedReservations: ReservationWithUserAndProduct[] = [];
 
       await prisma.$transaction(async (tx) => {
         await tx.presaleReservation.updateMany({
           where: { id: { in: expiredIds } },
           data: { status: 'EXPIRED' },
         });
+
         for (const [pid, count] of Object.entries(byProduct)) {
-          await tx.product.update({
+          const product = await tx.product.findUnique({
             where: { id: pid },
-            data: {
-              stock: { increment: count },
-            },
+            select: { id: true, isPresale: true, status: true },
           });
+
+          let promotedCount = 0;
+          if (product?.isPresale && product.status === 'ACTIVE') {
+            const promoted = await promotePendingReservationsFIFO(tx, pid, count, reassignNow, reassignExpiresAt);
+            promotedCount = promoted.length;
+            promotedReservations = [...promotedReservations, ...promoted];
+          }
+
+          promotedByProduct[pid] = promotedCount;
+          const remainingForStock = Math.max(0, count - promotedCount);
+
+          if (remainingForStock > 0) {
+            await tx.product.update({
+              where: { id: pid },
+              data: {
+                stock: { increment: remainingForStock },
+              },
+            });
+          }
         }
       });
 
@@ -520,12 +613,21 @@ router.post(
           console.error(`[presale] Error al enviar email expirado a ${r.user.email}:`, err);
         })
       );
-      await Promise.all(emailPromises);
+
+      const promotionEmails = promotedReservations.map((r) =>
+        sendPresaleArrivalEmail(r.user.email, r.user.name, r.product.name, r.id).catch((err) => {
+          console.error(`[presale] Error al enviar email de reasignación a ${r.user.email}:`, err);
+        })
+      );
+
+      await Promise.all([...emailPromises, ...promotionEmails]);
 
       return res.json({
         message: `Se liberaron ${expired.length} reserva(s) expirada(s). Stock restaurado.`,
         released: expired.length,
         byProduct,
+        promoted: promotedReservations.length,
+        promotedByProduct,
       });
     } catch (error) {
       console.error('Presale release-expired error:', error);

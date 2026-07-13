@@ -1021,10 +1021,11 @@ export const presaleAPI = {
   adminProductReservationCounts: () =>
     fetchAPI<{ countsByProduct: Record<string, number> }>('/presale/admin/product-reservation-counts', undefined, 'admin'),
 
-  /** Confirm product arrival → notify all PENDING reservers */
-  confirmArrival: (productId: string) =>
-    fetchAPI<{ message: string; notified: number }>(`/presale/admin/confirm-arrival/${productId}`, {
+  /** Confirm arrived quantity → notify FIFO subset of PENDING reservers */
+  confirmArrival: (productId: string, arrivedQty?: number) =>
+    fetchAPI<{ message: string; notified: number; pendingBefore?: number; pendingAfter?: number; partial?: boolean }>(`/presale/admin/confirm-arrival/${productId}`, {
       method: 'POST',
+      body: JSON.stringify(arrivedQty ? { arrivedQty } : {}),
     }, 'admin'),
 
   /** Convert presale into regular product and enable immediate sale */

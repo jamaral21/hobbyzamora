@@ -9,6 +9,8 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import { PrismaClient } from '@prisma/client';
+import { sendPresaleArrivalEmail } from './lib/emailService.js';
+import { getPresalePaymentExpiry } from './lib/presaleUtils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -103,10 +105,13 @@ app.listen(PORT, () => {
 
 // ─── Presale expiration job ──────────────────────────────────────────────────
 // Runs every 15 minutes. Marks NOTIFIED reservations past their expiresAt as
-// EXPIRED and restores the sellable stock on the product.
+// EXPIRED, then reassigns released slots FIFO to PENDING reservations when possible.
+// Any unreassigned slots are restored to sellable stock.
 async function expirePresaleReservations() {
   try {
     const now = new Date();
+    const reassignNow = new Date();
+    const reassignExpiresAt = getPresalePaymentExpiry(reassignNow);
     const expired = await prisma.presaleReservation.findMany({
       where: {
         status: 'NOTIFIED',
@@ -116,6 +121,15 @@ async function expirePresaleReservations() {
     });
 
     if (expired.length === 0) return;
+
+    type PromotedReservation = {
+      id: string;
+      user: { name: string; email: string };
+      product: { name: string };
+    };
+
+    let promotedForEmail: PromotedReservation[] = [];
+    const promotedByProduct: Record<string, number> = {};
 
     await prisma.$transaction(async (tx) => {
       // Mark all as EXPIRED
@@ -131,14 +145,61 @@ async function expirePresaleReservations() {
       }, {});
 
       for (const [productId, count] of Object.entries(countByProduct)) {
-        await tx.product.update({
+        const product = await tx.product.findUnique({
           where: { id: productId },
-          data: { stock: { increment: count } },
+          select: { id: true, isPresale: true, status: true },
         });
+
+        let promotedCount = 0;
+        if (product?.isPresale && product.status === 'ACTIVE') {
+          const pendingToNotify = await tx.presaleReservation.findMany({
+            where: { productId, status: 'PENDING' },
+            orderBy: { createdAt: 'asc' },
+            take: count,
+            include: {
+              user: { select: { name: true, email: true } },
+              product: { select: { name: true } },
+            },
+          });
+
+          if (pendingToNotify.length > 0) {
+            await tx.presaleReservation.updateMany({
+              where: {
+                id: { in: pendingToNotify.map((r) => r.id) },
+                status: 'PENDING',
+              },
+              data: { status: 'NOTIFIED', notifiedAt: reassignNow, expiresAt: reassignExpiresAt },
+            });
+
+            promotedCount = pendingToNotify.length;
+            promotedForEmail = [...promotedForEmail, ...pendingToNotify];
+          }
+        }
+
+        promotedByProduct[productId] = promotedCount;
+        const remainingForStock = Math.max(0, count - promotedCount);
+
+        if (remainingForStock > 0) {
+          await tx.product.update({
+            where: { id: productId },
+            data: { stock: { increment: remainingForStock } },
+          });
+        }
       }
     });
 
-    console.log(`[presale] Expiradas ${expired.length} reserva(s). Stock restaurado.`);
+    if (promotedForEmail.length > 0) {
+      await Promise.all(
+        promotedForEmail.map((r) =>
+          sendPresaleArrivalEmail(r.user.email, r.user.name, r.product.name, r.id).catch((err) => {
+            console.error(`[presale] Error al enviar email de reasignación a ${r.user.email}:`, err);
+          })
+        )
+      );
+    }
+
+    const promotedTotal = Object.values(promotedByProduct).reduce((acc, v) => acc + v, 0);
+    console.log(`[presale] Expiradas ${expired.length} reserva(s). Reasignadas FIFO: ${promotedTotal}.`);
   } catch (err) {
     console.error('[presale] Error en job de expiración:', err);
   }

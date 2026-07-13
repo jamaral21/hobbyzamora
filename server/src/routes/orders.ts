@@ -317,9 +317,11 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
           select: { status: true },
         });
 
-        const hasActiveReservation = Boolean(
-          existingReservation && ['PENDING', 'NOTIFIED', 'PAID'].includes(existingReservation.status)
-        );
+        const hasNotifiedReservation = existingReservation?.status === 'NOTIFIED';
+
+        if (!hasNotifiedReservation) {
+          return res.status(400).json({ error: `${product.name}: Solo clientes notificados pueden pagar esta preventa` });
+        }
 
         const activeReservedCount = await prisma.presaleReservation.count({
           where: {
@@ -329,7 +331,7 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
         });
 
         const unavailableReason = getPresaleUnavailableReason(product, new Date(), activeReservedCount);
-        if (unavailableReason && !(hasActiveReservation && unavailableReason === 'No hay cupos disponibles para esta preventa')) {
+        if (unavailableReason && !(hasNotifiedReservation && unavailableReason === 'No hay cupos disponibles para esta preventa')) {
           return res.status(400).json({ error: `${product.name}: ${unavailableReason}` });
         }
 

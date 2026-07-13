@@ -93,7 +93,7 @@ function PresaleProductCard({
 }: {
   product: Product;
   activeReservedCount: number;
-  onConfirmArrival: (productId: string) => void;
+  onConfirmArrival: (product: Product) => void;
   onRelease: (product: Product) => void;
   onEdit: (product: Product) => void;
   onConvert: (product: Product) => void;
@@ -105,7 +105,6 @@ function PresaleProductCard({
   const reserved = Math.max(0, activeReservedCount);
   const pct = total > 0 ? Math.min((reserved / total) * 100, 100) : 0;
   const presaleEndLabel = getPresaleEndLabel(product.presaleEndDate ?? null);
-  const isArrivalConfirmed = Boolean(product.presaleArrivedAt);
   const isExpiredByDate = Boolean(product.presaleEndDate && new Date(product.presaleEndDate) <= new Date());
   const isSoldOut = total > 0 && reserved >= total;
   const readyToConvert = Boolean(product.isPresale && (isExpiredByDate || isSoldOut || product.status === 'HIDDEN'));
@@ -180,17 +179,17 @@ function PresaleProductCard({
           </button>
         )}
         <button
-          onClick={() => onConfirmArrival(product.id)}
-          disabled={loadingId === product.id || isArrivalConfirmed}
+          onClick={() => onConfirmArrival(product)}
+          disabled={loadingId === product.id}
           className="flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-bold hover:bg-primary/90 disabled:opacity-60 transition-colors"
-          title={isArrivalConfirmed ? 'La llegada ya fue confirmada' : 'Notificar a todos los reservadores pendientes'}
+          title="Notificar por FIFO según cantidad llegada"
         >
           {loadingId === product.id ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
           ) : (
             <PackageCheck className="w-3.5 h-3.5" />
           )}
-          {isArrivalConfirmed ? 'Confirmado' : 'Llegó'}
+          Llegó
         </button>
       </div>
     </div>
@@ -438,10 +437,28 @@ export function PresalesPage() {
     loadProductReservationCounts();
   }, [loadProducts, loadGlobalStats, loadProductReservationCounts]);
 
-  const handleConfirmArrival = async (productId: string) => {
-    setConfirmingId(productId);
+  const handleConfirmArrival = async (product: Product) => {
+    const qtyInput = window.prompt(
+      `Cantidad llegada para ${product.name}.\nSe notificará FIFO.\n(Deja vacío para notificar a todos los pendientes)`,
+      ''
+    );
+
+    if (qtyInput === null) return;
+
+    let arrivedQty: number | undefined;
+    const trimmedQty = qtyInput.trim();
+    if (trimmedQty.length > 0) {
+      const parsedQty = Number.parseInt(trimmedQty, 10);
+      if (!Number.isFinite(parsedQty) || parsedQty <= 0) {
+        showToast('Ingresa una cantidad válida mayor a 0', 'err');
+        return;
+      }
+      arrivedQty = parsedQty;
+    }
+
+    setConfirmingId(product.id);
     try {
-      const data = await presaleAPI.confirmArrival(productId);
+      const data = await presaleAPI.confirmArrival(product.id, arrivedQty);
       showToast(data.message);
       await Promise.all([loadReservations(), loadProducts(), loadGlobalStats(), loadProductReservationCounts()]);
     } catch (err: any) {
