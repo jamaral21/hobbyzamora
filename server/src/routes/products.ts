@@ -99,6 +99,28 @@ const DRIVE_IMAGE_MIME_EXTENSIONS: Record<string, string> = {
   'image/gif': '.gif',
 };
 
+const GOOGLE_DRIVE_ERROR_DETAIL_LIMIT = 300;
+
+class GoogleDriveDownloadError extends Error {
+  status: number;
+  fileId: string;
+  detail: string;
+
+  constructor(fileId: string, status: number, detail: string) {
+    super(`Descarga fallida (${status})`);
+    this.name = 'GoogleDriveDownloadError';
+    this.status = status;
+    this.fileId = fileId;
+    this.detail = detail;
+  }
+}
+
+function compactGoogleDriveErrorDetail(detail: string) {
+  const compact = String(detail || '').replace(/\s+/g, ' ').trim();
+  if (!compact) return '';
+  return compact.slice(0, GOOGLE_DRIVE_ERROR_DETAIL_LIMIT);
+}
+
 function extractGoogleDriveFolderReference(input: string) {
   const value = String(input || '').trim();
   if (!value) return null;
@@ -275,7 +297,9 @@ async function downloadGoogleDriveImage(fileId: string, apiKey: string, resource
     headers: resourceKey ? { 'X-Goog-Drive-Resource-Keys': `${fileId}/${resourceKey}` } : undefined,
   });
   if (!response.ok) {
-    throw new Error(`Descarga fallida (${response.status})`);
+    const rawDetail = await response.text().catch(() => '');
+    const detail = compactGoogleDriveErrorDetail(rawDetail);
+    throw new GoogleDriveDownloadError(fileId, response.status, detail);
   }
 
   const data = await response.arrayBuffer();
@@ -1264,6 +1288,10 @@ router.post('/upload-image', authenticate, requireRole('ADMIN', 'STAFF'), single
 });
 
 router.post('/upload-images-drive', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
+  const importStartedAt = Date.now();
+  const importId = `drive-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  let folderIdForLog = '';
+
   try {
     const folderUrl = String(req.body?.folderUrl || '').trim();
     if (!folderUrl) {
@@ -1274,6 +1302,14 @@ router.post('/upload-images-drive', authenticate, requireRole('ADMIN', 'STAFF'),
     if (!folderRef) {
       return res.status(400).json({ error: 'No se pudo leer el ID de la carpeta de Google Drive' });
     }
+    folderIdForLog = folderRef.folderId;
+
+    console.log('[drive-import] started', {
+      importId,
+      folderId: folderRef.folderId,
+      hasResourceKey: Boolean(folderRef.resourceKey),
+      requestedBy: req.user?.email || 'unknown',
+    });
 
     const apiKey = String(process.env.GOOGLE_DRIVE_API_KEY || '').trim();
     if (!apiKey) {
@@ -1281,7 +1317,18 @@ router.post('/upload-images-drive', authenticate, requireRole('ADMIN', 'STAFF'),
     }
 
     const driveFiles = await listGoogleDriveFolderImages(folderRef.folderId, apiKey, folderRef.resourceKey);
+    console.log('[drive-import] discovered files', {
+      importId,
+      folderId: folderRef.folderId,
+      totalDriveFiles: driveFiles.length,
+    });
+
     if (driveFiles.length === 0) {
+      console.log('[drive-import] finished without files', {
+        importId,
+        folderId: folderRef.folderId,
+        elapsedMs: Date.now() - importStartedAt,
+      });
       return res.json({
         extracted: 0,
         skipped: 0,
@@ -1297,6 +1344,7 @@ router.post('/upload-images-drive', authenticate, requireRole('ADMIN', 'STAFF'),
     let skipped = 0;
 
     for (const driveFile of driveFiles) {
+      const downloadStartedAt = Date.now();
       try {
         const filename = resolveDriveImageFilename(driveFile.name, driveFile.mimeType);
         const ext = path.extname(filename).toLowerCase();
@@ -1309,15 +1357,47 @@ router.post('/upload-images-drive', authenticate, requireRole('ADMIN', 'STAFF'),
         fs.writeFileSync(path.join(productUploadsDir, filename), data);
         extracted.push(filename);
       } catch (downloadError) {
-        console.error('Drive image download skipped:', downloadError);
+        if (downloadError instanceof GoogleDriveDownloadError) {
+          console.error('[drive-import] image skipped', {
+            importId,
+            fileId: driveFile.id,
+            fileName: driveFile.name,
+            mimeType: driveFile.mimeType,
+            status: downloadError.status,
+            detail: downloadError.detail || 'sin detalle',
+            elapsedMs: Date.now() - downloadStartedAt,
+          });
+        } else {
+          console.error('[drive-import] image skipped (unexpected error)', {
+            importId,
+            fileId: driveFile.id,
+            fileName: driveFile.name,
+            mimeType: driveFile.mimeType,
+            error: downloadError instanceof Error ? downloadError.message : String(downloadError),
+            elapsedMs: Date.now() - downloadStartedAt,
+          });
+        }
         skipped++;
       }
     }
 
     const productsUpdated = await attachExtractedImagesToProducts(extracted);
+    console.log('[drive-import] completed', {
+      importId,
+      folderId: folderRef.folderId,
+      extracted: extracted.length,
+      skipped,
+      productsUpdated,
+      elapsedMs: Date.now() - importStartedAt,
+    });
     return res.json({ extracted: extracted.length, skipped, productsUpdated, files: extracted });
   } catch (error) {
-    console.error('Upload Drive images error:', error);
+    console.error('[drive-import] failed', {
+      importId,
+      folderId: folderIdForLog || 'unknown',
+      error: error instanceof Error ? error.message : String(error),
+      elapsedMs: Date.now() - importStartedAt,
+    });
     return res.status(500).json({ error: 'Error al importar imágenes desde Google Drive' });
   }
 });
