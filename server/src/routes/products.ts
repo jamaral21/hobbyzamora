@@ -5,6 +5,7 @@ import os from 'os';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
 import AdmZip from 'adm-zip';
+import { JWT } from 'google-auth-library';
 import { prisma } from '../index.js';
 import { syncHistoricalCostForProduct } from '../lib/costSync.js';
 import { generateUniqueSku, getSkuPrefix, isOfficialStoreCategory, normalizeStoreCategory } from '../lib/sku.js';
@@ -121,6 +122,68 @@ function compactGoogleDriveErrorDetail(detail: string) {
   return compact.slice(0, GOOGLE_DRIVE_ERROR_DETAIL_LIMIT);
 }
 
+// ─── Drive auth helpers ────────────────────────────────────────────────────────
+
+type DriveCredentials =
+  | { type: 'serviceAccount'; accessToken: string }
+  | { type: 'apiKey'; apiKey: string };
+
+async function getDriveCredentials(): Promise<DriveCredentials> {
+  const saJson = String(process.env.GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON || '').trim();
+  if (saJson) {
+    let keyFile: { client_email?: string; private_key?: string };
+    try {
+      keyFile = JSON.parse(saJson);
+    } catch {
+      throw new Error('GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON tiene formato JSON inválido');
+    }
+    if (!keyFile.client_email || !keyFile.private_key) {
+      throw new Error('GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON no tiene client_email o private_key');
+    }
+    const jwtClient = new JWT({
+      email: keyFile.client_email,
+      key: keyFile.private_key,
+      scopes: ['https://www.googleapis.com/auth/drive.readonly'],
+    });
+    const tokenResponse = await jwtClient.getAccessToken();
+    const accessToken = tokenResponse.token;
+    if (!accessToken) throw new Error('No se pudo obtener access token del service account');
+    return { type: 'serviceAccount', accessToken };
+  }
+
+  const apiKey = String(process.env.GOOGLE_DRIVE_API_KEY || '').trim();
+  if (apiKey) {
+    return { type: 'apiKey', apiKey };
+  }
+
+  throw new Error('Configura GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON (recomendado) o GOOGLE_DRIVE_API_KEY en el servidor');
+}
+
+function buildDriveRequestHeaders(
+  creds: DriveCredentials,
+  resourceKeys?: string,
+): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (creds.type === 'serviceAccount') {
+    headers['Authorization'] = `Bearer ${creds.accessToken}`;
+  }
+  if (resourceKeys) {
+    headers['X-Goog-Drive-Resource-Keys'] = resourceKeys;
+  }
+  return headers;
+}
+
+function buildDriveQueryParams(
+  creds: DriveCredentials,
+  extra: Record<string, string>,
+): URLSearchParams {
+  const params = new URLSearchParams(extra);
+  if (creds.type === 'apiKey') {
+    params.set('key', creds.apiKey);
+  }
+  return params;
+}
+
 function extractGoogleDriveFolderReference(input: string) {
   const value = String(input || '').trim();
   if (!value) return null;
@@ -216,27 +279,31 @@ async function attachExtractedImagesToProducts(extracted: string[]) {
   return updated;
 }
 
-async function listGoogleDriveFolderImages(folderId: string, apiKey: string, folderResourceKey?: string) {
+async function listGoogleDriveFolderImages(
+  folderId: string,
+  creds: DriveCredentials,
+  folderResourceKey?: string,
+) {
   const files: Array<{ id: string; name: string; mimeType: string; resourceKey?: string }> = [];
   const stack: string[] = [folderId];
   const visited = new Set<string>();
-  const baseHeaders = folderResourceKey
-    ? { 'X-Goog-Drive-Resource-Keys': `${folderId}/${folderResourceKey}` }
+  const folderResourceKeysHeader = folderResourceKey
+    ? `${folderId}/${folderResourceKey}`
     : undefined;
 
   // Validate folder access first to return a clear error early.
   {
-    const params = new URLSearchParams({
+    const params = buildDriveQueryParams(creds, {
       fields: 'id,name,mimeType',
       supportsAllDrives: 'true',
-      key: apiKey,
     });
-    const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(folderId)}?${params.toString()}`, {
-      headers: baseHeaders,
-    });
+    const response = await fetch(
+      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(folderId)}?${params.toString()}`,
+      { headers: buildDriveRequestHeaders(creds, folderResourceKeysHeader) },
+    );
     if (!response.ok) {
       const details = await response.text().catch(() => '');
-      throw new Error(`No se pudo acceder a la carpeta de Google Drive (${response.status}) ${details}`);
+      throw new Error(`No se pudo acceder a la carpeta de Google Drive (${response.status}) ${compactGoogleDriveErrorDetail(details)}`);
     }
   }
 
@@ -247,24 +314,24 @@ async function listGoogleDriveFolderImages(folderId: string, apiKey: string, fol
 
     let pageToken = '';
     do {
-      const params = new URLSearchParams({
+      const params = buildDriveQueryParams(creds, {
         q: `'${currentFolderId}' in parents and trashed = false`,
         fields: 'nextPageToken,files(id,name,mimeType,resourceKey)',
         pageSize: '1000',
         includeItemsFromAllDrives: 'true',
         supportsAllDrives: 'true',
-        key: apiKey,
       });
       if (pageToken) {
         params.set('pageToken', pageToken);
       }
 
-      const response = await fetch(`https://www.googleapis.com/drive/v3/files?${params.toString()}`, {
-        headers: baseHeaders,
-      });
+      const response = await fetch(
+        `https://www.googleapis.com/drive/v3/files?${params.toString()}`,
+        { headers: buildDriveRequestHeaders(creds, folderResourceKeysHeader) },
+      );
       if (!response.ok) {
         const details = await response.text().catch(() => '');
-        throw new Error(`No se pudo listar la carpeta de Google Drive (${response.status}) ${details}`);
+        throw new Error(`No se pudo listar la carpeta de Google Drive (${response.status}) ${compactGoogleDriveErrorDetail(details)}`);
       }
 
       const data = await response.json() as {
@@ -291,10 +358,16 @@ async function listGoogleDriveFolderImages(folderId: string, apiKey: string, fol
   return files;
 }
 
-async function downloadGoogleDriveImage(fileId: string, apiKey: string, resourceKey?: string) {
-  const mediaUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media&key=${encodeURIComponent(apiKey)}`;
+async function downloadGoogleDriveImage(
+  fileId: string,
+  creds: DriveCredentials,
+  resourceKey?: string,
+) {
+  const params = buildDriveQueryParams(creds, { alt: 'media' });
+  const mediaUrl = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?${params.toString()}`;
+  const resourceKeysHeader = resourceKey ? `${fileId}/${resourceKey}` : undefined;
   const response = await fetch(mediaUrl, {
-    headers: resourceKey ? { 'X-Goog-Drive-Resource-Keys': `${fileId}/${resourceKey}` } : undefined,
+    headers: buildDriveRequestHeaders(creds, resourceKeysHeader),
   });
   if (!response.ok) {
     const rawDetail = await response.text().catch(() => '');
@@ -1304,19 +1377,24 @@ router.post('/upload-images-drive', authenticate, requireRole('ADMIN', 'STAFF'),
     }
     folderIdForLog = folderRef.folderId;
 
+    let creds: DriveCredentials;
+    try {
+      creds = await getDriveCredentials();
+    } catch (credError) {
+      return res.status(503).json({
+        error: credError instanceof Error ? credError.message : 'Error al obtener credenciales de Google Drive',
+      });
+    }
+
     console.log('[drive-import] started', {
       importId,
       folderId: folderRef.folderId,
       hasResourceKey: Boolean(folderRef.resourceKey),
       requestedBy: req.user?.email || 'unknown',
+      authMethod: creds.type,
     });
 
-    const apiKey = String(process.env.GOOGLE_DRIVE_API_KEY || '').trim();
-    if (!apiKey) {
-      return res.status(503).json({ error: 'Falta configurar GOOGLE_DRIVE_API_KEY en el servidor' });
-    }
-
-    const driveFiles = await listGoogleDriveFolderImages(folderRef.folderId, apiKey, folderRef.resourceKey);
+    const driveFiles = await listGoogleDriveFolderImages(folderRef.folderId, creds, folderRef.resourceKey);
     console.log('[drive-import] discovered files', {
       importId,
       folderId: folderRef.folderId,
@@ -1353,7 +1431,7 @@ router.post('/upload-images-drive', authenticate, requireRole('ADMIN', 'STAFF'),
           continue;
         }
 
-        const data = await downloadGoogleDriveImage(driveFile.id, apiKey, driveFile.resourceKey);
+        const data = await downloadGoogleDriveImage(driveFile.id, creds, driveFile.resourceKey);
         fs.writeFileSync(path.join(productUploadsDir, filename), data);
         extracted.push(filename);
       } catch (downloadError) {
