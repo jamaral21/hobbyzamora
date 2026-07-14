@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import multer from 'multer';
 import AdmZip from 'adm-zip';
 import { JWT } from 'google-auth-library';
+import sharp from 'sharp';
 import { prisma } from '../index.js';
 import { syncHistoricalCostForProduct } from '../lib/costSync.js';
 import { generateUniqueSku, getSkuPrefix, isOfficialStoreCategory, normalizeStoreCategory } from '../lib/sku.js';
@@ -31,7 +32,46 @@ const resolveUploadsBaseDir = () => {
 
 const uploadsBaseDir = resolveUploadsBaseDir();
 const productUploadsDir = path.join(uploadsBaseDir, 'products');
+const productVariantsDir = path.join(productUploadsDir, 'variants');
 const HIDDEN_PRODUCTS_ALLOWED_EMAIL = 'admin@hobbyzamora.com';
+
+const PRODUCT_IMAGE_VARIANTS = [
+  { key: 'thumb', width: 400, quality: 74 },
+  { key: 'card', width: 800, quality: 78 },
+  { key: 'detail', width: 1200, quality: 82 },
+] as const;
+
+type ProductImageVariantKey = typeof PRODUCT_IMAGE_VARIANTS[number]['key'];
+
+function getVariantFilename(filename: string, variant: ProductImageVariantKey) {
+  const parsed = path.parse(filename);
+  return `${parsed.name}__${variant}.webp`;
+}
+
+async function generateProductImageVariants(filename: string) {
+  const sourcePath = path.join(productUploadsDir, filename);
+  if (!fs.existsSync(sourcePath)) return;
+
+  const ext = path.extname(filename).toLowerCase();
+  const allowed = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif']);
+  if (!allowed.has(ext)) return;
+
+  fs.mkdirSync(productVariantsDir, { recursive: true });
+
+  for (const variant of PRODUCT_IMAGE_VARIANTS) {
+    const outPath = path.join(productVariantsDir, getVariantFilename(filename, variant.key));
+    await sharp(sourcePath)
+      .rotate()
+      .resize({
+        width: variant.width,
+        height: variant.width,
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .webp({ quality: variant.quality })
+      .toFile(outPath);
+  }
+}
 
 // Configure multer for ZIP uploads — disk storage, no size limit
 const upload = multer({
@@ -1350,6 +1390,12 @@ router.post('/upload-image', authenticate, requireRole('ADMIN', 'STAFF'), single
       return res.status(400).json({ error: 'No se recibió imagen' });
     }
 
+    try {
+      await generateProductImageVariants(req.file.filename);
+    } catch (variantError) {
+      console.error('Upload image variants generation error:', variantError);
+    }
+
     return res.json({
       url: `/uploads/products/${req.file.filename}`,
       filename: req.file.filename,
@@ -1433,6 +1479,7 @@ router.post('/upload-images-drive', authenticate, requireRole('ADMIN', 'STAFF'),
 
         const data = await downloadGoogleDriveImage(driveFile.id, creds, driveFile.resourceKey);
         fs.writeFileSync(path.join(productUploadsDir, filename), data);
+        await generateProductImageVariants(filename);
         extracted.push(filename);
       } catch (downloadError) {
         if (downloadError instanceof GoogleDriveDownloadError) {
@@ -1576,6 +1623,7 @@ router.post('/upload-images/complete', authenticate, requireRole('ADMIN', 'STAFF
 
       const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
       fs.writeFileSync(path.join(productUploadsDir, safeName), entry.getData());
+      await generateProductImageVariants(safeName);
       extracted.push(safeName);
     }
 
@@ -1635,6 +1683,7 @@ router.post('/upload-images', authenticate, requireRole('ADMIN', 'STAFF'), uploa
       const destPath = path.join(productUploadsDir, safeName);
 
       fs.writeFileSync(destPath, entry.getData());
+      await generateProductImageVariants(safeName);
       extracted.push(safeName);
     }
 
