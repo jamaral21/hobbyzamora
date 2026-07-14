@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react';
 import { Package } from 'lucide-react';
 import { Badge } from '../design-system/Badge';
+import { buildProductImageVariantUrl } from '../../lib/productImageVariants';
 
 interface Product {
   id: string;
@@ -16,6 +18,33 @@ interface Product {
 export interface POSProductGridProps {
   products: Product[];
   onSelect: (product: Product) => void;
+}
+
+function POSProductImage({ src, alt }: { src: string; alt: string }) {
+  const original = String(src || '');
+  const [imageSrc, setImageSrc] = useState(() => buildProductImageVariantUrl(original, 'card'));
+
+  useEffect(() => {
+    setImageSrc(buildProductImageVariantUrl(original, 'card'));
+  }, [original]);
+
+  return (
+    <img
+      src={imageSrc || original}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      className="w-full h-full object-cover"
+      onError={() => {
+        if (imageSrc !== original) {
+          setImageSrc(original);
+          return;
+        }
+        setImageSrc('');
+      }}
+      style={imageSrc || original ? undefined : { display: 'none' }}
+    />
+  );
 }
 
 export function POSProductGrid({ products, onSelect }: POSProductGridProps) {
@@ -46,14 +75,7 @@ export function POSProductGrid({ products, onSelect }: POSProductGridProps) {
             }`}
           >
             <div className="aspect-square bg-secondary rounded-lg mb-2 overflow-hidden relative">
-              <img
-                src={product.images[0]}
-                alt={product.name}
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
-              />
+              <POSProductImage src={product.images[0]} alt={product.name} />
               {product.isPresale && (
                 <span className="absolute top-1.5 left-1.5 text-[10px] bg-accent text-accent-foreground px-1.5 py-0.5 rounded">
                   Preventa

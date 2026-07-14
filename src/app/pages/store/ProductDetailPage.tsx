@@ -10,6 +10,44 @@ import { productsAPI, wishlistAPI, presaleAPI, type PresaleReservation } from '.
 import { useCartStore } from '../../lib/store';
 import { useAuth } from '../../contexts/AuthContext';
 import { AuthModal } from '../../components/auth/AuthModal';
+import { buildProductImageVariantUrl, type ProductImageVariant } from '../../lib/productImageVariants';
+
+function ProductImageWithVariant({
+  src,
+  alt,
+  variant,
+  className,
+  loading,
+}: {
+  src: string;
+  alt: string;
+  variant: ProductImageVariant;
+  className?: string;
+  loading?: 'eager' | 'lazy';
+}) {
+  const original = String(src || '');
+  const variantSrc = buildProductImageVariantUrl(original, variant);
+  const [imgSrc, setImgSrc] = useState(variantSrc || original);
+
+  useEffect(() => {
+    setImgSrc(variantSrc || original);
+  }, [variantSrc, original]);
+
+  return (
+    <img
+      src={imgSrc || original}
+      alt={alt}
+      loading={loading}
+      decoding="async"
+      className={className}
+      onError={() => {
+        if (imgSrc !== original) {
+          setImgSrc(original);
+        }
+      }}
+    />
+  );
+}
 
 function getPresaleExpiryLabel(presaleEndDate?: string | null) {
   if (!presaleEndDate) return null;
@@ -201,9 +239,11 @@ export default function ProductDetailPage() {
           {/* Images */}
           <div>
             <div className="aspect-square bg-secondary rounded-xl overflow-hidden mb-4">
-              <img
+              <ProductImageWithVariant
                 src={product.images[selectedImage]}
                 alt={product.name}
+                variant="detail"
+                loading="eager"
                 className="w-full h-full object-cover"
               />
             </div>
@@ -218,7 +258,13 @@ export default function ProductDetailPage() {
                       : 'border-transparent hover:border-border'
                   }`}
                 >
-                  <img src={image} alt={`Vista ${idx + 1}`} className="w-full h-full object-cover" />
+                  <ProductImageWithVariant
+                    src={image}
+                    alt={`Vista ${idx + 1}`}
+                    variant="thumb"
+                    loading="lazy"
+                    className="w-full h-full object-cover"
+                  />
                 </button>
               ))}
             </div>

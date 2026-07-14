@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { ShoppingCart, AlertCircle, Flame, Clock3 } from 'lucide-react';
 import { Card } from '../design-system/Card';
@@ -6,6 +6,7 @@ import { Button } from '../design-system/Button';
 import { Badge } from '../design-system/Badge';
 import { Product } from '../../lib/api';
 import { useCartStore } from '../../lib/store';
+import { buildProductImageVariantUrl } from '../../lib/productImageVariants';
 
 export interface ProductCardProps {
   product: Product;
@@ -34,7 +35,13 @@ export function ProductCard({ product, hideStock = false }: ProductCardProps) {
   const isDisabled = product.stock <= 0 || !!isExpiredPresale || !!isSoldOutPresale;
   const { addItem } = useCartStore();
   const [justAdded, setJustAdded] = useState(false);
+  const originalImage = String(product.images?.[0] || '');
+  const [imageSrc, setImageSrc] = useState(() => buildProductImageVariantUrl(originalImage, 'card'));
   const presaleExpiryLabel = product.isPresale ? getPresaleExpiryLabel(product.presaleEndDate ?? null) : null;
+
+  useEffect(() => {
+    setImageSrc(buildProductImageVariantUrl(originalImage, 'card'));
+  }, [originalImage]);
 
   const handleAddToCart = () => {
     if (isDisabled) return;
@@ -48,9 +55,16 @@ export function ProductCard({ product, hideStock = false }: ProductCardProps) {
       <Link to={`/store/product/${product.id}`}>
         <div className="aspect-square overflow-hidden bg-secondary relative">
           <img
-            src={product.images[0]}
+            src={imageSrc || originalImage}
             alt={product.name}
+            loading="lazy"
+            decoding="async"
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            onError={() => {
+              if (imageSrc !== originalImage) {
+                setImageSrc(originalImage);
+              }
+            }}
           />
           {product.isPresale && (
             <Badge variant="presale" pixel className="absolute top-3 left-3">
