@@ -1,7 +1,14 @@
 import { StoreNavbar } from './StoreNavbar';
 import { ChatWidget } from '../chat/ChatWidget';
+import { useStoreSections } from '../../hooks/useData';
+import { buildSectionGroups } from '../../lib/sections';
+import { useMemo } from 'react';
+import { Instagram } from 'lucide-react';
 
 export function StoreLayout({ children }: { children: React.ReactNode }) {
+  const { data: sections } = useStoreSections();
+  const groups = useMemo(() => buildSectionGroups(sections || []), [sections]);
+
   return (
     <div className="min-h-screen bg-background">
       <StoreNavbar />
@@ -18,27 +25,34 @@ export function StoreLayout({ children }: { children: React.ReactNode }) {
               </p>
             </div>
             <div>
+              <h4 className="text-sm text-foreground mb-4 font-semibold">Categorías</h4>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                {groups.slice(0, 7).map((group) => (
+                  <li key={group.parentCategory}>
+                    <a href={`/store/products?category=${group.slug}`} className="hover:text-primary transition-colors">
+                      {group.parentCategory}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
               <h4 className="text-sm text-foreground mb-4 font-semibold">Tienda</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li><a href="/store/products" className="hover:text-primary transition-colors">Todos los Productos</a></li>
                 <li><a href="/store/presales" className="hover:text-primary transition-colors">Preventas</a></li>
-                <li><a href="/store/products" className="hover:text-primary transition-colors">Novedades</a></li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="text-sm text-foreground mb-4 font-semibold">Soporte</h4>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#" className="hover:text-primary transition-colors">Contáctanos</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">Preguntas Frecuentes</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">Envíos</a></li>
+                <li><a href="/store/account" className="hover:text-primary transition-colors">Mi Cuenta</a></li>
               </ul>
             </div>
             <div>
               <h4 className="text-sm text-foreground mb-4 font-semibold">Síguenos</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><a href="#" className="hover:text-primary transition-colors">Instagram</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">Facebook</a></li>
-                <li><a href="#" className="hover:text-primary transition-colors">TikTok</a></li>
+                <li>
+                  <a href="https://www.instagram.com/hobbyzamora" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:text-primary transition-colors">
+                    <Instagram className="w-4 h-4" />
+                    @hobbyzamora
+                  </a>
+                </li>
               </ul>
             </div>
           </div>

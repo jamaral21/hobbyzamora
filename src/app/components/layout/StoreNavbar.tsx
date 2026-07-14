@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { Search, ShoppingCart, User, Menu, X, Star, ChevronDown } from 'lucide-react';
 import { Button } from '../design-system/Button';
@@ -19,20 +19,8 @@ export function StoreNavbar() {
   return (
     <nav className="sticky top-0 z-[80] isolate overflow-visible bg-background/80 backdrop-blur-xl border-b border-border">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-20 relative">
-          {/* Left — Search */}
-          <div className="hidden md:flex flex-1 justify-start">
-            <div className="relative w-full max-w-sm">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Buscar productos..."
-                className="w-full pl-11 pr-4 py-2.5 rounded-lg border border-border bg-input-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all"
-              />
-            </div>
-          </div>
-
-          {/* Mobile — Hamburger (left side) */}
+        <div className="flex items-center justify-between h-20 gap-6">
+          {/* Mobile — Hamburger */}
           <button
             className="md:hidden p-2 text-muted-foreground hover:text-foreground"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
@@ -41,13 +29,25 @@ export function StoreNavbar() {
             {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
 
-          {/* Center — Logo */}
-          <Link to="/" className="flex items-center gap-2.5 group absolute left-1/2 -translate-x-1/2 md:static md:translate-x-0 md:flex-none">
-            <img src="/logo.png" alt="HobbyZamora" className="h-16 w-auto invert-0 dark:invert-0 brightness-200" />
+          {/* Left — Logo (big) */}
+          <Link to="/" className="flex items-center gap-2.5 shrink-0">
+            <img src="/logo.png" alt="HobbyZamora" className="h-14 md:h-16 w-auto invert-0 dark:invert-0 brightness-200" />
           </Link>
 
+          {/* Center — Search (wide) */}
+          <div className="hidden md:flex flex-1 max-w-2xl">
+            <div className="relative w-full">
+              <input
+                type="text"
+                placeholder="Buscar productos..."
+                className="w-full pl-4 pr-12 py-2.5 rounded-lg border border-border bg-input-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all"
+              />
+              <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+            </div>
+          </div>
+
           {/* Right — Cart + Login */}
-          <div className="flex items-center gap-4 flex-1 justify-end">
+          <div className="flex items-center gap-3 shrink-0">
             <Link to="/store/cart" className="relative p-2.5 rounded-lg hover:bg-secondary transition-colors group">
               <ShoppingCart className="w-6 h-6 text-muted-foreground group-hover:text-primary transition-colors" />
               {cartItemCount > 0 && (
@@ -66,8 +66,8 @@ export function StoreNavbar() {
 
       {/* Mobile Menu */}
       {isMenuOpen && (
-        <div className="md:hidden border-t border-border bg-background/95 backdrop-blur-xl">
-          <div className="px-4 py-4 space-y-3">
+        <div className="md:hidden fixed inset-0 top-20 z-[90] bg-background/98 backdrop-blur-xl overflow-y-auto overscroll-contain">
+          <div className="px-4 py-4 space-y-3 pb-20">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
@@ -128,37 +128,13 @@ export function StoreNavbar() {
               const isActive = isParentActive || Boolean(activeChild);
 
               return (
-                <div key={group.parentCategory} className="relative group shrink-0 group-hover:z-50">
-                  <Link
-                    to={`/store/products?category=${group.slug}`}
-                    className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-[0.9rem] transition-colors whitespace-nowrap ${
-                      isActive
-                        ? 'text-primary bg-primary/10 font-medium'
-                        : 'text-muted-foreground hover:text-primary hover:bg-primary/5'
-                    }`}
-                  >
-                    {group.parentCategory}
-                    {group.children.length > 0 && <ChevronDown className="w-3.5 h-3.5" />}
-                  </Link>
-
-                  {group.children.length > 0 && (
-                    <div className="pointer-events-none absolute left-0 top-[calc(100%-1px)] z-[60] min-w-[220px] rounded-lg border border-border bg-card p-1 opacity-0 shadow-lg transition-all group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
-                      {group.children.map((child) => (
-                        <Link
-                          key={child.id}
-                          to={`/store/products?category=${child.slug}`}
-                          className={`block rounded-md px-3 py-2 text-sm transition-colors ${
-                            currentCategory === child.slug
-                              ? 'bg-primary/10 text-primary'
-                              : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-                          }`}
-                        >
-                          {child.name}
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <CategoryDropdown
+                  key={group.parentCategory}
+                  group={group}
+                  isActive={isActive}
+                  currentCategory={currentCategory}
+                  onNavigate={() => setIsMenuOpen(false)}
+                />
               );
             })}
             <Link
@@ -176,5 +152,77 @@ export function StoreNavbar() {
         </div>
       </div>
     </nav>
+  );
+}
+
+function CategoryDropdown({
+  group,
+  isActive,
+  currentCategory,
+  onNavigate,
+}: {
+  group: ReturnType<typeof buildSectionGroups>[number];
+  isActive: boolean;
+  currentCategory: string;
+  onNavigate: () => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  React.useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    if (isOpen) document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [isOpen]);
+
+  const handleParentClick = (e: React.MouseEvent) => {
+    if (group.children.length > 0) {
+      // On touch devices, first tap opens dropdown instead of navigating
+      if (!isOpen) {
+        e.preventDefault();
+        setIsOpen(true);
+      }
+    }
+  };
+
+  return (
+    <div ref={ref} className="relative shrink-0" onMouseEnter={() => setIsOpen(true)} onMouseLeave={() => setIsOpen(false)}>
+      <Link
+        to={`/store/products?category=${group.slug}`}
+        onClick={handleParentClick}
+        className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-[0.9rem] transition-colors whitespace-nowrap ${
+          isActive
+            ? 'text-primary bg-primary/10 font-medium'
+            : 'text-muted-foreground hover:text-primary hover:bg-primary/5'
+        }`}
+      >
+        {group.parentCategory}
+        {group.children.length > 0 && <ChevronDown className="w-3.5 h-3.5" />}
+      </Link>
+
+      {group.children.length > 0 && isOpen && (
+        <div className="absolute left-0 top-[calc(100%-1px)] z-[60] min-w-[220px] rounded-lg border border-border bg-card p-1 shadow-lg">
+          {group.children.map((child) => (
+            <Link
+              key={child.id}
+              to={`/store/products?category=${child.slug}`}
+              onClick={() => { setIsOpen(false); onNavigate(); }}
+              className={`block rounded-md px-3 py-2 text-sm transition-colors ${
+                currentCategory === child.slug
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+              }`}
+            >
+              {child.name}
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

@@ -13,6 +13,7 @@ import {
   LogOut,
   Menu,
   X,
+  Star,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useState, useEffect } from 'react';
@@ -30,6 +31,7 @@ const navItems: NavItem[] = [
   { label: 'Pedidos', icon: ShoppingBag, path: '/admin/orders' },
   { label: 'Preventas', icon: Clock, path: '/admin/presales' },
   { label: 'Clientes', icon: Users, path: '/admin/customers' },
+  { label: 'Reseñas', icon: Star, path: '/admin/reviews' },
   { label: 'Agente Instagram', icon: Instagram, path: '/admin/instagram' },
 ];
 
