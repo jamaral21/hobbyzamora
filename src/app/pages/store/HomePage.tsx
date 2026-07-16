@@ -62,7 +62,7 @@ const heroSlides: HeroSlide[] = [
 export default function HomePage() {
   const INSTAGRAM_FEED_ENABLED = import.meta.env.VITE_ENABLE_INSTAGRAM_FEED === 'true';
   const { isAuthenticated } = useAuth();
-  const { data: products, isLoading } = useProducts({ limit: 500 }, {
+  const { data: products, isLoading } = useProducts({ limit: 1000 }, {
     authMode: isAuthenticated ? 'customer' : 'public',
   });
   const { data: sections } = useStoreSections();
