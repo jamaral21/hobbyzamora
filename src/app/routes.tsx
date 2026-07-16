@@ -16,6 +16,7 @@ import OrderConfirmationPage from './pages/store/OrderConfirmationPage';
 import AccountPage from './pages/store/AccountPage';
 import PresalesPage from './pages/store/PresalesPage';
 import ResetPasswordPage from './pages/store/ResetPasswordPage';
+import ReviewPage from './pages/store/ReviewPage';
 
 // Admin Pages
 import DashboardPage from './pages/admin/DashboardPage';
@@ -24,6 +25,7 @@ import AdminProductDetailPage from './pages/admin/AdminProductDetailPage';
 import OrdersPage from './pages/admin/OrdersPage';
 import OrderDetailPage from './pages/admin/OrderDetailPage';
 import CustomersPage from './pages/admin/CustomersPage';
+import ReviewsPage from './pages/admin/ReviewsPage';
 import InstagramAgentPage from './pages/admin/InstagramAgentPage';
 import { PresalesPage as AdminPresalesPage } from './pages/admin/PresalesPage';
 import SectionsConfigPage from './pages/admin/SectionsConfigPage';
@@ -64,6 +66,13 @@ function withStoreMaintenance(Page: ComponentType) {
     useEffect(() => {
       let cancelled = false;
 
+      // Skip maintenance check entirely in localhost development
+      const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (isDev) {
+        setMaintenance(false);
+        return;
+      }
+
       fetch('/api/site-maintenance')
         .then(async (response) => {
           if (!response.ok) {
@@ -76,7 +85,6 @@ function withStoreMaintenance(Page: ComponentType) {
           }
         })
         .catch(() => {
-          // Safe fallback: keep store in maintenance if endpoint fails.
           if (!cancelled) {
             setMaintenance(true);
           }
@@ -159,6 +167,10 @@ export const router = createBrowserRouter([
     path: '/reset-password',
     Component: ResetPasswordPage,
   },
+  {
+    path: '/review/:token',
+    Component: ReviewPage,
+  },
 
   // Admin Routes
   {
@@ -194,8 +206,16 @@ export const router = createBrowserRouter([
     Component: CustomersPage,
   },
   {
+    path: '/admin/reviews',
+    Component: ReviewsPage,
+  },
+  {
     path: '/admin/instagram',
     Component: InstagramAgentPage,
+  },
+  {
+    path: '/admin/reviews',
+    Component: ReviewsPage,
   },
   {
     path: '/admin/settings/sections',

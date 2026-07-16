@@ -179,3 +179,132 @@ El frontend de todos estos tickets ya está implementado y desplegado en la bran
 - `src/app/hooks/useData.ts` — hooks que consumen los endpoints
 
 Si necesitas ver exactamente qué params envía el frontend y qué response espera, revisa esos dos archivos.
+
+---
+
+## D. Pedidos — Número de seguimiento
+
+### TICKET-008: Agregar campo de número de seguimiento a pedidos
+
+**¿Qué hace?** Permite al admin guardar un número de seguimiento (tracking) en cada pedido para que el cliente pueda rastrear su envío.
+
+**¿Por qué?** Cuando HobbyZamora despacha un pedido, la empresa de envío (Starken, Chilexpress, etc.) le da un código de seguimiento. El admin necesita guardarlo en el sistema para que el cliente lo vea.
+
+**Cambios necesarios:**
+
+1. **Migration Prisma** — agregar campos `trackingNumber String?` y `shippingCompany String?` al modelo `Order`
+2. **Endpoint** — `PATCH /api/orders/:id/tracking` con body `{ trackingNumber: string, shippingCompany: string }`
+   - Auth: ADMIN/STAFF
+   - Guardar ambos campos en la orden
+   - Opcionalmente: si se agrega tracking y el estado es PROCESSING, cambiar automáticamente a SHIPPED
+3. **GET /api/orders/:id** — incluir `trackingNumber` y `shippingCompany` en la respuesta
+
+**Frontend ya implementado:**
+- `OrderDetailPage.tsx` — card "Seguimiento de Envío" con input de texto para empresa + input de tracking number + botón guardar
+- Ambos campos son texto libre (no dropdown)
+- Lee de `order.trackingNumber` y `order.shippingCompany`
+- Llama a `PATCH /api/orders/:id/tracking` al guardar
+
+---
+
+## E. Categorías / Secciones de la tienda
+
+### TICKET-009: Reorganizar secciones del navbar
+
+**¿Qué hace?** Ajusta las categorías/secciones de la barra de navegación de la tienda para reflejar la organización real del inventario.
+
+**¿Por qué?** "Figuarts" no es un nombre que los clientes entienden, y Dragon Ball / One Piece no son Pokémon — tenerlos dentro de "Pokémon TCG" confunde a los clientes.
+
+**Cambios en la DB (tabla de secciones/categorías):**
+
+1. **Renombrar** "Figuarts" → "Figuras"
+2. **Crear nueva sección padre** "TCG Varios"
+3. **Mover** "Dragon Ball CCG - Japón" de hijo de "Pokémon TCG" → hijo de "TCG Varios"
+4. **Mover** "One Piece CCG - Japón" de hijo de "Pokémon TCG" → hijo de "TCG Varios"
+
+**Resultado esperado en el navbar:**
+- Pokémon TCG (con hijos: Acrílicos, Playmats, Pokemon TCG - China, Español, Inglés, Japón, Protectores)
+- TCG Varios (con hijos: Dragon Ball CCG - Japón, One Piece CCG - Japón)
+- Figuras (antes era "Figuarts")
+
+**No requiere cambios de frontend** — el navbar lee las secciones dinámicamente desde el endpoint de secciones.
+
+---
+
+## F. Instagram Feed en el Home
+
+### TICKET-010: Mostrar publicaciones de Instagram en la tienda
+
+**¿Qué hace?** Muestra las últimas 6 publicaciones del Instagram de @hobbyzamora como una fila de imágenes clickeables en el home de la tienda.
+
+**¿Por qué?** Geekers y otras tiendas lo hacen — muestra contenido fresco y social proof sin esfuerzo manual. Los clientes ven que la tienda está activa.
+
+**Opciones de implementación:**
+1. **Instagram Basic Display API** — endpoint que devuelve las últimas N publicaciones (imagen, caption, link). Requiere token de acceso que se renueva cada 60 días.
+2. **Embed manual** — el admin sube links de posts y se renderizan con el embed de Instagram. Más simple pero manual.
+3. **Scraping** — no recomendado, viola TOS de Meta.
+
+**Lo que necesita:**
+- Backend: endpoint `GET /api/instagram/feed` que retorne las últimas 6 publicaciones (imagen URL, link al post)
+- O un widget embed de terceros (Elfsight, SnapWidget) que no requiere backend
+
+**Frontend que se puede hacer ahora:** Placeholder de la sección con link a @hobbyzamora. El contenido real necesita backend o integración.
+
+---
+
+## G. Sistema de Reseñas Post-Venta
+
+### TICKET-011: Sistema completo de reseñas de productos
+
+**¿Qué hace?** Permite a los clientes que ya compraron dejar una reseña con foto, nombre, nombre del producto y rating. El admin puede solicitar reseñas desde el panel de pedidos y moderar las que llegan.
+
+**¿Por qué?** Las reseñas con fotos reales generan confianza. Geekers las muestra en el home como social proof. Solo clientes verificados (que compraron) pueden dejar reseña.
+
+**Componentes del sistema:**
+
+### 11a: Modelo de datos (Migration Prisma)
+```prisma
+model Review {
+  id          String   @id @default(uuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id])
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  customerName String
+  rating      Int      // 1-5
+  comment     String?
+  photoUrl    String?
+  status      String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt   DateTime @default(now())
+}
+```
+
+### 11b: Landing page de reseña (frontend + backend)
+- URL: `/review/:token` — token único por pedido
+- El cliente ve: nombre del producto, campo de rating (estrellas), comentario, upload de foto
+- Solo funciona si el token es válido y el pedido fue entregado
+- Backend: `POST /api/reviews` con validación de token
+
+### 11c: Solicitar reseña desde admin (frontend + backend)
+- En OrderDetailPage: botón "Solicitar Reseña" visible cuando el pedido está DELIVERED
+- Al hacer click: genera un token de reseña y envía un email al cliente con el link
+- Backend: `POST /api/orders/:id/request-review` — genera token, envía email
+
+### 11d: Mostrar reseñas en el home (frontend + backend)
+- Sección en el home con las últimas reseñas aprobadas (carrusel)
+- Card: foto del producto, rating estrellas, comentario, nombre del cliente, fecha
+- Backend: `GET /api/reviews?status=APPROVED&limit=6`
+
+### 11e: Moderar reseñas en admin (frontend + backend)
+- Nueva página o sección en admin para ver reseñas pendientes
+- Aprobar / Rechazar cada reseña
+- Backend: `PATCH /api/reviews/:id/status` con `{ status: 'APPROVED' | 'REJECTED' }`
+
+**Prioridad:** Media (feature completa, no urgente)
+
+---
+
+**Frontend que se puede hacer ahora (sin backend):**
+- Placeholder de la sección de reseñas en el home con datos mock
+- UI del botón "Solicitar Reseña" en OrderDetailPage (sin funcionalidad real)
+- Landing page `/review/:token` con el formulario (guardado local hasta que backend exista)

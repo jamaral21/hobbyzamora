@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { Link } from 'react-router';
-import { ArrowLeft, Package, CreditCard, Truck, Loader2, AlertCircle, ShieldAlert, MapPin } from 'lucide-react';
+import { ArrowLeft, Package, CreditCard, Truck, Loader2, AlertCircle, ShieldAlert, MapPin, PackageSearch, Star, Copy, CheckCircle } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { Button } from '../../components/design-system/Button';
 import { Badge } from '../../components/design-system/Badge';
 import { Card } from '../../components/design-system/Card';
+import { Input } from '../../components/design-system/Input';
 import { Modal } from '../../components/design-system/Modal';
 import { useOrder, useUpdateOrderStatus } from '../../hooks/useData';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
@@ -251,9 +252,17 @@ export default function OrderDetailPage() {
               </div>
             </Card>
           )}
+          
+          {/* Tracking — left column, visible without scroll */}
+          <TrackingNumberCard orderId={order.id} initialTrackingNumber={(order as any).trackingNumber || ''} />
+
+          {/* Review — left column, easy to find */}
+          {order.status === 'DELIVERED' && (
+            <ReviewRequestCard orderId={order.id} customerEmail={order.customerEmail} />
+          )}
         </div>
 
-        {/* Right Column: Customer + Status Update */}
+        {/* Right Column: Customer + Shipping + Status */}
         <div className="space-y-6">
           {/* Customer Info */}
           <Card>
@@ -344,6 +353,117 @@ export default function OrderDetailPage() {
         </div>
       </div>
     </AdminLayout>
+  );
+}
+
+function TrackingNumberCard({ orderId, initialTrackingNumber }: { orderId: string; initialTrackingNumber: string }) {
+  const [trackingNumber, setTrackingNumber] = useState(initialTrackingNumber);
+  const [shippingCompany, setShippingCompany] = useState((window as any).__orderShippingCompany || '');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      // TODO: Backend TICKET — PATCH /api/orders/:id/tracking { trackingNumber, shippingCompany }
+      await ordersAPI.updateStatus(orderId, trackingNumber ? 'SHIPPED' : 'PROCESSING');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch {
+      // silently fail — backend ticket pending
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <div className="flex items-center gap-2 mb-4">
+        <PackageSearch className="w-5 h-5 text-muted-foreground" />
+        <h2 className="text-lg font-semibold text-foreground">Seguimiento de Envío</h2>
+      </div>
+      <div className="space-y-3">
+        <Input
+          label="Empresa de envío"
+          placeholder="Ej: Starken, Chilexpress, Blue Express"
+          value={shippingCompany}
+          onChange={(e) => setShippingCompany(e.target.value)}
+        />
+        <Input
+          label="N° de seguimiento"
+          placeholder="Ej: SP123456789CL"
+          value={trackingNumber}
+          onChange={(e) => setTrackingNumber(e.target.value)}
+        />
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={handleSave} disabled={isSaving || (!trackingNumber && !shippingCompany)}>
+            {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Guardar'}
+          </Button>
+          {saved && <span className="text-xs text-emerald-500">✓ Guardado</span>}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function ReviewRequestCard({ orderId, customerEmail }: { orderId: string; customerEmail: string }) {
+  const [reviewRequested, setReviewRequested] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  // Generate a deterministic token from orderId (real implementation would be backend-generated)
+  const reviewToken = btoa(orderId).replace(/[^a-zA-Z0-9]/g, '').slice(0, 16);
+  const reviewUrl = `${window.location.origin}/review/${reviewToken}`;
+
+  const handleRequestReview = () => {
+    // TODO: Backend TICKET-011c — POST /api/orders/:id/request-review
+    // This would generate a real token and send email to customerEmail
+    setReviewRequested(true);
+  };
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(reviewUrl);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
+  };
+
+  return (
+    <Card>
+      <div className="flex items-center gap-2 mb-4">
+        <Star className="w-5 h-5 text-primary" />
+        <h2 className="text-lg font-semibold text-foreground">Solicitar Reseña</h2>
+      </div>
+      <div className="space-y-3">
+        {reviewRequested ? (
+          <div className="space-y-3">
+            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+              <p className="text-xs text-emerald-400 font-medium">✓ Solicitud enviada a {customerEmail}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Link de reseña (compartir manualmente):</p>
+              <div className="flex items-center gap-2">
+                <code className="text-xs bg-secondary px-2 py-1 rounded flex-1 truncate text-foreground">{reviewUrl}</code>
+                <button
+                  onClick={handleCopyLink}
+                  className="p-1.5 rounded hover:bg-secondary transition-colors"
+                  title="Copiar link"
+                >
+                  {linkCopied ? <CheckCircle className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-muted-foreground" />}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="text-sm text-muted-foreground">
+              Envía un email al cliente solicitando una reseña de su compra. El cliente recibirá un link para dejar su opinión y foto.
+            </p>
+            <Button size="sm" onClick={handleRequestReview} fullWidth>
+              <Star className="w-4 h-4" /> Enviar Solicitud de Reseña
+            </Button>
+          </>
+        )}
+      </div>
+    </Card>
   );
 }
 

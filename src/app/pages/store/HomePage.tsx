@@ -16,8 +16,9 @@ import { ProductCard } from '../../components/store/ProductCard';
 import { Button } from '../../components/design-system/Button';
 import { Card } from '../../components/design-system/Card';
 import { HeroSlider, type HeroSlide } from '../../components/design-system/HeroSlider';
-import { useProducts } from '../../hooks/useData';
+import { useProducts, useStoreSections } from '../../hooks/useData';
 import { useAuth } from '../../contexts/AuthContext';
+import { buildSectionGroups } from '../../lib/sections';
 import { mockProducts } from '../../data/mockData';
 
 const slugify = (text: string) =>
@@ -71,6 +72,8 @@ export default function HomePage() {
   const { data: products, isLoading } = useProducts(undefined, {
     authMode: isAuthenticated ? 'customer' : 'public',
   });
+  const { data: sections } = useStoreSections();
+  const categoryGroups = useMemo(() => buildSectionGroups(sections || []), [sections]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const allProducts = products && products.length > 0 ? products : mockProducts;
@@ -91,17 +94,18 @@ export default function HomePage() {
     return allProducts.filter((p: any) => p.isPresale);
   }, [allProducts]);
 
-  const beybladeBase = useMemo(() => {
-    return allProducts.filter((p: any) => slugify(p.category).includes('beyblade'));
-  }, [allProducts]);
-
-  const beybladeProducts = useMemo(() => beybladeBase.slice(0, 6), [beybladeBase]);
-
-  const pokemonTcgBase = useMemo(() => {
-    return allProducts.filter((p: any) => slugify(p.category).includes('pokemon-tcg'));
-  }, [allProducts]);
-
-  const pokemonTcgProducts = useMemo(() => pokemonTcgBase.slice(0, 6), [pokemonTcgBase]);
+  // Dynamic category products — one carousel per category that has products
+  const categoryProducts = useMemo(() => {
+    if (!categoryGroups.length || !allProducts.length) return [];
+    return categoryGroups
+      .map((group) => {
+        const products = allProducts.filter((p: any) =>
+          slugify(p.category).includes(group.slug) || slugify(p.category) === group.slug
+        );
+        return { ...group, products: products.slice(0, 10) };
+      })
+      .filter((g) => g.products.length > 0);
+  }, [categoryGroups, allProducts]);
 
   const novedadesEnStock = useMemo(() => {
     return sortedByNewest
@@ -181,30 +185,39 @@ export default function HomePage() {
       {/* ═══════════════════════════════════════════
           NOVEDADES EN STOCK
       ═══════════════════════════════════════════ */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h2 className="text-primary mb-2">NOVEDADES EN STOCK</h2>
-            <p className="text-muted-foreground">Productos nuevos disponibles para compra inmediata</p>
+      <section className="py-14">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h2 className="text-primary mb-2">NOVEDADES EN STOCK</h2>
+              <p className="text-muted-foreground">Productos nuevos disponibles para compra inmediata</p>
+            </div>
+            <Link to="/store/products">
+              <Button variant="outline" size="sm">
+                Ver Todo
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </Link>
           </div>
-          <Link to="/store/products">
-            <Button variant="outline" size="sm">
-              Ver Todo
-              <ArrowRight className="w-4 h-4" />
-            </Button>
-          </Link>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {novedadesEnStock.map((product) => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
-
-        {novedadesEnStock.length === 0 && (
-          <Card className="text-center py-10 mt-6">
-            <p className="text-sm text-muted-foreground">Aun no hay novedades con stock disponible.</p>
-          </Card>
+        {novedadesEnStock.length > 0 ? (
+          <div
+            className="flex gap-5 overflow-x-auto scrollbar-hide pb-2 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
+            style={{ scrollbarWidth: 'none' }}
+          >
+            {novedadesEnStock.map((product) => (
+              <div key={product.id} className="flex-shrink-0 w-[280px]">
+                <ProductCard product={product} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <Card className="text-center py-10">
+              <p className="text-sm text-muted-foreground">Aun no hay novedades con stock disponible.</p>
+            </Card>
+          </div>
         )}
       </section>
 
@@ -257,42 +270,112 @@ export default function HomePage() {
       )}
 
       {/* ═══════════════════════════════════════════
-          BEYBLADE
+          BANNER DIVISOR — CATEGORÍAS
       ═══════════════════════════════════════════ */}
-      {beybladeProducts.length > 0 && (
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h2 className="text-primary mb-2">BEYBLADE</h2>
-              <p className="text-muted-foreground">Productos de Beyblade disponibles</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {beybladeProducts.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
-          </div>
-        </section>
-      )}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-14 pb-4">
+        <div className="flex items-center gap-4">
+          <div className="h-px flex-1 bg-border" />
+          <h2 className="text-primary shrink-0">CATEGORÍAS</h2>
+          <div className="h-px flex-1 bg-border" />
+        </div>
+      </div>
 
       {/* ═══════════════════════════════════════════
-          POKEMON TCG
+          SECCIONES POR CATEGORÍA — Carrusel dinámico por cada categoría
       ═══════════════════════════════════════════ */}
-      {pokemonTcgProducts.length > 0 && (
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h2 className="text-primary mb-2">POKEMON TCG</h2>
-              <p className="text-muted-foreground">Sobres, cartas y colecciones TCG</p>
+      {categoryProducts.map((cat) => (
+        <section key={cat.parentCategory} className="py-10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-primary mb-1">{cat.parentCategory.toUpperCase()}</h2>
+              </div>
+              <Link to={`/store/products?category=${cat.slug}`}>
+                <Button variant="outline" size="sm">
+                  Ver Todo
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </Link>
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {pokemonTcgProducts.map((product) => (
-              <ProductCard key={product.id} product={product} />
+          <div
+            className="flex gap-5 overflow-x-auto scrollbar-hide pb-2 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
+            style={{ scrollbarWidth: 'none' }}
+          >
+            {cat.products.map((product) => (
+              <div key={product.id} className="flex-shrink-0 w-[280px]">
+                <ProductCard product={product} />
+              </div>
             ))}
           </div>
         </section>
-      )}
+      ))}
+
+      {/* ═══════════════════════════════════════════
+          INSTAGRAM — Feed placeholder
+      ═══════════════════════════════════════════ */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground mb-1">Síguenos en Instagram</p>
+            <h2 className="text-primary">@HOBBYZAMORA</h2>
+          </div>
+          <a href="https://www.instagram.com/hobbyzamora" target="_blank" rel="noopener noreferrer">
+            <Button variant="outline" size="sm">
+              Seguir
+              <ArrowRight className="w-4 h-4" />
+            </Button>
+          </a>
+        </div>
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <a
+              key={i}
+              href="https://www.instagram.com/hobbyzamora"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="aspect-square rounded-lg bg-secondary border border-border flex items-center justify-center hover:border-primary/30 transition-colors"
+            >
+              <svg className="w-6 h-6 text-muted-foreground/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="2" y="2" width="20" height="20" rx="5" />
+                <circle cx="12" cy="12" r="5" />
+                <circle cx="17.5" cy="6.5" r="1.5" fill="currentColor" stroke="none" />
+              </svg>
+            </a>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground text-center mt-4">Próximamente: feed en vivo conectado con Instagram</p>
+      </section>
+
+      {/* ═══════════════════════════════════════════
+          RESEÑAS — Placeholder
+      ═══════════════════════════════════════════ */}
+      <section className="border-t border-border py-14">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-8">
+            <h2 className="text-primary mb-2">RESEÑAS DE CLIENTES</h2>
+            <p className="text-muted-foreground">Lo que dicen nuestros compradores</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            {[
+              { name: 'Próximamente', product: 'Reseñas verificadas', comment: 'Pronto podrás ver reseñas de clientes reales que compraron en HobbyZamora.', rating: 5 },
+            ].map((review, idx) => (
+              <Card key={idx} className="p-5">
+                <div className="flex items-center gap-1 mb-2">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <span key={star} className={`text-sm ${star <= review.rating ? 'text-primary' : 'text-muted-foreground/30'}`}>★</span>
+                  ))}
+                </div>
+                <p className="text-sm text-foreground mb-3">{review.comment}</p>
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">{review.name}</span>
+                  {' · '}{review.product}
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
 
       {/* ═══════════════════════════════════════════
           TRUST BADGES — Envío, Pago, Originales, Soporte
@@ -327,15 +410,15 @@ export default function HomePage() {
                 <p className="text-xs text-muted-foreground">Productos verificados y sellados</p>
               </div>
             </div>
-            <div className="flex items-center gap-4 group">
+            <a href="https://www.instagram.com/hobbyzamora" target="_blank" rel="noopener noreferrer" className="flex items-center gap-4 group">
               <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 group-hover:shadow-[0_0_16px_rgba(255,214,10,0.2)] transition-shadow">
                 <Sparkles className="w-6 h-6 text-primary" />
               </div>
               <div>
                 <p className="text-sm text-foreground font-medium">¿Preguntas?</p>
-                <p className="text-xs text-muted-foreground">Contáctanos por Instagram o email</p>
+                <p className="text-xs text-muted-foreground">Contáctanos por Instagram</p>
               </div>
-            </div>
+            </a>
           </div>
         </div>
       </section>
