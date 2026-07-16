@@ -16,9 +16,10 @@ import { ProductCard } from '../../components/store/ProductCard';
 import { Button } from '../../components/design-system/Button';
 import { Card } from '../../components/design-system/Card';
 import { HeroSlider, type HeroSlide } from '../../components/design-system/HeroSlider';
-import { useInstagramFeed, useProducts, useReviews } from '../../hooks/useData';
+import { useInstagramFeed, useProducts, useReviews, useStoreSections } from '../../hooks/useData';
 import { useAuth } from '../../contexts/AuthContext';
 import { mockProducts } from '../../data/mockData';
+import { buildSectionGroups, resolveParentCategory } from '../../lib/sections';
 
 const heroSlides: HeroSlide[] = [
   {
@@ -61,11 +62,13 @@ const heroSlides: HeroSlide[] = [
 export default function HomePage() {
   const INSTAGRAM_FEED_ENABLED = import.meta.env.VITE_ENABLE_INSTAGRAM_FEED === 'true';
   const { isAuthenticated } = useAuth();
-  const { data: products, isLoading } = useProducts(undefined, {
+  const { data: products, isLoading } = useProducts({ limit: 500 }, {
     authMode: isAuthenticated ? 'customer' : 'public',
   });
+  const { data: sections } = useStoreSections();
   const { data: instagramFeed } = useInstagramFeed({ enabled: INSTAGRAM_FEED_ENABLED });
   const { data: approvedReviews } = useReviews({ status: 'APPROVED', limit: 6 });
+  const categoryGroups = useMemo(() => buildSectionGroups(sections || []), [sections]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const allProducts = products && products.length > 0 ? products : mockProducts;
@@ -92,18 +95,37 @@ export default function HomePage() {
   }, [allProducts]);
 
   const featuredProducts = useMemo(() => {
-    return sortedByNewest.slice(0, 8);
+    return sortedByNewest
+      .filter((p: any) => Boolean(p.featured) && !p.isPresale)
+      .slice(0, 8);
   }, [sortedByNewest]);
 
   const presaleProducts = useMemo(() => {
     return allProducts.filter((p: any) => p.isPresale);
   }, [allProducts]);
 
-  const novedadesEnStock = useMemo(() => {
-    return sortedByNewest
-      .filter((p: any) => !p.isPresale && Number(p.stock || 0) > 0)
-      .slice(0, 6);
-  }, [sortedByNewest]);
+  const categoryProducts = useMemo(() => {
+    if (!categoryGroups.length || !sortedByNewest.length) return [];
+
+    const grouped = new Map<string, any[]>();
+    for (const group of categoryGroups) {
+      grouped.set(group.parentCategory, []);
+    }
+
+    for (const product of sortedByNewest) {
+      if (product.isPresale) continue;
+      const parent = resolveParentCategory(String(product.category || ''), categoryGroups);
+      if (!grouped.has(parent)) continue;
+      grouped.get(parent)?.push(product);
+    }
+
+    return categoryGroups
+      .map((group) => {
+        const products = grouped.get(group.parentCategory) || [];
+        return { ...group, products: products.slice(0, 10) };
+      })
+      .filter((g) => g.products.length > 0);
+  }, [categoryGroups, sortedByNewest]);
 
   const scroll = (direction: 'left' | 'right') => {
     if (scrollRef.current) {
@@ -172,42 +194,10 @@ export default function HomePage() {
             </div>
           ))}
         </div>
-      </section>
-
-      {/* ═══════════════════════════════════════════
-          NOVEDADES EN STOCK
-      ═══════════════════════════════════════════ */}
-      <section className="py-14">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between mb-8">
-            <div>
-              <h2 className="text-primary mb-2">NOVEDADES EN STOCK</h2>
-              <p className="text-muted-foreground">Productos nuevos disponibles para compra inmediata</p>
-            </div>
-            <Link to="/store/products">
-              <Button variant="outline" size="sm">
-                Ver Todo
-                <ArrowRight className="w-4 h-4" />
-              </Button>
-            </Link>
-          </div>
-        </div>
-
-        {novedadesEnStock.length > 0 ? (
-          <div
-            className="flex gap-5 overflow-x-auto scrollbar-hide pb-2 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
-            style={{ scrollbarWidth: 'none' }}
-          >
-            {novedadesEnStock.map((product) => (
-              <div key={product.id} className="flex-shrink-0 w-[280px]">
-                <ProductCard product={product} />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <Card className="text-center py-10">
-              <p className="text-sm text-muted-foreground">Aun no hay novedades con stock disponible.</p>
+        {featuredProducts.length === 0 && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+            <Card className="text-center py-8">
+              <p className="text-sm text-muted-foreground">Aún no hay productos marcados como destacados.</p>
             </Card>
           </div>
         )}
@@ -260,6 +250,48 @@ export default function HomePage() {
           </div>
         </section>
       )}
+
+      {/* ═══════════════════════════════════════════
+          BANNER DIVISOR — CATEGORÍAS
+      ═══════════════════════════════════════════ */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-14 pb-4">
+        <div className="flex items-center gap-4">
+          <div className="h-px flex-1 bg-border" />
+          <h2 className="text-primary shrink-0">CATEGORÍAS</h2>
+          <div className="h-px flex-1 bg-border" />
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════
+          SECCIONES POR CATEGORÍA — Carrusel dinámico por cada categoría
+      ═══════════════════════════════════════════ */}
+      {categoryProducts.map((cat) => (
+        <section key={cat.parentCategory} className="py-10">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-primary mb-1">{cat.parentCategory.toUpperCase()}</h2>
+              </div>
+              <Link to={`/store/products?category=${cat.slug}`}>
+                <Button variant="outline" size="sm">
+                  Ver Todo
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </Link>
+            </div>
+          </div>
+          <div
+            className="flex gap-5 overflow-x-auto scrollbar-hide pb-2 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
+            style={{ scrollbarWidth: 'none' }}
+          >
+            {cat.products.map((product) => (
+              <div key={product.id} className="flex-shrink-0 w-[280px]">
+                <ProductCard product={product} />
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
 
       {/* ═══════════════════════════════════════════
           INSTAGRAM — Feed placeholder
