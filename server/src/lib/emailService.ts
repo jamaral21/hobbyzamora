@@ -229,6 +229,8 @@ interface OrderSummary {
   shippingStreet?: string | null;
   shippingCity?: string | null;
   shippingState?: string | null;
+  trackingNumber?: string | null;
+  shippingCompany?: string | null;
 }
 
 // ─── Send helper ──────────────────────────────────────────────────────────────
@@ -374,6 +376,31 @@ export async function sendNewOrderAdminEmail(order: OrderSummary): Promise<void>
     <a class="btn" href="${BASE_URL}/admin/orders">Ver en el admin</a>
   `);
   await send(adminEmail, `Nueva orden #${order.orderNumber} – HobbyZamora`, html);
+}
+
+export async function sendReviewRequestEmail(
+  order: Pick<OrderSummary, 'orderNumber' | 'customerName' | 'customerEmail' | 'items'>,
+  reviewUrl: string
+): Promise<void> {
+  const productSummary = order.items.slice(0, 3).map((item) => item.name).join(', ');
+  const extraCount = Math.max(order.items.length - 3, 0);
+  const itemsLabel = extraCount > 0
+    ? `${productSummary} y ${extraCount} producto${extraCount === 1 ? '' : 's'} más`
+    : productSummary;
+
+  const html = layout(`Queremos tu reseña sobre tu compra #${order.orderNumber}`, `
+    <h2>Hola, ${order.customerName}</h2>
+    <p>Tu pedido <strong>#${order.orderNumber}</strong> ya fue entregado y nos encantaría conocer tu experiencia.</p>
+    <p><strong>Productos:</strong> ${itemsLabel}</p>
+    <p>Puedes dejar tu reseña, calificación y una foto en el siguiente enlace:</p>
+    <div style="text-align:center">
+      <a class="btn" href="${reviewUrl}">Dejar reseña</a>
+    </div>
+    <p style="margin-top:16px">Si el botón no funciona, copia este enlace en tu navegador:</p>
+    <p><a href="${reviewUrl}">${reviewUrl}</a></p>
+  `);
+
+  await send(order.customerEmail, `Cuéntanos sobre tu compra #${order.orderNumber} – HobbyZamora`, html);
 }
 
 /** Confirmación de reserva de preventa */

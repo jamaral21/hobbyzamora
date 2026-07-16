@@ -1,19 +1,62 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router';
 import { Star, Camera, CheckCircle, Loader2 } from 'lucide-react';
 import { Button } from '../../components/design-system/Button';
 import { Card } from '../../components/design-system/Card';
-import { Input, Textarea } from '../../components/design-system/Input';
+import { Select, Textarea } from '../../components/design-system/Input';
+import { reviewsAPI } from '../../lib/api';
 
 export default function ReviewPage() {
   const { token } = useParams<{ token: string }>();
+  const [orderInfo, setOrderInfo] = useState<null | Awaited<ReturnType<typeof reviewsAPI.getByToken>>>(null);
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const [comment, setComment] = useState('');
+  const [selectedProductId, setSelectedProductId] = useState('');
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadToken() {
+      if (!token) {
+        setError('Link de reseña inválido');
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const payload = await reviewsAPI.getByToken(token);
+        if (!isMounted) return;
+        setOrderInfo(payload);
+        const firstPendingItem = payload.items.find((item) => !item.alreadyReviewed);
+        setSelectedProductId(firstPendingItem?.productId || payload.items[0]?.productId || '');
+      } catch (err: any) {
+        if (!isMounted) return;
+        setError(err?.message || 'No se pudo cargar la reseña');
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+
+    loadToken();
+    return () => {
+      isMounted = false;
+      if (photoPreview) {
+        URL.revokeObjectURL(photoPreview);
+      }
+    };
+  }, [token]);
+
+  const availableProducts = useMemo(
+    () => orderInfo?.items.filter((item) => !item.alreadyReviewed) || [],
+    [orderInfo]
+  );
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -24,19 +67,49 @@ export default function ReviewPage() {
   };
 
   const handleSubmit = async () => {
-    if (rating === 0) return;
+    if (rating === 0 || !token || !selectedProductId) return;
     setIsSubmitting(true);
+    setError(null);
     try {
-      // TODO: Backend TICKET-011b — POST /api/reviews with token, rating, comment, photo
-      // For now, simulate success
-      await new Promise((r) => setTimeout(r, 1500));
+      let photoUrl: string | undefined;
+      if (photoFile) {
+        const upload = await reviewsAPI.uploadPhoto(photoFile);
+        photoUrl = upload.url;
+      }
+
+      await reviewsAPI.create({
+        token,
+        productId: selectedProductId,
+        rating,
+        comment,
+        photoUrl,
+      });
       setSubmitted(true);
-    } catch {
-      // handle error
+    } catch (err: any) {
+      setError(err?.message || 'No se pudo enviar la reseña');
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (error && !orderInfo) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <Card className="max-w-md w-full text-center py-12">
+          <h1 className="text-2xl font-bold text-foreground mb-2">No pudimos abrir esta reseña</h1>
+          <p className="text-muted-foreground">{error}</p>
+        </Card>
+      </div>
+    );
+  }
 
   if (submitted) {
     return (
@@ -68,6 +141,20 @@ export default function ReviewPage() {
         </div>
 
         <Card className="space-y-6">
+          <div>
+            <label className="block text-sm text-muted-foreground mb-2">Producto</label>
+            <Select value={selectedProductId} onChange={(e) => setSelectedProductId(e.target.value)} disabled={availableProducts.length === 0}>
+              {availableProducts.map((item) => (
+                <option key={item.productId} value={item.productId}>
+                  {item.name}{item.variantName ? ` - ${item.variantName}` : ''}
+                </option>
+              ))}
+            </Select>
+            {availableProducts.length === 0 && (
+              <p className="text-xs text-muted-foreground mt-2">Todos los productos de esta orden ya tienen reseña.</p>
+            )}
+          </div>
+
           {/* Rating */}
           <div>
             <label className="block text-sm text-muted-foreground mb-2">¿Cómo calificas tu compra?</label>
@@ -138,6 +225,8 @@ export default function ReviewPage() {
               'Enviar Reseña'
             )}
           </Button>
+
+          {error && <p className="text-sm text-destructive text-center">{error}</p>}
 
           {rating === 0 && (
             <p className="text-xs text-muted-foreground text-center">Selecciona al menos una estrella para continuar</p>

@@ -87,6 +87,7 @@ model Product {
   cartItems        CartItem[]
   wishlists        Wishlist[]
   presaleReservations PresaleReservation[]
+  reviews          Review[]
 
   @@map("products")
 }
@@ -181,12 +182,17 @@ model Order {
   status String @default("PENDING")
   source String @default("ONLINE")
   notes  String?
+  trackingNumber   String?
+  shippingCompany  String?
+  reviewToken      String?   @unique
+  reviewRequestedAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   items    OrderItem[]
   payments Payment[]
+  reviews  Review[]
 
   @@map("orders")
 }
@@ -233,6 +239,24 @@ model Payment {
   updatedAt DateTime  @updatedAt
 
   @@map("payments")
+}
+
+model Review {
+  id           String   @id @default(uuid())
+  orderId      String
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  customerName String
+  rating       Int
+  comment      String?
+  photoUrl     String?
+  status       String   @default("PENDING")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([orderId, productId])
+  @@map("reviews")
 }
 
 // ==================== CART ====================

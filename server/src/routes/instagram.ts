@@ -6,6 +6,46 @@ import { askProductAI } from '../lib/productAI.js';
 
 const router = Router();
 
+router.get('/feed', async (_req, res) => {
+  const token = process.env.INSTAGRAM_ACCESS_TOKEN;
+  const username = process.env.INSTAGRAM_USERNAME || 'hobbyzamora';
+
+  if (!token) {
+    return res.json({ posts: [], username, source: 'placeholder' });
+  }
+
+  try {
+    const response = await fetch(
+      `https://graph.facebook.com/v19.0/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=6&access_token=${token}`
+    );
+    const data = await response.json() as any;
+
+    if (!response.ok || data.error) {
+      return res.status(502).json({
+        error: data?.error?.message || 'Failed to fetch Instagram feed',
+      });
+    }
+
+    const posts = Array.isArray(data.data)
+      ? data.data
+          .filter((post: any) => typeof post?.permalink === 'string')
+          .map((post: any) => ({
+            id: post.id,
+            imageUrl: post.media_type === 'VIDEO' ? post.thumbnail_url || post.media_url : post.media_url,
+            link: post.permalink,
+            caption: typeof post.caption === 'string' ? post.caption : '',
+            timestamp: post.timestamp,
+          }))
+          .filter((post: any) => typeof post.imageUrl === 'string' && post.imageUrl.length > 0)
+      : [];
+
+    return res.json({ posts, username, source: 'instagram' });
+  } catch (error) {
+    console.error('Instagram feed error:', error);
+    return res.status(500).json({ error: 'Failed to fetch Instagram feed' });
+  }
+});
+
 // Health check — verifica conexión real con Meta Graph API
 router.get('/health', authenticate, requireRole('ADMIN', 'STAFF'), async (_req, res) => {
   const token = process.env.INSTAGRAM_ACCESS_TOKEN;

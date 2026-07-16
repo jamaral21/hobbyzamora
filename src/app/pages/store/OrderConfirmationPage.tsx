@@ -168,6 +168,25 @@ export default function OrderConfirmationPage() {
               </div>
             )}
 
+            {(order?.trackingNumber || order?.shippingCompany) && (
+              <div className="text-left mb-8 p-4 border border-border rounded-lg">
+                <h3 className="text-sm font-medium text-foreground mb-2 flex items-center gap-1.5">
+                  <Package className="w-4 h-4 text-primary" />
+                  Seguimiento de Envío
+                </h3>
+                {order?.shippingCompany && (
+                  <p className="text-sm text-muted-foreground">
+                    Empresa: <span className="text-foreground">{order.shippingCompany}</span>
+                  </p>
+                )}
+                {order?.trackingNumber && (
+                  <p className="text-sm text-muted-foreground">
+                    Número de seguimiento: <span className="text-foreground font-[family-name:var(--font-mono)]">{order.trackingNumber}</span>
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Items del pedido */}
             {order?.items && order.items.length > 0 && (
               <div className="text-left mb-8">

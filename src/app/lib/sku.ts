@@ -1,9 +1,10 @@
 export const PRODUCT_CATEGORY_OPTIONS = [
   'Pokémon TCG',
+  'TCG Varios',
   'Beyblade X',
   'Pokémon Merch',
   'Autos Tomy Tomica',
-  'Figuarts',
+  'Figuras',
   'Nintendo',
   'Coleccionables Varios',
 ] as const;
@@ -15,6 +16,7 @@ const LEGACY_CATEGORY_TO_MENU: Record<string, (typeof PRODUCT_CATEGORY_OPTIONS)[
   'sobres sueltos': 'Pokémon TCG',
   'tins y latas': 'Pokémon TCG',
   blisters: 'Pokémon TCG',
+  figuarts: 'Figuras',
   tomica: 'Autos Tomy Tomica',
 };
 
@@ -24,9 +26,11 @@ export function isOfficialStoreCategory(category: string) {
 
 const CATEGORY_PREFIXES: Record<string, string> = {
   'pokemon tcg': 'PKM',
+  'tcg varios': 'TVR',
   'beyblade x': 'BBX',
   'pokemon merch': 'PMR',
   'autos tomy tomica': 'TMC',
+  'figuras': 'FGT',
   'figuarts': 'FGT',
   'nintendo': 'NTD',
   'coleccionables varios': 'COL',

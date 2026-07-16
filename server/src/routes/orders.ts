@@ -1,10 +1,12 @@
 import { Router } from 'express';
+import { randomBytes } from 'crypto';
 import { prisma } from '../index.js';
 import { authenticate, requireRole, optionalAuth, AuthRequest } from '../middleware/auth.js';
 import {
   sendOrderConfirmationEmail,
   sendOrderStatusEmail,
   sendNewOrderAdminEmail,
+  sendReviewRequestEmail,
 } from '../lib/emailService.js';
 import { getPresaleUnavailableReason } from '../lib/presaleUtils.js';
 
@@ -562,6 +564,108 @@ router.patch('/:id/status', authenticate, requireRole('ADMIN', 'STAFF'), async (
   } catch (error) {
     console.error('Update order status error:', error);
     res.status(500).json({ error: 'Failed to update order status' });
+  }
+});
+
+router.patch('/:id/tracking', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
+  try {
+    const id = req.params.id as string;
+    const trackingNumber = typeof req.body?.trackingNumber === 'string' ? req.body.trackingNumber.trim() : '';
+    const shippingCompany = typeof req.body?.shippingCompany === 'string' ? req.body.shippingCompany.trim() : '';
+
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: { items: true, payments: true },
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    const nextStatus = trackingNumber && order.status === 'PROCESSING' ? 'SHIPPED' : order.status;
+    const updated = await prisma.order.update({
+      where: { id },
+      data: {
+        trackingNumber: trackingNumber || null,
+        shippingCompany: shippingCompany || null,
+        status: nextStatus,
+      },
+      include: { items: true, payments: true },
+    });
+
+    const updatedResponse = {
+      ...updated,
+      subtotal: parseFloat(updated.subtotal.toString()),
+      tax: parseFloat(updated.tax.toString()),
+      shipping: parseFloat(updated.shipping.toString()),
+      discount: parseFloat(updated.discount.toString()),
+      total: parseFloat(updated.total.toString()),
+      items: updated.items.map(i => ({
+        ...i,
+        price: parseFloat(i.price.toString()),
+        cost: parseFloat(i.cost.toString()),
+      })),
+      payments: updated.payments.map(p => ({
+        ...p,
+        amount: parseFloat(p.amount.toString()),
+      })),
+    };
+
+    if (nextStatus !== order.status && nextStatus === 'SHIPPED') {
+      sendOrderStatusEmail(updatedResponse).catch(() => {});
+    }
+
+    res.json(updatedResponse);
+  } catch (error) {
+    console.error('Update tracking error:', error);
+    res.status(500).json({ error: 'Failed to update tracking' });
+  }
+});
+
+router.post('/:id/request-review', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
+  try {
+    const id = req.params.id as string;
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: { items: true },
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    if (order.status !== 'DELIVERED') {
+      return res.status(400).json({ error: 'Review requests are only allowed for delivered orders' });
+    }
+
+    const reviewToken = order.reviewToken || randomBytes(24).toString('hex');
+    await prisma.order.update({
+      where: { id },
+      data: {
+        reviewToken,
+        reviewRequestedAt: new Date(),
+      },
+    });
+
+    const baseUrl = process.env.BASE_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
+    const reviewUrl = `${baseUrl.replace(/\/$/, '')}/review/${reviewToken}`;
+
+    sendReviewRequestEmail({
+      orderNumber: order.orderNumber,
+      customerName: order.customerName,
+      customerEmail: order.customerEmail,
+      items: order.items.map((item) => ({
+        name: item.name,
+        variantName: item.variantName,
+        quantity: item.quantity,
+        price: parseFloat(item.price.toString()),
+      })),
+    }, reviewUrl).catch(() => {});
+
+    res.json({ message: 'Review request sent', reviewToken, reviewUrl });
+  } catch (error) {
+    console.error('Request review error:', error);
+    res.status(500).json({ error: 'Failed to request review' });
   }
 });
 

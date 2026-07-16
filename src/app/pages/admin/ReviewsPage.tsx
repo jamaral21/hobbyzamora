@@ -1,54 +1,20 @@
-import { useState } from 'react';
-import { Star, CheckCircle, XCircle, Clock, Image } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Star, CheckCircle, XCircle, Clock, Image, Loader2 } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { Card } from '../../components/design-system/Card';
 import { Button } from '../../components/design-system/Button';
 import { Badge } from '../../components/design-system/Badge';
-
-// Mock reviews for UI development — backend will replace this
-const MOCK_REVIEWS = [
-  {
-    id: '1',
-    customerName: 'Valentina R.',
-    productName: 'Pokémon TCG Booster Box SV10',
-    rating: 5,
-    comment: 'Excelente servicio, me llegó en buen estado 🌟',
-    photoUrl: null,
-    status: 'PENDING' as const,
-    createdAt: '2026-07-10',
-    orderNumber: 'ORD-202607-ABC123',
-  },
-  {
-    id: '2',
-    customerName: 'Ignacio M.',
-    productName: 'Beyblade X BX-00 Starter Set',
-    rating: 4,
-    comment: 'Muy buena experiencia con la compra. Envío rápido.',
-    photoUrl: null,
-    status: 'APPROVED' as const,
-    createdAt: '2026-07-08',
-    orderNumber: 'ORD-202607-DEF456',
-  },
-  {
-    id: '3',
-    customerName: 'Almendra P.',
-    productName: 'Pokémon TCG Elite Trainer Box',
-    rating: 5,
-    comment: '',
-    photoUrl: null,
-    status: 'APPROVED' as const,
-    createdAt: '2026-07-05',
-    orderNumber: 'ORD-202606-GHI789',
-  },
-];
+import { useReviews } from '../../hooks/useData';
+import { reviewsAPI, type Review } from '../../lib/api';
 
 type ReviewStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
 export default function ReviewsPage() {
-  const [reviews, setReviews] = useState(MOCK_REVIEWS);
   const [filter, setFilter] = useState<'ALL' | ReviewStatus>('ALL');
+  const { data, isLoading, refetch } = useReviews({ status: filter, limit: 50 }, { authMode: 'admin' });
+  const reviews = useMemo(() => data || [], [data]);
 
-  const filteredReviews = filter === 'ALL' ? reviews : reviews.filter((r) => r.status === filter);
+  const filteredReviews = reviews;
 
   const counts = {
     pending: reviews.filter((r) => r.status === 'PENDING').length,
@@ -56,14 +22,14 @@ export default function ReviewsPage() {
     rejected: reviews.filter((r) => r.status === 'REJECTED').length,
   };
 
-  const handleApprove = (id: string) => {
-    // TODO: Backend TICKET-011e — PATCH /api/reviews/:id/status { status: 'APPROVED' }
-    setReviews((prev) => prev.map((r) => r.id === id ? { ...r, status: 'APPROVED' as const } : r));
+  const handleApprove = async (id: string) => {
+    await reviewsAPI.updateStatus(id, 'APPROVED');
+    await refetch();
   };
 
-  const handleReject = (id: string) => {
-    // TODO: Backend TICKET-011e — PATCH /api/reviews/:id/status { status: 'REJECTED' }
-    setReviews((prev) => prev.map((r) => r.id === id ? { ...r, status: 'REJECTED' as const } : r));
+  const handleReject = async (id: string) => {
+    await reviewsAPI.updateStatus(id, 'REJECTED');
+    await refetch();
   };
 
   return (
@@ -113,6 +79,11 @@ export default function ReviewsPage() {
 
         {/* Reviews List */}
         <div className="space-y-4">
+          {isLoading && (
+            <div className="flex justify-center py-6">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            </div>
+          )}
           {filteredReviews.length === 0 ? (
             <Card className="text-center py-12">
               <Star className="w-8 h-8 text-muted-foreground/30 mx-auto mb-3" />

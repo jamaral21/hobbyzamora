@@ -14,6 +14,7 @@
     "db:generate": "prisma generate --schema=server/prisma/schema.prisma",
     "db:migrate": "prisma migrate dev --schema=server/prisma/schema.prisma",
     "db:push": "prisma db push --schema=server/prisma/schema.prisma",
+    "db:run:reorganize-sections": "prisma db execute --schema=server/prisma/schema.prisma --file=scripts/sql/reorganize-store-sections.sql",
     "db:seed": "tsx server/prisma/seed.ts",
     "db:seed:shipments": "tsx server/prisma/seed-shipments.ts",
     "images:backfill:variants": "tsx server/scripts/backfill-product-image-variants.ts",

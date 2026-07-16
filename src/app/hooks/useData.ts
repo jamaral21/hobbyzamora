@@ -7,6 +7,7 @@ import {
   customersAPI,
   instagramAPI,
   posAPI,
+  reviewsAPI,
   Product,
   ProductSearchResult,
 } from '../lib/api';
@@ -210,6 +211,21 @@ export function useInstagramStats() {
 
 export function useInstagramHealth() {
   return useFetch(() => instagramAPI.getHealth(), []);
+}
+
+export function useInstagramFeed() {
+  return useFetch(() => instagramAPI.getFeed(), []);
+}
+
+export function useReviews(
+  params?: { status?: 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'; limit?: number },
+  options?: { enabled?: boolean; authMode?: 'public' | 'admin' }
+) {
+  return useFetch(
+    () => reviewsAPI.getAll(params, options?.authMode ?? 'public'),
+    [params?.status, params?.limit, options?.authMode],
+    options
+  );
 }
 
 export function usePOSProducts(search?: string, category?: string) {

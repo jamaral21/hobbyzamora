@@ -69,8 +69,28 @@ export interface Order {
   total: number;
   status: 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'REFUNDED';
   source: 'ONLINE' | 'POS' | 'INSTAGRAM';
+  trackingNumber?: string | null;
+  shippingCompany?: string | null;
+  reviewToken?: string | null;
+  reviewRequestedAt?: string | null;
   items: OrderItem[];
   payments?: Payment[];
+}
+
+export interface Review {
+  id: string;
+  orderId: string;
+  productId: string;
+  customerName: string;
+  rating: number;
+  comment?: string | null;
+  photoUrl?: string | null;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  createdAt: string;
+  updatedAt?: string;
+  productName?: string;
+  productImage?: string | null;
+  orderNumber?: string;
 }
 
 export interface OrderItem {
@@ -190,6 +210,25 @@ export interface InstagramMessage {
   content: string;
   productId?: string;
   createdAt: string;
+}
+
+export interface InstagramFeedPost {
+  id: string;
+  imageUrl: string;
+  link: string;
+  caption: string;
+  timestamp: string;
+}
+
+export interface ReviewTokenPayload {
+  orderNumber: string;
+  customerName: string;
+  items: Array<{
+    productId: string;
+    name: string;
+    variantName?: string | null;
+    alreadyReviewed: boolean;
+  }>;
 }
 
 export interface InventoryItem {
@@ -571,6 +610,17 @@ export const ordersAPI = {
 
   getById: (id: string) => fetchAPI<Order>(`/orders/${id}`),
 
+  updateTracking: (id: string, data: { trackingNumber: string; shippingCompany: string }) =>
+    fetchAPI<Order>(`/orders/${id}/tracking`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }, 'admin'),
+
+  requestReview: (id: string) =>
+    fetchAPI<{ message: string; reviewToken: string; reviewUrl: string }>(`/orders/${id}/request-review`, {
+      method: 'POST',
+    }, 'admin'),
+
   create: (data: {
     items: Array<{ productId: string; variantId?: string; quantity: number }>;
     customerName: string;
@@ -853,6 +903,56 @@ export const instagramAPI = {
       error?: string;
       code?: number;
     }>('/instagram/health', undefined, 'admin'),
+
+  getFeed: () =>
+    fetchAPI<{
+      posts: InstagramFeedPost[];
+      username: string;
+      source: 'instagram' | 'placeholder';
+    }>('/instagram/feed', undefined, 'public'),
+};
+
+export const reviewsAPI = {
+  getAll: (params?: { status?: 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'; limit?: number }, authMode: AuthMode = 'public') => {
+    const searchParams = new URLSearchParams();
+    if (params?.status) searchParams.set('status', params.status);
+    if (params?.limit) searchParams.set('limit', String(params.limit));
+
+    const query = searchParams.toString();
+    return fetchAPI<Review[]>(`/reviews${query ? `?${query}` : ''}`, undefined, authMode);
+  },
+
+  getByToken: (token: string) =>
+    fetchAPI<ReviewTokenPayload>(`/reviews/token/${token}`, undefined, 'public'),
+
+  create: (data: { token: string; productId: string; rating: number; comment?: string; photoUrl?: string }) =>
+    fetchAPI<Review>('/reviews', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }, 'public'),
+
+  updateStatus: (id: string, status: 'PENDING' | 'APPROVED' | 'REJECTED') =>
+    fetchAPI<Review>(`/reviews/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }, 'admin'),
+
+  uploadPhoto: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_BASE}/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({ error: 'Request failed' }));
+      throw new ApiError(response.status, data.error || response.statusText);
+    }
+
+    return response.json() as Promise<{ url: string }>;
+  },
 };
 
 // Payments API

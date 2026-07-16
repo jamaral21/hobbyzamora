@@ -16,7 +16,7 @@ import { ProductCard } from '../../components/store/ProductCard';
 import { Button } from '../../components/design-system/Button';
 import { Card } from '../../components/design-system/Card';
 import { HeroSlider, type HeroSlide } from '../../components/design-system/HeroSlider';
-import { useProducts, useStoreSections } from '../../hooks/useData';
+import { useInstagramFeed, useProducts, useReviews, useStoreSections } from '../../hooks/useData';
 import { useAuth } from '../../contexts/AuthContext';
 import { buildSectionGroups } from '../../lib/sections';
 import { mockProducts } from '../../data/mockData';
@@ -73,10 +73,25 @@ export default function HomePage() {
     authMode: isAuthenticated ? 'customer' : 'public',
   });
   const { data: sections } = useStoreSections();
+  const { data: instagramFeed } = useInstagramFeed();
+  const { data: approvedReviews } = useReviews({ status: 'APPROVED', limit: 6 });
   const categoryGroups = useMemo(() => buildSectionGroups(sections || []), [sections]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const allProducts = products && products.length > 0 ? products : mockProducts;
+  const instagramPosts = instagramFeed?.posts || [];
+  const showInstagramSection = instagramFeed?.source === 'instagram' && instagramPosts.length > 0;
+  const homepageReviews = approvedReviews && approvedReviews.length > 0
+    ? approvedReviews
+    : [{
+        id: 'placeholder-review',
+        customerName: 'Próximamente',
+        productName: 'Reseñas verificadas',
+        comment: 'Pronto podrás ver reseñas de clientes reales que compraron en HobbyZamora.',
+        rating: 5,
+        status: 'APPROVED' as const,
+        createdAt: new Date().toISOString(),
+      }];
 
   const sortedByNewest = useMemo(() => {
     return [...allProducts].sort((a: any, b: any) => {
@@ -314,38 +329,35 @@ export default function HomePage() {
       {/* ═══════════════════════════════════════════
           INSTAGRAM — Feed placeholder
       ═══════════════════════════════════════════ */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground mb-1">Síguenos en Instagram</p>
-            <h2 className="text-primary">@HOBBYZAMORA</h2>
-          </div>
-          <a href="https://www.instagram.com/hobbyzamora" target="_blank" rel="noopener noreferrer">
-            <Button variant="outline" size="sm">
-              Seguir
-              <ArrowRight className="w-4 h-4" />
-            </Button>
-          </a>
-        </div>
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <a
-              key={i}
-              href="https://www.instagram.com/hobbyzamora"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="aspect-square rounded-lg bg-secondary border border-border flex items-center justify-center hover:border-primary/30 transition-colors"
-            >
-              <svg className="w-6 h-6 text-muted-foreground/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="2" y="2" width="20" height="20" rx="5" />
-                <circle cx="12" cy="12" r="5" />
-                <circle cx="17.5" cy="6.5" r="1.5" fill="currentColor" stroke="none" />
-              </svg>
+      {showInstagramSection && (
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <p className="text-xs uppercase tracking-[0.25em] text-muted-foreground mb-1">Síguenos en Instagram</p>
+              <h2 className="text-primary">@HOBBYZAMORA</h2>
+            </div>
+            <a href="https://www.instagram.com/hobbyzamora" target="_blank" rel="noopener noreferrer">
+              <Button variant="outline" size="sm">
+                Seguir
+                <ArrowRight className="w-4 h-4" />
+              </Button>
             </a>
-          ))}
-        </div>
-        <p className="text-xs text-muted-foreground text-center mt-4">Próximamente: feed en vivo conectado con Instagram</p>
-      </section>
+          </div>
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+            {instagramPosts.map((post) => (
+              <a
+                key={post.id}
+                href={post.link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="aspect-square rounded-lg bg-secondary border border-border flex items-center justify-center overflow-hidden hover:border-primary/30 transition-colors"
+              >
+                <img src={post.imageUrl} alt={post.caption || 'Publicación de Instagram'} className="w-full h-full object-cover" />
+              </a>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ═══════════════════════════════════════════
           RESEÑAS — Placeholder
@@ -357,10 +369,8 @@ export default function HomePage() {
             <p className="text-muted-foreground">Lo que dicen nuestros compradores</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-            {[
-              { name: 'Próximamente', product: 'Reseñas verificadas', comment: 'Pronto podrás ver reseñas de clientes reales que compraron en HobbyZamora.', rating: 5 },
-            ].map((review, idx) => (
-              <Card key={idx} className="p-5">
+            {homepageReviews.slice(0, 3).map((review) => (
+              <Card key={review.id} className="p-5">
                 <div className="flex items-center gap-1 mb-2">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <span key={star} className={`text-sm ${star <= review.rating ? 'text-primary' : 'text-muted-foreground/30'}`}>★</span>
@@ -368,8 +378,8 @@ export default function HomePage() {
                 </div>
                 <p className="text-sm text-foreground mb-3">{review.comment}</p>
                 <div className="text-xs text-muted-foreground">
-                  <span className="font-medium text-foreground">{review.name}</span>
-                  {' · '}{review.product}
+                  <span className="font-medium text-foreground">{review.customerName}</span>
+                  {' · '}{review.productName}
                 </div>
               </Card>
             ))}

@@ -254,7 +254,12 @@ export default function OrderDetailPage() {
           )}
           
           {/* Tracking — left column, visible without scroll */}
-          <TrackingNumberCard orderId={order.id} initialTrackingNumber={(order as any).trackingNumber || ''} />
+          <TrackingNumberCard
+            orderId={order.id}
+            initialTrackingNumber={order.trackingNumber || ''}
+            initialShippingCompany={order.shippingCompany || ''}
+            onSaved={refetch}
+          />
 
           {/* Review — left column, easy to find */}
           {order.status === 'DELIVERED' && (
@@ -356,21 +361,31 @@ export default function OrderDetailPage() {
   );
 }
 
-function TrackingNumberCard({ orderId, initialTrackingNumber }: { orderId: string; initialTrackingNumber: string }) {
+function TrackingNumberCard({
+  orderId,
+  initialTrackingNumber,
+  initialShippingCompany,
+  onSaved,
+}: {
+  orderId: string;
+  initialTrackingNumber: string;
+  initialShippingCompany: string;
+  onSaved: () => Promise<void>;
+}) {
   const [trackingNumber, setTrackingNumber] = useState(initialTrackingNumber);
-  const [shippingCompany, setShippingCompany] = useState((window as any).__orderShippingCompany || '');
+  const [shippingCompany, setShippingCompany] = useState(initialShippingCompany);
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      // TODO: Backend TICKET — PATCH /api/orders/:id/tracking { trackingNumber, shippingCompany }
-      await ordersAPI.updateStatus(orderId, trackingNumber ? 'SHIPPED' : 'PROCESSING');
+      await ordersAPI.updateTracking(orderId, { trackingNumber, shippingCompany });
+      await onSaved();
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch {
-      // silently fail — backend ticket pending
+      // keep silent to preserve current admin UX
     } finally {
       setIsSaving(false);
     }
@@ -409,15 +424,20 @@ function TrackingNumberCard({ orderId, initialTrackingNumber }: { orderId: strin
 function ReviewRequestCard({ orderId, customerEmail }: { orderId: string; customerEmail: string }) {
   const [reviewRequested, setReviewRequested] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [reviewUrl, setReviewUrl] = useState('');
+  const [isRequesting, setIsRequesting] = useState(false);
 
-  // Generate a deterministic token from orderId (real implementation would be backend-generated)
-  const reviewToken = btoa(orderId).replace(/[^a-zA-Z0-9]/g, '').slice(0, 16);
-  const reviewUrl = `${window.location.origin}/review/${reviewToken}`;
-
-  const handleRequestReview = () => {
-    // TODO: Backend TICKET-011c — POST /api/orders/:id/request-review
-    // This would generate a real token and send email to customerEmail
-    setReviewRequested(true);
+  const handleRequestReview = async () => {
+    setIsRequesting(true);
+    try {
+      const result = await ordersAPI.requestReview(orderId);
+      setReviewUrl(result.reviewUrl);
+      setReviewRequested(true);
+    } catch {
+      // keep silent to preserve current admin UX
+    } finally {
+      setIsRequesting(false);
+    }
   };
 
   const handleCopyLink = () => {
@@ -457,8 +477,8 @@ function ReviewRequestCard({ orderId, customerEmail }: { orderId: string; custom
             <p className="text-sm text-muted-foreground">
               Envía un email al cliente solicitando una reseña de su compra. El cliente recibirá un link para dejar su opinión y foto.
             </p>
-            <Button size="sm" onClick={handleRequestReview} fullWidth>
-              <Star className="w-4 h-4" /> Enviar Solicitud de Reseña
+            <Button size="sm" onClick={handleRequestReview} fullWidth disabled={isRequesting}>
+              {isRequesting ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Star className="w-4 h-4" /> Enviar Solicitud de Reseña</>}
             </Button>
           </>
         )}
