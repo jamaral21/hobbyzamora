@@ -68,19 +68,20 @@ const heroSlides: HeroSlide[] = [
 ];
 
 export default function HomePage() {
+  const INSTAGRAM_FEED_ENABLED = import.meta.env.VITE_ENABLE_INSTAGRAM_FEED === 'true';
   const { isAuthenticated } = useAuth();
   const { data: products, isLoading } = useProducts(undefined, {
     authMode: isAuthenticated ? 'customer' : 'public',
   });
   const { data: sections } = useStoreSections();
-  const { data: instagramFeed } = useInstagramFeed();
+  const { data: instagramFeed } = useInstagramFeed({ enabled: INSTAGRAM_FEED_ENABLED });
   const { data: approvedReviews } = useReviews({ status: 'APPROVED', limit: 6 });
   const categoryGroups = useMemo(() => buildSectionGroups(sections || []), [sections]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const allProducts = products && products.length > 0 ? products : mockProducts;
   const instagramPosts = instagramFeed?.posts || [];
-  const showInstagramSection = instagramFeed?.source === 'instagram' && instagramPosts.length > 0;
+  const showInstagramSection = INSTAGRAM_FEED_ENABLED && instagramFeed?.source === 'instagram' && instagramPosts.length > 0;
   const homepageReviews = approvedReviews && approvedReviews.length > 0
     ? approvedReviews
     : [{

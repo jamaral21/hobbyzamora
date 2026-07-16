@@ -213,8 +213,8 @@ export function useInstagramHealth() {
   return useFetch(() => instagramAPI.getHealth(), []);
 }
 
-export function useInstagramFeed() {
-  return useFetch(() => instagramAPI.getFeed(), []);
+export function useInstagramFeed(options?: { enabled?: boolean }) {
+  return useFetch(() => instagramAPI.getFeed(), [], options);
 }
 
 export function useReviews(
