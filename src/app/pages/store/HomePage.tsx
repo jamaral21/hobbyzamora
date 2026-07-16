@@ -16,18 +16,9 @@ import { ProductCard } from '../../components/store/ProductCard';
 import { Button } from '../../components/design-system/Button';
 import { Card } from '../../components/design-system/Card';
 import { HeroSlider, type HeroSlide } from '../../components/design-system/HeroSlider';
-import { useInstagramFeed, useProducts, useReviews, useStoreSections } from '../../hooks/useData';
+import { useInstagramFeed, useProducts, useReviews } from '../../hooks/useData';
 import { useAuth } from '../../contexts/AuthContext';
-import { buildSectionGroups } from '../../lib/sections';
 import { mockProducts } from '../../data/mockData';
-
-const slugify = (text: string) =>
-  String(text || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '');
 
 const heroSlides: HeroSlide[] = [
   {
@@ -73,10 +64,8 @@ export default function HomePage() {
   const { data: products, isLoading } = useProducts(undefined, {
     authMode: isAuthenticated ? 'customer' : 'public',
   });
-  const { data: sections } = useStoreSections();
   const { data: instagramFeed } = useInstagramFeed({ enabled: INSTAGRAM_FEED_ENABLED });
   const { data: approvedReviews } = useReviews({ status: 'APPROVED', limit: 6 });
-  const categoryGroups = useMemo(() => buildSectionGroups(sections || []), [sections]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const allProducts = products && products.length > 0 ? products : mockProducts;
@@ -109,19 +98,6 @@ export default function HomePage() {
   const presaleProducts = useMemo(() => {
     return allProducts.filter((p: any) => p.isPresale);
   }, [allProducts]);
-
-  // Dynamic category products — one carousel per category that has products
-  const categoryProducts = useMemo(() => {
-    if (!categoryGroups.length || !allProducts.length) return [];
-    return categoryGroups
-      .map((group) => {
-        const products = allProducts.filter((p: any) =>
-          slugify(p.category).includes(group.slug) || slugify(p.category) === group.slug
-        );
-        return { ...group, products: products.slice(0, 10) };
-      })
-      .filter((g) => g.products.length > 0);
-  }, [categoryGroups, allProducts]);
 
   const novedadesEnStock = useMemo(() => {
     return sortedByNewest
@@ -284,48 +260,6 @@ export default function HomePage() {
           </div>
         </section>
       )}
-
-      {/* ═══════════════════════════════════════════
-          BANNER DIVISOR — CATEGORÍAS
-      ═══════════════════════════════════════════ */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-14 pb-4">
-        <div className="flex items-center gap-4">
-          <div className="h-px flex-1 bg-border" />
-          <h2 className="text-primary shrink-0">CATEGORÍAS</h2>
-          <div className="h-px flex-1 bg-border" />
-        </div>
-      </div>
-
-      {/* ═══════════════════════════════════════════
-          SECCIONES POR CATEGORÍA — Carrusel dinámico por cada categoría
-      ═══════════════════════════════════════════ */}
-      {categoryProducts.map((cat) => (
-        <section key={cat.parentCategory} className="py-10">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-primary mb-1">{cat.parentCategory.toUpperCase()}</h2>
-              </div>
-              <Link to={`/store/products?category=${cat.slug}`}>
-                <Button variant="outline" size="sm">
-                  Ver Todo
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </Link>
-            </div>
-          </div>
-          <div
-            className="flex gap-5 overflow-x-auto scrollbar-hide pb-2 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
-            style={{ scrollbarWidth: 'none' }}
-          >
-            {cat.products.map((product) => (
-              <div key={product.id} className="flex-shrink-0 w-[280px]">
-                <ProductCard product={product} />
-              </div>
-            ))}
-          </div>
-        </section>
-      ))}
 
       {/* ═══════════════════════════════════════════
           INSTAGRAM — Feed placeholder
