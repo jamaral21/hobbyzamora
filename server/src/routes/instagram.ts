@@ -6,24 +6,38 @@ import { askProductAI } from '../lib/productAI.js';
 
 const router = Router();
 
+const INSTAGRAM_FEED_TIMEOUT_MS = 8000;
+
+const getTimeoutSignal = (timeoutMs: number): AbortSignal | undefined => {
+  if (typeof AbortSignal !== 'undefined' && typeof (AbortSignal as any).timeout === 'function') {
+    return (AbortSignal as any).timeout(timeoutMs) as AbortSignal;
+  }
+  return undefined;
+};
+
 router.get('/feed', async (_req, res) => {
   const token = process.env.INSTAGRAM_ACCESS_TOKEN;
   const username = process.env.INSTAGRAM_USERNAME || 'hobbyzamora';
+  const fallbackPayload = { posts: [], username, source: 'fallback' as const };
 
   if (!token) {
-    return res.json({ posts: [], username, source: 'placeholder' });
+    return res.json({ ...fallbackPayload, source: 'placeholder' as const });
   }
 
   try {
-    const response = await fetch(
-      `https://graph.facebook.com/v19.0/me/media?fields=id,caption,media_type,media_url,thumbnail_url,permalink,timestamp&limit=6&access_token=${token}`
-    );
+    const feedUrl = new URL('https://graph.facebook.com/v20.0/me/media');
+    feedUrl.searchParams.set('fields', 'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp');
+    feedUrl.searchParams.set('limit', '6');
+    feedUrl.searchParams.set('access_token', token);
+
+    const response = await fetch(feedUrl, {
+      signal: getTimeoutSignal(INSTAGRAM_FEED_TIMEOUT_MS),
+    });
     const data = await response.json() as any;
 
     if (!response.ok || data.error) {
-      return res.status(502).json({
-        error: data?.error?.message || 'Failed to fetch Instagram feed',
-      });
+      console.warn('Instagram feed unavailable:', data?.error?.message || response.statusText);
+      return res.json(fallbackPayload);
     }
 
     const posts = Array.isArray(data.data)
@@ -41,8 +55,9 @@ router.get('/feed', async (_req, res) => {
 
     return res.json({ posts, username, source: 'instagram' });
   } catch (error) {
-    console.error('Instagram feed error:', error);
-    return res.status(500).json({ error: 'Failed to fetch Instagram feed' });
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn('Instagram feed error:', message);
+    return res.json(fallbackPayload);
   }
 });
 
@@ -56,9 +71,11 @@ router.get('/health', authenticate, requireRole('ADMIN', 'STAFF'), async (_req, 
   }
 
   try {
-    const response = await fetch(
-      `https://graph.facebook.com/v19.0/me?fields=id,name&access_token=${token}`
-    );
+    const meUrl = new URL('https://graph.facebook.com/v19.0/me');
+    meUrl.searchParams.set('fields', 'id,name');
+    meUrl.searchParams.set('access_token', token);
+
+    const response = await fetch(meUrl);
     const data = await response.json() as any;
 
     if (data.error) {
@@ -70,9 +87,11 @@ router.get('/health', authenticate, requireRole('ADMIN', 'STAFF'), async (_req, 
     }
 
     // También verificar token debug info
-    const debugResponse = await fetch(
-      `https://graph.facebook.com/v19.0/debug_token?input_token=${token}&access_token=${appId}|${process.env.INSTAGRAM_APP_SECRET}`
-    );
+    const debugUrl = new URL('https://graph.facebook.com/v19.0/debug_token');
+    debugUrl.searchParams.set('input_token', token);
+    debugUrl.searchParams.set('access_token', `${appId}|${process.env.INSTAGRAM_APP_SECRET}`);
+
+    const debugResponse = await fetch(debugUrl);
     const debugData = await debugResponse.json() as any;
     const tokenInfo = debugData.data;
 
