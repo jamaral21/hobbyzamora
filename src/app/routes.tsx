@@ -17,6 +17,7 @@ import AccountPage from './pages/store/AccountPage';
 import PresalesPage from './pages/store/PresalesPage';
 import ResetPasswordPage from './pages/store/ResetPasswordPage';
 import ReviewPage from './pages/store/ReviewPage';
+import FAQPage from './pages/store/FAQPage';
 
 // Admin Pages
 import DashboardPage from './pages/admin/DashboardPage';
@@ -171,6 +172,10 @@ export const router = createBrowserRouter([
   {
     path: '/review/:token',
     Component: ReviewPage,
+  },
+  {
+    path: '/store/faq',
+    Component: FAQPage,
   },
 
   // Admin Routes

@@ -381,15 +381,15 @@ export default function HomePage() {
                 <p className="text-xs text-muted-foreground">Productos verificados y sellados</p>
               </div>
             </div>
-            <a href="https://www.instagram.com/hobbyzamora" target="_blank" rel="noopener noreferrer" className="flex items-center gap-4 group">
+            <Link to="/store/faq" className="flex items-center gap-4 group">
               <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 group-hover:shadow-[0_0_16px_rgba(255,214,10,0.2)] transition-shadow">
                 <Sparkles className="w-6 h-6 text-primary" />
               </div>
               <div>
                 <p className="text-sm text-foreground font-medium">¿Preguntas?</p>
-                <p className="text-xs text-muted-foreground">Contáctanos por Instagram</p>
+                <p className="text-xs text-muted-foreground">Ver preguntas frecuentes</p>
               </div>
-            </a>
+            </Link>
           </div>
         </div>
       </section>
