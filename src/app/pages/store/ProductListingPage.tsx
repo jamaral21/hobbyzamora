@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router';
 import { Search, SlidersHorizontal, Loader2 } from 'lucide-react';
 import { StoreLayout } from '../../components/layout/StoreLayout';
@@ -19,10 +19,11 @@ export default function ProductListingPage() {
 
 export function ProductListingPageContent({ presalesOnly = false }: { presalesOnly?: boolean }) {
   const { isAuthenticated } = useAuth();
-  const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('featured');
   const [searchParams, setSearchParams] = useSearchParams();
   const categoryParam = searchParams.get('category') || 'all';
+  const searchParam = searchParams.get('search') || '';
+  const [searchQuery, setSearchQuery] = useState(searchParam);
   const { data: sectionData } = useStoreSections();
 
   const { data: products, isLoading } = useProducts({ limit: 1000 }, {
@@ -75,6 +76,20 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
     setSearchParams(searchParams, { replace: true });
   };
 
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    if (value.trim()) {
+      searchParams.set('search', value.trim());
+    } else {
+      searchParams.delete('search');
+    }
+    setSearchParams(searchParams, { replace: true });
+  };
+
+  useEffect(() => {
+    setSearchQuery(searchParam);
+  }, [searchParam]);
+
   const filteredProducts = useMemo(() => {
     if (!baseProducts.length) return [];
     return baseProducts
@@ -117,7 +132,7 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
               type="text"
               placeholder="Buscar productos..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => handleSearchChange(e.target.value)}
               className="w-full pl-10 pr-4 py-3 rounded-lg border border-border bg-input-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>

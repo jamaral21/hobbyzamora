@@ -90,8 +90,8 @@ const roleLabels: Record<ShipmentsRole, string> = {
 export function ShipmentsSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { role, setRole, hasAccess } = useShipmentsRole();
-  const { logout } = useAdminAuth();
+  const { role, hasAccess } = useShipmentsRole();
+  const { user, logout } = useAdminAuth();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(
     () => Object.fromEntries(sections.map(s => [s.label, s.defaultOpen])),
@@ -133,19 +133,14 @@ export function ShipmentsSidebar() {
         </button>
       </div>
 
-      {/* Role Selector */}
+      {/* Active User */}
       {!isCollapsed && (
         <div className="px-3 py-3 border-b border-border">
-          <label className="block text-xs text-muted-foreground mb-1">Rol activo</label>
-          <select
-            value={role}
-            onChange={e => setRole(e.target.value as ShipmentsRole)}
-            className="w-full px-2 py-1.5 rounded-lg text-sm text-foreground bg-input-background border border-border focus:outline-none focus:ring-1 focus:ring-primary/30"
-          >
-            {(Object.keys(roleLabels) as ShipmentsRole[]).map(r => (
-              <option key={r} value={r}>{roleLabels[r]}</option>
-            ))}
-          </select>
+          <label className="block text-xs text-muted-foreground mb-1">Usuario activo</label>
+          <div className="w-full px-2 py-1.5 rounded-lg text-sm text-foreground bg-input-background border border-border">
+            {user?.name || user?.email || 'Usuario'}
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">{roleLabels[role]}</p>
         </div>
       )}
 

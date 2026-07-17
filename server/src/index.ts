@@ -33,6 +33,7 @@ import presaleRoutes from './routes/presale.js';
 import shipmentsRoutes from './routes/shipments.js';
 import uploadsRoutes from './routes/uploads.js';
 import siteMaintenanceRoutes from './routes/siteMaintenance.js';
+import adminUsersRoutes from './routes/adminUsers.js';
 
 // Initialize Prisma
 export const prisma = new PrismaClient();
@@ -88,6 +89,7 @@ app.use('/api/presale', presaleRoutes);
 app.use('/api/shipments', shipmentsRoutes);
 app.use('/api/upload', uploadsRoutes);
 app.use('/api/site-maintenance', siteMaintenanceRoutes);
+app.use('/api/admin/users', adminUsersRoutes);
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

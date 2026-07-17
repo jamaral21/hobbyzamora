@@ -518,6 +518,7 @@ router.get('/', optionalAuth, async (req: AuthRequest, res) => {
       status,
       search,
       presale,
+      featured,
       minPrice,
       maxPrice,
       page = '1',
@@ -557,6 +558,12 @@ router.get('/', optionalAuth, async (req: AuthRequest, res) => {
       where.isPresale = true;
     } else if (presale === 'false') {
       where.isPresale = false;
+    }
+
+    if (featured === 'true') {
+      where.featured = true;
+    } else if (featured === 'false') {
+      where.featured = false;
     }
 
     // Usuarios no autenticados no pueden ver productos de preventa

@@ -1,50 +1,37 @@
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useMemo } from 'react';
 import { ShipmentsRole, ROLE_PAGES } from '../data/shipmentsDomain';
-
-const STORAGE_KEY = 'shipments_role';
+import { useAdminAuth } from './AdminAuthContext';
 
 interface ShipmentsRoleContextType {
   role: ShipmentsRole;
-  setRole: (role: ShipmentsRole) => void;
   hasAccess: (moduleId: string) => boolean;
   accessibleModules: string[];
 }
 
 const ShipmentsRoleContext = createContext<ShipmentsRoleContextType | null>(null);
 
-function getStoredRole(): ShipmentsRole {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored && (stored === 'admin' || stored === 'japon' || stored === 'chile' || stored === 'contador')) {
-      return stored;
-    }
-  } catch {
-    // localStorage unavailable
+function resolveRole(userRole?: string, shipmentsRole?: string): ShipmentsRole {
+  if (shipmentsRole === 'admin' || shipmentsRole === 'japon' || shipmentsRole === 'chile' || shipmentsRole === 'contador') {
+    return shipmentsRole;
   }
-  return 'admin';
+
+  if (userRole === 'ADMIN') return 'admin';
+  return 'chile';
 }
 
 export function ShipmentsRoleProvider({ children }: { children: React.ReactNode }) {
-  const [role, setRoleState] = useState<ShipmentsRole>(getStoredRole);
-
-  const setRole = useCallback((newRole: ShipmentsRole) => {
-    setRoleState(newRole);
-    try {
-      localStorage.setItem(STORAGE_KEY, newRole);
-    } catch {
-      // localStorage unavailable
-    }
-  }, []);
-
-  const hasAccess = useCallback(
-    (moduleId: string) => ROLE_PAGES[role].includes(moduleId),
-    [role],
+  const { user } = useAdminAuth();
+  const role = useMemo(
+    () => resolveRole(user?.role, user?.shipmentsRole),
+    [user?.role, user?.shipmentsRole]
   );
+
+  const hasAccess = (moduleId: string) => ROLE_PAGES[role].includes(moduleId);
 
   const accessibleModules = useMemo(() => ROLE_PAGES[role], [role]);
 
   return (
-    <ShipmentsRoleContext.Provider value={{ role, setRole, hasAccess, accessibleModules }}>
+    <ShipmentsRoleContext.Provider value={{ role, hasAccess, accessibleModules }}>
       {children}
     </ShipmentsRoleContext.Provider>
   );

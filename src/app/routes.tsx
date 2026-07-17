@@ -25,6 +25,7 @@ import AdminProductDetailPage from './pages/admin/AdminProductDetailPage';
 import OrdersPage from './pages/admin/OrdersPage';
 import OrderDetailPage from './pages/admin/OrderDetailPage';
 import CustomersPage from './pages/admin/CustomersPage';
+import AdminUsersPage from './pages/admin/AdminUsersPage';
 import ReviewsPage from './pages/admin/ReviewsPage';
 import InstagramAgentPage from './pages/admin/InstagramAgentPage';
 import { PresalesPage as AdminPresalesPage } from './pages/admin/PresalesPage';
@@ -204,6 +205,10 @@ export const router = createBrowserRouter([
   {
     path: '/admin/customers',
     Component: CustomersPage,
+  },
+  {
+    path: '/admin/users',
+    Component: AdminUsersPage,
   },
   {
     path: '/admin/reviews',

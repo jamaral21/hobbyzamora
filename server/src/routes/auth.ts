@@ -17,6 +17,36 @@ import {
 const router = Router();
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
+type ShipmentsRole = 'admin' | 'japon' | 'chile' | 'contador';
+
+async function getUserShipmentsRole(userId: string, appRole: string): Promise<ShipmentsRole> {
+  const fallback: ShipmentsRole = appRole === 'ADMIN' ? 'admin' : 'chile';
+
+  try {
+    const tableExists = await prisma.$queryRawUnsafe<Array<{ name: string }>>(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='shipments_user_roles'"
+    );
+
+    if (!tableExists || tableExists.length === 0) {
+      return fallback;
+    }
+
+    const rows = await prisma.$queryRawUnsafe<Array<{ role: string }>>(
+      'SELECT role FROM shipments_user_roles WHERE userId = ? LIMIT 1',
+      userId
+    );
+
+    const role = rows?.[0]?.role;
+    if (role === 'admin' || role === 'japon' || role === 'chile' || role === 'contador') {
+      return role;
+    }
+  } catch {
+    return fallback;
+  }
+
+  return fallback;
+}
+
 const resolveUploadsBaseDir = () => {
   if (process.env.UPLOADS_DIR) {
     return path.resolve(process.env.UPLOADS_DIR);
@@ -128,6 +158,10 @@ router.post('/login', async (req, res) => {
       { expiresIn: '7d' as any }
     );
 
+    const shipmentsRole = (user.role === 'ADMIN' || user.role === 'STAFF')
+      ? await getUserShipmentsRole(user.id, user.role)
+      : undefined;
+
     res.json({
       user: {
         id: user.id,
@@ -136,6 +170,7 @@ router.post('/login', async (req, res) => {
         phone: user.phone,
         avatarUrl: user.avatarUrl,
         role: user.role,
+        shipmentsRole,
         presaleBanned: (user as any).presaleBanned ?? false,
       },
       token,
@@ -163,7 +198,18 @@ router.get('/me', authenticate, async (req: AuthRequest, res) => {
       },
     });
 
-    res.json(user);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const shipmentsRole = (user.role === 'ADMIN' || user.role === 'STAFF')
+      ? await getUserShipmentsRole(user.id, user.role)
+      : undefined;
+
+    res.json({
+      ...user,
+      shipmentsRole,
+    });
   } catch (error) {
     console.error('Get user error:', error);
     res.status(500).json({ error: 'Failed to get user' });

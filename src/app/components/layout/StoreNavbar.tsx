@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Link, useLocation } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { Search, ShoppingCart, User, Menu, X, Star, ChevronDown } from 'lucide-react';
 import { Button } from '../design-system/Button';
 import { Badge } from '../design-system/Badge';
@@ -9,12 +9,28 @@ import { buildSectionGroups, slugifySection } from '../../lib/sections';
 
 export function StoreNavbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [search, setSearch] = useState('');
   const cartItemCount = useCartStore((s) => s.getItemCount());
   const location = useLocation();
+  const navigate = useNavigate();
   const { data: sections } = useStoreSections();
 
   const groups = useMemo(() => buildSectionGroups(sections || []), [sections]);
   const currentCategory = new URLSearchParams(location.search).get('category') || '';
+
+  React.useEffect(() => {
+    const q = new URLSearchParams(location.search).get('search') || '';
+    setSearch(q);
+  }, [location.search]);
+
+  const submitSearch = (event: React.FormEvent) => {
+    event.preventDefault();
+    const trimmed = search.trim();
+    const qs = new URLSearchParams();
+    if (trimmed) qs.set('search', trimmed);
+    navigate(`/store/products${qs.toString() ? `?${qs.toString()}` : ''}`);
+    setIsMenuOpen(false);
+  };
 
   return (
     <nav className="sticky top-0 z-[80] isolate overflow-visible bg-background/80 backdrop-blur-xl border-b border-border">
@@ -36,14 +52,18 @@ export function StoreNavbar() {
 
           {/* Center — Search (wide) */}
           <div className="hidden md:flex flex-1 max-w-2xl">
-            <div className="relative w-full">
+            <form className="relative w-full" onSubmit={submitSearch}>
               <input
                 type="text"
                 placeholder="Buscar productos..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
                 className="w-full pl-4 pr-12 py-2.5 rounded-lg border border-border bg-input-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all"
               />
-              <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-            </div>
+              <button type="submit" className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors" aria-label="Buscar">
+                <Search className="w-5 h-5" />
+              </button>
+            </form>
           </div>
 
           {/* Right — Cart + Login */}
@@ -69,12 +89,16 @@ export function StoreNavbar() {
         <div className="md:hidden fixed inset-0 top-20 z-[90] bg-background/98 backdrop-blur-xl overflow-y-auto overscroll-contain">
           <div className="px-4 py-4 space-y-3 pb-20">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Buscar..."
-                className="w-full pl-10 pr-4 py-2 rounded-lg border border-border bg-input-background text-foreground placeholder:text-muted-foreground"
-              />
+              <form onSubmit={submitSearch}>
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Buscar..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 rounded-lg border border-border bg-input-background text-foreground placeholder:text-muted-foreground"
+                />
+              </form>
             </div>
             <Link to="/store" className="block py-2 text-muted-foreground hover:text-primary transition-colors">Tienda</Link>
             <Link to="/store/products" className="block py-2 text-muted-foreground hover:text-primary transition-colors">Productos</Link>

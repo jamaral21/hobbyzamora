@@ -174,12 +174,6 @@ export default function HomePage() {
               >
                 <ChevronRight className="w-5 h-5" />
               </button>
-              <Link to="/store/products" className="ml-2">
-                <Button variant="outline" size="sm">
-                  Ver Todo
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </Link>
             </div>
           </div>
         </div>

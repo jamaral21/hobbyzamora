@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { User } from '../lib/api';
+import { getAdminToken, setAdminToken, clearAdminToken } from '../lib/authStorage';
 
 const API_BASE = '/api';
-const ADMIN_TOKEN_KEY = 'adminToken';
 
 interface AdminAuthContextType {
   user: User | null;
@@ -15,7 +15,7 @@ interface AdminAuthContextType {
 const AdminAuthContext = createContext<AdminAuthContextType | null>(null);
 
 async function adminFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+  const token = getAdminToken();
   const response = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
     headers: {
@@ -36,18 +36,18 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+    const token = getAdminToken();
     if (token) {
       adminFetch<User>('/auth/me')
         .then((u) => {
           if (u.role === 'ADMIN' || u.role === 'STAFF') {
             setUser(u);
           } else {
-            localStorage.removeItem(ADMIN_TOKEN_KEY);
+            clearAdminToken();
           }
         })
         .catch(() => {
-          localStorage.removeItem(ADMIN_TOKEN_KEY);
+          clearAdminToken();
         })
         .finally(() => setIsLoading(false));
     } else {
@@ -65,12 +65,12 @@ export function AdminAuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error('Acceso denegado. Se requiere rol de administrador.');
     }
 
-    localStorage.setItem(ADMIN_TOKEN_KEY, data.token);
+    setAdminToken(data.token);
     setUser(data.user);
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem(ADMIN_TOKEN_KEY);
+    clearAdminToken();
     setUser(null);
   }, []);
 

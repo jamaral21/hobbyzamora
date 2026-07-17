@@ -10,9 +10,17 @@ function scopedKey(baseKey: string): string {
 
 function getWithLegacyFallback(baseKey: string): string | null {
   const scoped = localStorage.getItem(scopedKey(baseKey));
+  const legacy = localStorage.getItem(baseKey);
+
+  // Si ambas claves existen y difieren, priorizamos legacy porque puede venir
+  // de un login reciente hecho por contextos aun no migrados a namespaced keys.
+  if (scoped && legacy && scoped !== legacy) {
+    localStorage.setItem(scopedKey(baseKey), legacy);
+    return legacy;
+  }
+
   if (scoped) return scoped;
 
-  const legacy = localStorage.getItem(baseKey);
   if (legacy) {
     // Migracion silenciosa: promovemos la sesion previa a la clave namespaced.
     localStorage.setItem(scopedKey(baseKey), legacy);

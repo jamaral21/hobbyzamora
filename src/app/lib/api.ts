@@ -254,9 +254,19 @@ export interface User {
   email: string;
   name: string;
   role: 'ADMIN' | 'STAFF' | 'CUSTOMER';
+  shipmentsRole?: 'admin' | 'japon' | 'chile' | 'contador';
   phone?: string;
   avatarUrl?: string | null;
   presaleBanned?: boolean;
+}
+
+export interface AdminUser {
+  id: string;
+  name: string;
+  email: string;
+  role: 'ADMIN' | 'STAFF';
+  shipmentsRole: 'admin' | 'japon' | 'chile' | 'contador';
+  createdAt: string;
 }
 
 export interface Address {
@@ -427,6 +437,7 @@ export const productsAPI = {
     status?: string;
     search?: string;
     presale?: boolean;
+    featured?: boolean;
     page?: number;
     limit?: number;
   }, authMode: AuthMode = 'auto') => {
@@ -435,6 +446,7 @@ export const productsAPI = {
     if (params?.status) searchParams.set('status', params.status);
     if (params?.search) searchParams.set('search', params.search);
     if (params?.presale !== undefined) searchParams.set('presale', String(params.presale));
+    if (params?.featured !== undefined) searchParams.set('featured', String(params.featured));
     if (params?.page) searchParams.set('page', String(params.page));
     if (params?.limit) searchParams.set('limit', String(params.limit));
     
@@ -1169,5 +1181,39 @@ export const presaleAPI = {
   adminDeleteReservation: (reservationId: string) =>
     fetchAPI<{ message: string }>(`/presale/admin/reservation/${reservationId}`, {
       method: 'DELETE',
+    }, 'admin'),
+};
+
+export const adminUsersAPI = {
+  getAll: (params?: { search?: string; page?: number; limit?: number }) => {
+    const searchParams = new URLSearchParams();
+    if (params?.search) searchParams.set('search', params.search);
+    if (params?.page) searchParams.set('page', String(params.page));
+    if (params?.limit) searchParams.set('limit', String(params.limit));
+    const query = searchParams.toString();
+    return fetchAPI<{ users: AdminUser[]; pagination: any }>(`/admin/users${query ? `?${query}` : ''}`, undefined, 'admin');
+  },
+
+  create: (data: {
+    name: string;
+    email: string;
+    password: string;
+    role: 'ADMIN' | 'STAFF';
+    shipmentsRole: 'admin' | 'japon' | 'chile' | 'contador';
+  }) =>
+    fetchAPI<AdminUser>('/admin/users', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }, 'admin'),
+
+  update: (id: string, data: {
+    name?: string;
+    password?: string;
+    role?: 'ADMIN' | 'STAFF';
+    shipmentsRole?: 'admin' | 'japon' | 'chile' | 'contador';
+  }) =>
+    fetchAPI<AdminUser>(`/admin/users/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
     }, 'admin'),
 };

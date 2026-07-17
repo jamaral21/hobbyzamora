@@ -22,6 +22,7 @@ export default function ProductsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ACTIVE' | 'ARCHIVED' | 'HIDDEN' | 'ALL'>('ACTIVE');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [featuredFilter, setFeaturedFilter] = useState<'ALL' | 'FEATURED' | 'NOT_FEATURED'>('ALL');
   const [isEditorOpen, setIsEditorOpen] = useState(
     (location.state as any)?.openEditor === true
   );
@@ -40,6 +41,7 @@ export default function ProductsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 1 });
   const [searchTerm, setSearchTerm] = useState('');
+  const [sectionCategories, setSectionCategories] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
 
@@ -57,6 +59,7 @@ export default function ProductsPage() {
           category: categoryFilter === 'ALL' ? undefined : categoryFilter,
           search: searchTerm.trim() || undefined,
           presale: isPresalesView ? true : false,
+          featured: featuredFilter === 'ALL' ? undefined : featuredFilter === 'FEATURED',
           page: currentPage,
           limit: 50,
         },
@@ -75,7 +78,7 @@ export default function ProductsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [isAuthenticated, statusFilter, categoryFilter, searchTerm, isPresalesView, currentPage]);
+  }, [isAuthenticated, statusFilter, categoryFilter, featuredFilter, searchTerm, isPresalesView, currentPage]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -86,24 +89,42 @@ export default function ProductsPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter, categoryFilter, isPresalesView]);
+  }, [statusFilter, categoryFilter, featuredFilter, isPresalesView]);
 
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm]);
 
-  const categoryOptions = useMemo(() => {
-    const categories = new Set<string>();
+  useEffect(() => {
+    let cancelled = false;
 
-    (products || [])
-      .filter((p: any) => isPresalesView ? p.isPresale : !p.isPresale)
-      .forEach((p: any) => {
-        const category = String(p.category || '').trim();
-        if (category) categories.add(category);
-      });
+    const loadSections = async () => {
+      try {
+        const sections = await productsAPI.getSections();
+        if (cancelled) return;
 
-    return ['ALL', ...orderSectionLabels(categories)];
-  }, [products, isPresalesView]);
+        const categories = new Set<string>();
+        for (const section of sections || []) {
+          categories.add(String(section.parentCategory || '').trim());
+          for (const child of section.children || []) {
+            categories.add(String(child.name || '').trim());
+          }
+        }
+
+        setSectionCategories(orderSectionLabels(categories));
+      } catch {
+        if (!cancelled) setSectionCategories([]);
+      }
+    };
+
+    void loadSections();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const categoryOptions = useMemo(() => ['ALL', ...sectionCategories], [sectionCategories]);
 
   const filteredProducts = products || [];
 
@@ -487,6 +508,18 @@ export default function ProductsPage() {
               <option value="ARCHIVED">Desactivados</option>
               <option value="HIDDEN">Ocultos</option>
               <option value="ALL">Todos</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2 rounded-lg border border-border bg-input-background px-3 py-2">
+            <Filter className="w-4 h-4 text-muted-foreground" />
+            <select
+              value={featuredFilter}
+              onChange={(e) => setFeaturedFilter(e.target.value as 'ALL' | 'FEATURED' | 'NOT_FEATURED')}
+              className="bg-transparent text-foreground focus:outline-none"
+            >
+              <option value="ALL">Destacados: Todos</option>
+              <option value="FEATURED">Solo destacados</option>
+              <option value="NOT_FEATURED">No destacados</option>
             </select>
           </div>
         </div>

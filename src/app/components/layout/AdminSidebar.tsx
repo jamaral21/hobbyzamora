@@ -31,6 +31,7 @@ const navItems: NavItem[] = [
   { label: 'Pedidos', icon: ShoppingBag, path: '/admin/orders' },
   { label: 'Preventas', icon: Clock, path: '/admin/presales' },
   { label: 'Clientes', icon: Users, path: '/admin/customers' },
+  { label: 'Usuarios Admin', icon: Users, path: '/admin/users' },
   { label: 'Reseñas', icon: Star, path: '/admin/reviews' },
   { label: 'Agente Instagram', icon: Instagram, path: '/admin/instagram' },
 ];

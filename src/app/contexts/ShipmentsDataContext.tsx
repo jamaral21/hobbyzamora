@@ -444,7 +444,8 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
     try {
       const configResp = await shipmentsFetch<{ data: ApiConfig }>('/config');
       applyConfigResponse(configResp.data);
-    } catch {
+    } catch (error) {
+      console.warn('[shipments] No se pudo cargar configuracion', error);
       // Si config falla, no bloquea la carga del resto de módulos.
     }
 
@@ -468,6 +469,20 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
         shipmentsFetch<{ data: ApiComprasChile[] }>('/compras-chile'),
         shipmentsFetch<{ data: ApiGavChile[] }>('/gav-chile'),
       ]);
+
+      const failedModules: Array<{ module: string; error: unknown }> = [];
+      if (comprasResp.status === 'rejected') failedModules.push({ module: 'compras', error: comprasResp.reason });
+      if (boletasResp.status === 'rejected') failedModules.push({ module: 'boletas', error: boletasResp.reason });
+      if (cajasResp.status === 'rejected') failedModules.push({ module: 'cajas', error: cajasResp.reason });
+      if (comprasWebResp.status === 'rejected') failedModules.push({ module: 'compras-web', error: comprasWebResp.reason });
+      if (bodegaChileResp.status === 'rejected') failedModules.push({ module: 'bodega-chile', error: bodegaChileResp.reason });
+      if (ventasResp.status === 'rejected') failedModules.push({ module: 'ventas', error: ventasResp.reason });
+      if (comprasChileResp.status === 'rejected') failedModules.push({ module: 'compras-chile', error: comprasChileResp.reason });
+      if (gavChileResp.status === 'rejected') failedModules.push({ module: 'gav-chile', error: gavChileResp.reason });
+
+      if (failedModules.length > 0) {
+        console.warn('[shipments] Algunos módulos fallaron al sincronizar', failedModules);
+      }
 
       const apiCompras = comprasResp.status === 'fulfilled' ? extractArray<ApiCompra>(comprasResp.value.data) : [];
       const uiToApi: Record<number, string> = {};
@@ -655,7 +670,8 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
       setGavChile(apiGavChile.map((item) => ({
         ...item,
       })));
-    } catch {
+    } catch (error) {
+      console.warn('[shipments] Error inesperado al sincronizar datos', error);
       // Si ocurre un error inesperado de parseo, mantenemos el estado actual.
     }
   }, [applyConfigResponse]);
