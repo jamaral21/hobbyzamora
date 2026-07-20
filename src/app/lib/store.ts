@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { cartAPI, CartItem, Product } from '../lib/api';
+import { getCustomerToken } from './authStorage';
 
 interface LocalCartItem {
   id: string;
@@ -114,7 +115,7 @@ export const useCartStore = create<CartState>()(
       },
 
       syncWithBackend: async () => {
-        const token = localStorage.getItem('token');
+        const token = getCustomerToken();
         if (!token) return;
 
         set({ isLoading: true });
