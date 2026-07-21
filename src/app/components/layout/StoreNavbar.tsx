@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { Search, ShoppingCart, User, Menu, X, Star, ChevronDown } from 'lucide-react';
 import { Button } from '../design-system/Button';
@@ -9,6 +10,7 @@ import { buildSectionGroups, slugifySection } from '../../lib/sections';
 
 export function StoreNavbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
   const [search, setSearch] = useState('');
   const cartItemCount = useCartStore((s) => s.getItemCount());
   const location = useLocation();
@@ -23,6 +25,10 @@ export function StoreNavbar() {
     setSearch(q);
   }, [location.search]);
 
+  React.useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const submitSearch = (event: React.FormEvent) => {
     event.preventDefault();
     const trimmed = search.trim();
@@ -33,13 +39,16 @@ export function StoreNavbar() {
   };
 
   return (
-    <nav className="sticky top-0 z-[80] isolate overflow-visible bg-background/80 backdrop-blur-xl border-b border-border">
+    <nav className={`sticky top-0 isolate overflow-visible bg-background/80 backdrop-blur-xl border-b border-border ${isMenuOpen ? 'z-[120]' : 'z-[80]'}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20 gap-6">
           {/* Mobile — Hamburger */}
           <button
+            type="button"
             className="md:hidden p-2 text-muted-foreground hover:text-foreground"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
+            aria-expanded={isMenuOpen}
+            aria-controls="store-mobile-menu"
             aria-label={isMenuOpen ? 'Cerrar menú' : 'Abrir menú'}
           >
             {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
@@ -85,61 +94,73 @@ export function StoreNavbar() {
       </div>
 
       {/* Mobile Menu */}
-      {isMenuOpen && (
-        <div className="md:hidden fixed inset-0 top-20 z-[90] bg-background/98 backdrop-blur-xl overflow-y-auto overscroll-contain">
-          <div className="px-4 py-4 space-y-3 pb-20">
-            <div className="relative">
-              <form onSubmit={submitSearch}>
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder="Buscar..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 rounded-lg border border-border bg-input-background text-foreground placeholder:text-muted-foreground"
-                />
-              </form>
-            </div>
-            <Link to="/store" className="block py-2 text-muted-foreground hover:text-primary transition-colors">Tienda</Link>
-            <Link to="/store/products" className="block py-2 text-muted-foreground hover:text-primary transition-colors">Productos</Link>
-            <Link to="/store/presales" className="flex items-center gap-2 py-2 text-amber-500 hover:text-amber-400 font-medium transition-colors">
-              <Star className="w-4 h-4 fill-amber-500" />
-              Preventas
-            </Link>
-            <Link to="/store/account" className="block py-2 text-muted-foreground hover:text-primary transition-colors">Mi Cuenta</Link>
-
-            {/* Separator */}
-            <div className="border-t border-border my-2" />
-
-            {/* Categories */}
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider py-1">Categorías</p>
-            {groups.map((group) => (
-              <div key={group.parentCategory}>
-                <Link
-                to={`/store/products?category=${group.slug}`}
-                onClick={() => setIsMenuOpen(false)}
-                className="block py-2 text-muted-foreground hover:text-primary transition-colors"
-              >
-                {group.parentCategory}
+      {isMounted && isMenuOpen && createPortal(
+        <>
+          <button
+            type="button"
+            aria-label="Cerrar menú"
+            className="fixed inset-0 z-[100] md:hidden bg-black/45 backdrop-blur-[2px]"
+            onClick={() => setIsMenuOpen(false)}
+          />
+          <div
+            id="store-mobile-menu"
+            className="md:hidden fixed left-0 right-0 top-20 bottom-0 z-[110] overflow-y-auto overscroll-contain border-t border-border bg-background/98 shadow-2xl"
+          >
+            <div className="px-4 py-4 space-y-3 pb-20">
+              <div className="relative">
+                <form onSubmit={submitSearch}>
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Buscar..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 rounded-lg border border-border bg-input-background text-foreground placeholder:text-muted-foreground"
+                  />
+                </form>
+              </div>
+              <Link to="/store" onClick={() => setIsMenuOpen(false)} className="block py-2 text-muted-foreground hover:text-primary transition-colors">Tienda</Link>
+              <Link to="/store/products" onClick={() => setIsMenuOpen(false)} className="block py-2 text-muted-foreground hover:text-primary transition-colors">Productos</Link>
+              <Link to="/store/presales" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 py-2 text-amber-500 hover:text-amber-400 font-medium transition-colors">
+                <Star className="w-4 h-4 fill-amber-500" />
+                Preventas
               </Link>
-              {group.children.length > 0 && (
-                <div className="ml-3 border-l border-border pl-3 pb-1">
-                  {group.children.map((child) => (
-                    <Link
-                      key={child.id}
-                      to={`/store/products?category=${child.slug}`}
-                      onClick={() => setIsMenuOpen(false)}
-                      className="block py-1.5 text-sm text-muted-foreground hover:text-primary transition-colors"
-                    >
-                      {child.name}
-                    </Link>
-                  ))}
+              <Link to="/store/account" onClick={() => setIsMenuOpen(false)} className="block py-2 text-muted-foreground hover:text-primary transition-colors">Mi Cuenta</Link>
+
+              {/* Separator */}
+              <div className="border-t border-border my-2" />
+
+              {/* Categories */}
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider py-1">Categorías</p>
+              {groups.map((group) => (
+                <div key={group.parentCategory}>
+                  <Link
+                    to={`/store/products?category=${group.slug}`}
+                    onClick={() => setIsMenuOpen(false)}
+                    className="block py-2 text-muted-foreground hover:text-primary transition-colors"
+                  >
+                    {group.parentCategory}
+                  </Link>
+                  {group.children.length > 0 && (
+                    <div className="ml-3 border-l border-border pl-3 pb-1">
+                      {group.children.map((child) => (
+                        <Link
+                          key={child.id}
+                          to={`/store/products?category=${child.slug}`}
+                          onClick={() => setIsMenuOpen(false)}
+                          className="block py-1.5 text-sm text-muted-foreground hover:text-primary transition-colors"
+                        >
+                          {child.name}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
+              ))}
             </div>
-            ))}
           </div>
-        </div>
+        </>,
+        document.body,
       )}
 
       {/* Category Bar */}
