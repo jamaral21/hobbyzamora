@@ -287,6 +287,117 @@ export async function deleteInvoice(invoiceId: string): Promise<ShipmentsRespons
 }
 
 /**
+ * Actualizar líneas/comisión/tc de una boleta existente
+ * Solo se puede editar si el estado es 'sin_pagar'
+ * NOTA: totalCLP = totalJPY * tc (igual que generateGavJaponBoleta y el preview del frontend)
+ */
+export async function updateInvoice(
+  invoiceId: string,
+  payload: {
+    comisionPct: number;
+    tc: number;
+    items: Array<{ nombre: string; ean?: string; tipo: string; precioU: number; cant: number }>;
+  }
+): Promise<ShipmentsResponse<InvoiceWithItems>> {
+  try {
+    if (!payload.items || payload.items.length === 0) {
+      return {
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Debe incluir al menos un producto',
+          details: [{ field: 'items', message: 'Array vacío' }],
+        },
+      };
+    }
+
+    if (payload.comisionPct < 0 || payload.comisionPct > 100) {
+      return {
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'La comisión debe estar entre 0 y 100',
+          details: [{ field: 'comisionPct', message: 'Rango: 0-100' }],
+        },
+      };
+    }
+
+    if (payload.tc <= 0) {
+      return {
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'El tipo de cambio debe ser mayor a 0',
+          details: [{ field: 'tc', message: 'Debe ser > 0' }],
+        },
+      };
+    }
+
+    const existing = await prisma.shipmentsInvoice.findUnique({ where: { invoiceId } });
+
+    if (!existing) {
+      return {
+        error: {
+          code: 'NOT_FOUND',
+          message: 'Boleta no encontrada',
+        },
+      };
+    }
+
+    if (existing.estado !== 'sin_pagar') {
+      return {
+        error: {
+          code: 'CONFLICT',
+          message: `No se puede editar boleta en estado "${existing.estado}". Solo se pueden editar boletas sin pagar.`,
+        },
+      };
+    }
+
+    const subtotalJPY = payload.items.reduce((sum, item) => sum + item.precioU * item.cant, 0);
+    const totalJPY = subtotalJPY * (1 + payload.comisionPct / 100);
+    const totalCLP = Math.round(totalJPY * payload.tc);
+
+    await prisma.$transaction([
+      prisma.shipmentsInvoiceItem.deleteMany({ where: { invoiceId: existing.id } }),
+      prisma.shipmentsInvoiceItem.createMany({
+        data: payload.items.map((item) => ({
+          invoiceId: existing.id,
+          fecha: new Date(),
+          tipo: item.tipo,
+          nombre: item.nombre,
+          ean: item.ean || null,
+          precioU: new Decimal(item.precioU),
+          cant: item.cant,
+          comPct: new Decimal(payload.comisionPct),
+          tc: new Decimal(payload.tc),
+        })),
+      }),
+      prisma.shipmentsInvoice.update({
+        where: { id: existing.id },
+        data: {
+          subtotalJPY: new Decimal(subtotalJPY),
+          comision: new Decimal(payload.comisionPct),
+          totalJPY: new Decimal(totalJPY),
+          tc: new Decimal(payload.tc),
+          totalCLP: new Decimal(totalCLP),
+        },
+      }),
+    ]);
+
+    const invoiceWithItems = await prisma.shipmentsInvoice.findUnique({
+      where: { id: existing.id },
+      include: { items: { orderBy: { createdAt: 'asc' } } },
+    });
+
+    return { data: invoiceWithItems as InvoiceWithItems };
+  } catch (error: any) {
+    return {
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: error.message || 'Error al editar boleta',
+      },
+    };
+  }
+}
+
+/**
  * Actualizar estado de boleta a 'pagado'
  * Se usa desde el endpoint de "Confirmar Pago"
  */

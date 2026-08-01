@@ -45,6 +45,8 @@ export default function BoletasPage() {
   const [editComision, setEditComision] = useState('');
   const [editTc, setEditTc] = useState('');
   const [editLines, setEditLines] = useState<EditLineItem[]>([]);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   function openModal() {
     // Build a map of already-used quantities per compraId from existing boletaItems
@@ -107,14 +109,22 @@ export default function BoletasPage() {
     }));
   }
 
-  function handleEditSubmit() {
+  async function handleEditSubmit() {
     if (!editBoleta) return;
-    updateBoleta(editBoleta.id, {
-      comisionPct: Number(editComision) || 0,
-      tc: Number(editTc) || 1,
-      items: editLines,
-    });
-    setEditBoleta(null);
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      await updateBoleta(editBoleta.id, {
+        comisionPct: Number(editComision) || 0,
+        tc: Number(editTc) || 1,
+        items: editLines,
+      });
+      setEditBoleta(null);
+    } catch (error) {
+      setEditError(error instanceof Error ? error.message : 'No se pudo guardar la boleta');
+    } finally {
+      setEditSaving(false);
+    }
   }
 
   const editPreview = useMemo(() => {
@@ -396,11 +406,16 @@ export default function BoletasPage() {
       {/* Modal Editar Boleta */}
       <Modal
         isOpen={!!editBoleta}
-        onClose={() => setEditBoleta(null)}
+        onClose={() => { setEditBoleta(null); setEditError(null); }}
         title={`Editar Boleta — ${editBoleta?.id ?? ''}`}
         size="xl"
       >
         <div className="space-y-4">
+          {editError && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {editError}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Comisión %"
@@ -482,9 +497,9 @@ export default function BoletasPage() {
           )}
         </div>
         <ModalFooter>
-          <Button variant="ghost" onClick={() => setEditBoleta(null)}>Cancelar</Button>
-          <Button onClick={handleEditSubmit} disabled={editLines.length === 0}>
-            Guardar cambios
+          <Button variant="ghost" onClick={() => { setEditBoleta(null); setEditError(null); }}>Cancelar</Button>
+          <Button onClick={handleEditSubmit} disabled={editLines.length === 0 || editSaving}>
+            {editSaving ? 'Guardando…' : 'Guardar cambios'}
           </Button>
         </ModalFooter>
       </Modal>

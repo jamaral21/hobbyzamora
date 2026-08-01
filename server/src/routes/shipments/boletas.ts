@@ -4,6 +4,7 @@ import {
   listInvoices,
   getInvoice,
   createInvoice,
+  updateInvoice,
   deleteInvoice,
 } from '../../lib/invoiceService.js';
 
@@ -100,6 +101,47 @@ router.post('/', async (req: ShipmentsRequest, res) => {
     }
 
     return res.status(201).json(result);
+  } catch (error: any) {
+    return res.status(500).json({
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: error.message,
+      },
+    });
+  }
+});
+
+/**
+ * PUT /api/shipments/boletas/:id
+ * Editar líneas/comisión/tc de una boleta existente
+ *
+ * Regla: Solo se puede editar si estado = 'sin_pagar'
+ *
+ * Body:
+ *   {
+ *     items: Array<{ nombre, ean?, tipo, precioU, cant }>,
+ *     comisionPct: number,
+ *     tc: number
+ *   }
+ *
+ * Response 200:
+ *   { data: { invoiceId, ..., items: [...] } }
+ */
+router.put('/:id', async (req: ShipmentsRequest, res) => {
+  try {
+    const invoiceId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    const result = await updateInvoice(invoiceId, req.body);
+
+    if (result.error) {
+      let status = 500;
+      if (result.error.code === 'VALIDATION_ERROR') status = 400;
+      if (result.error.code === 'NOT_FOUND') status = 404;
+      if (result.error.code === 'CONFLICT') status = 409;
+      return res.status(status).json(result);
+    }
+
+    return res.json(result);
   } catch (error: any) {
     return res.status(500).json({
       error: {

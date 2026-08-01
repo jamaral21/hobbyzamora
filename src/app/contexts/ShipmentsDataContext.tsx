@@ -96,6 +96,11 @@ interface ShipmentsDataContextType {
   addCompra: (data: Omit<PurchaseRecord, 'id' | 'sku'>) => PurchaseRecord;
   updateCompra: (id: number, data: Partial<PurchaseRecord>) => void;
   addBoleta: (data: NewBoletaInput) => Invoice;
+  updateBoleta: (boletaId: string, data: {
+    comisionPct: number;
+    tc: number;
+    items: Array<{ nombre: string; ean?: string; tipo: string; precioU: number; cant: number }>;
+  }) => Promise<void>;
   confirmPayment: (boletaId: string, payload?: PaymentConfirmationPayload) => void;
   deleteBoleta: (boletaId: string) => Promise<void>;
   addCaja: (data: Omit<Box, 'internacion'>) => Box;
@@ -763,6 +768,61 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
     return invoice;
   }, [boletas, purchaseUiToApiId, syncFromApi]);
 
+  const updateBoleta = useCallback(async (
+    boletaId: string,
+    data: {
+      comisionPct: number;
+      tc: number;
+      items: Array<{ nombre: string; ean?: string; tipo: string; precioU: number; cant: number }>;
+    }
+  ): Promise<void> => {
+    const previousBoletas = boletas;
+    const previousItems = boletaItems;
+
+    const subtotalJPY = data.items.reduce((s, i) => s + i.precioU * i.cant, 0);
+    const totalJPY = subtotalJPY * (1 + data.comisionPct / 100);
+    const totalCLP = data.tc > 0 ? Math.round(totalJPY * data.tc) : 0;
+
+    setBoletas((prev) => prev.map((b) => b.id === boletaId ? {
+      ...b,
+      productos: data.items.length,
+      subtotalJPY,
+      comision: data.comisionPct,
+      totalJPY: Math.round(totalJPY),
+      tc: data.tc,
+      totalCLP,
+    } : b));
+    setBoletaItems((prev) => ({
+      ...prev,
+      [boletaId]: data.items.map((i) => ({
+        fecha: new Date().toISOString().split('T')[0],
+        tipo: i.tipo,
+        nombre: i.nombre,
+        ean: i.ean ?? '',
+        precioU: i.precioU,
+        cant: i.cant,
+        comPct: data.comisionPct,
+        tc: data.tc,
+      })),
+    }));
+
+    try {
+      await shipmentsFetch(`/boletas/${encodeURIComponent(boletaId)}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          comisionPct: data.comisionPct,
+          tc: data.tc,
+          items: data.items,
+        }),
+      });
+      await syncFromApi();
+    } catch (error) {
+      setBoletas(previousBoletas);
+      setBoletaItems(previousItems);
+      throw error;
+    }
+  }, [boletas, boletaItems, syncFromApi]);
+
   const confirmPayment = useCallback((boletaId: string, payload?: PaymentConfirmationPayload) => {
     setBoletas(prev => prev.map(b => b.id === boletaId ? { ...b, estado: 'pagado' as const } : b));
     // Also update related purchases, attempting to honor partial quantities
@@ -1172,7 +1232,7 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
         compras, boletas, boletaItems, cajas, stockChile,
         pedidosWeb, comprasChile, ventas, gavChile, config,
         calcDisponibleBySku: calcDisponible,
-        addCompra, updateCompra, addBoleta, confirmPayment, deleteBoleta,
+        addCompra, updateCompra, addBoleta, updateBoleta, confirmPayment, deleteBoleta,
         addCaja, updateCaja, deleteCaja, saveInternacion,
         confirmCosteo, updatePrecioVenta, addVenta, confirmGAV,
         updateConfig, createBackup, addPedidoWeb, updatePedidoWeb,
