@@ -21,7 +21,9 @@
     "db:studio": "prisma studio --schema=server/prisma/schema.prisma",
     "shipments:backup": "bash scripts/shipments/backup-shipments-state.sh",
     "shipments:changes:today": "bash scripts/shipments/export-shipments-changes-since.sh server/prisma/dev.db $(date +%Y-%m-%d)",
-    "shipments:changes:since": "bash scripts/shipments/export-shipments-changes-since.sh"
+    "shipments:changes:since": "bash scripts/shipments/export-shipments-changes-since.sh",
+    "shipments:reset-data": "tsx server/scripts/reset-shipments-data.ts",
+    "shipments:reset-data:dry-run": "tsx server/scripts/reset-shipments-data.ts --dry-run"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
