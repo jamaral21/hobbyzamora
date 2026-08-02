@@ -424,13 +424,19 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
       });
     }
 
+    // Los métodos manuales (efectivo/transferencia) no tienen un flujo automático de
+    // rechazo, por lo que se confirman como pagados de inmediato. El pago con tarjeta
+    // se confirma más tarde (en notifyOrderProcessing) solo si Getnet lo aprueba, para
+    // no dejar la reserva marcada como PAID si el pago termina siendo rechazado.
+    const isManualPayment = normalizedPaymentMethod === 'TRANSFER' || normalizedPaymentMethod === 'CASH';
+
     // Deduct stock / handle presale reservations
     for (const item of orderItems) {
       const product = await prisma.product.findUnique({ where: { id: item.productId }, select: { isPresale: true } });
       if (product?.isPresale) {
         const userId = req.user?.id;
 
-        if (userId) {
+        if (userId && isManualPayment) {
           await prisma.presaleReservation.upsert({
             where: { userId_productId: { userId, productId: item.productId } },
             update: {

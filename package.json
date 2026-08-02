@@ -23,7 +23,9 @@
     "shipments:changes:today": "bash scripts/shipments/export-shipments-changes-since.sh server/prisma/dev.db $(date +%Y-%m-%d)",
     "shipments:changes:since": "bash scripts/shipments/export-shipments-changes-since.sh",
     "shipments:reset-data": "tsx server/scripts/reset-shipments-data.ts",
-    "shipments:reset-data:dry-run": "tsx server/scripts/reset-shipments-data.ts --dry-run"
+    "shipments:reset-data:dry-run": "tsx server/scripts/reset-shipments-data.ts --dry-run",
+    "presale:fix-stuck-paid": "tsx server/scripts/fix-presale-stuck-paid.ts",
+    "presale:fix-stuck-paid:dry-run": "tsx server/scripts/fix-presale-stuck-paid.ts --dry-run"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

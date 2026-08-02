@@ -472,6 +472,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
       const order = await prisma.order.create({
         data: {
           orderNumber,
+          userId: customerId || null,
           customerName,
           customerEmail,
           customerPhone,
@@ -522,24 +523,12 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
         },
       });
 
-      // Deduct stock / handle presale reservations (Getnet)
+      // Deduct stock for non-presale items. Las reservas de preventa se marcan como
+      // PAID recien cuando el terminal confirme la aprobacion (ver /pos/getnet/status),
+      // para no dejarlas bloqueadas si el pago con tarjeta termina siendo rechazado.
       for (const item of orderItems) {
         const product = await prisma.product.findUnique({ where: { id: item.productId }, select: { isPresale: true } });
-        if (product?.isPresale) {
-          if (customerId) {
-            await prisma.presaleReservation.upsert({
-              where: { userId_productId: { userId: customerId, productId: item.productId } },
-              update: {
-                status: 'PAID',
-                paidAt: new Date(),
-                cancelledAt: null,
-                cancellationReason: null,
-                cancelledBy: null,
-              },
-              create: { userId: customerId, productId: item.productId, status: 'PAID', paidAt: new Date() },
-            });
-          }
-        } else {
+        if (!product?.isPresale) {
           await prisma.product.update({
             where: { id: item.productId },
             data: { stock: { decrement: item.quantity } },
@@ -690,6 +679,14 @@ router.post('/getnet/status', authenticate, requireRole('ADMIN', 'STAFF'), async
           await tx.order.update({
             where: { id: payment.orderId },
             data: { status: 'DELIVERED' },
+          });
+        }
+
+        if (payment.order.userId) {
+          const productIds = payment.order.items.map((i) => i.productId);
+          await tx.presaleReservation.updateMany({
+            where: { userId: payment.order.userId, productId: { in: productIds }, status: 'NOTIFIED' },
+            data: { status: 'PAID', paidAt: new Date() },
           });
         }
       });
