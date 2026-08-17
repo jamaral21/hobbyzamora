@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { prisma } from '../index.js';
 import { authenticate, optionalAuth, requireRole, AuthRequest } from '../middleware/auth.js';
 import { sendOrderStatusEmail } from '../lib/emailService.js';
+import { restoreOrderInventory } from '../lib/orderInventoryService.js';
 
 const router = Router();
 
@@ -62,12 +63,7 @@ async function updateOrderStatusWithStock(orderId: string, nextStatus: 'PROCESSI
   }
 
   await prisma.$transaction(async (tx) => {
-    for (const item of order.items) {
-      await tx.product.update({
-        where: { id: item.productId },
-        data: { stock: { increment: item.quantity } },
-      });
-    }
+    await restoreOrderInventory(tx, order.id);
 
     await tx.order.update({
       where: { id: orderId },

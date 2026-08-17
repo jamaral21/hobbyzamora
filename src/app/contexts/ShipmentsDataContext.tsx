@@ -24,6 +24,9 @@ interface CosteoEntry {
   cant: number;
   pct: number;
   costoUnit: number;
+  sellable: number;
+  collection: number;
+  personal: number;
 }
 
 interface NewVentaInput {
@@ -107,7 +110,7 @@ interface ShipmentsDataContextType {
   updateCaja: (id: string, data: Partial<Box>) => void;
   deleteCaja: (id: string) => void;
   saveInternacion: (cajaId: string, data: InternacionData) => void;
-  confirmCosteo: (cajaId: string, costeoData: CosteoEntry[]) => void;
+  confirmCosteo: (cajaId: string, costeoData: CosteoEntry[], holdUnassigned: boolean) => void;
   updatePrecioVenta: (stockId: string, precio: number) => void;
   addVenta: (data: NewVentaInput) => SaleRecord;
   confirmGAV: (id: number) => void;
@@ -197,6 +200,8 @@ type ApiCaja = {
   tcEnvio?: number | null;
   internacionArancel?: number | null;
   internacionIva?: number | null;
+  isHistorical?: boolean;
+  deductPurchaseUnits?: boolean;
   productos?: Array<{
     compraId: string;
     sku: string;
@@ -296,7 +301,7 @@ const DEFAULT_ERP_CONFIG: ERPConfig = {
   comisionPct: 0,
 };
 
-async function shipmentsFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
+export async function shipmentsFetch<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const adminToken = getAdminToken();
   const customerToken = getCustomerToken();
   const candidates = [adminToken, customerToken].filter((value, idx, arr): value is string => {
@@ -589,6 +594,8 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
           mo_tarifa: toNumber(item.moTarifa),
           mat_jpy: toNumber(item.matJpy),
           tc_envio: toNumber(item.tcEnvio),
+          isHistorical: item.isHistorical === true,
+          deductPurchaseUnits: item.deductPurchaseUnits === true,
           internacion: hasInternacion
             ? {
                 arancel,
@@ -916,6 +923,8 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
         moTarifa: data.mo_tarifa,
         matJpy: data.mat_jpy,
         tcEnvio: data.tc_envio,
+        isHistorical: data.isHistorical === true,
+        deductPurchaseUnits: data.deductPurchaseUnits === true,
         productos: productosPayload,
       }),
     }).then(() => syncFromApi()).catch(() => undefined);
@@ -954,7 +963,7 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
     }).then(() => syncFromApi()).catch(() => undefined);
   }, [syncFromApi]);
 
-  const confirmCosteo = useCallback((cajaId: string, costeoData: CosteoEntry[]) => {
+  const confirmCosteo = useCallback((cajaId: string, costeoData: CosteoEntry[], holdUnassigned: boolean) => {
     const box = cajas.find(b => b.id === cajaId);
     if (!box) return;
 
@@ -965,7 +974,7 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
       nombre: entry.nombre,
       ean: entry.ean,
       caja: cajaId,
-      cant: entry.cant,
+      cant: entry.sellable,
       costoUnit: entry.costoUnit,
       precioVenta: null,
     }));
@@ -993,7 +1002,11 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
           ean: entry.ean,
           cant: entry.cant,
           pct: entry.pct,
+          sellable: entry.sellable,
+          collection: entry.collection,
+          personal: entry.personal,
         })),
+        holdUnassigned,
       }),
     }).then(() => syncFromApi()).catch(() => undefined);
   }, [cajas, stockChile, compras, purchaseUiToApiId, syncFromApi]);

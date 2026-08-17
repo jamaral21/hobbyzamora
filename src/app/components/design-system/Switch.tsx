@@ -9,8 +9,13 @@ export interface SwitchProps {
 
 export function Switch({ checked, onChange, label, disabled = false }: SwitchProps) {
   return (
-    <label className="flex items-center gap-3 cursor-pointer">
-      <div
+    <div className="flex items-center gap-3">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        disabled={disabled}
         className={clsx(
           'relative w-11 h-6 rounded-full transition-colors duration-200',
           {
@@ -19,7 +24,7 @@ export function Switch({ checked, onChange, label, disabled = false }: SwitchPro
             'opacity-50 cursor-not-allowed': disabled,
           }
         )}
-        onClick={() => !disabled && onChange(!checked)}
+        onClick={() => onChange(!checked)}
       >
         <div
           className={clsx(
@@ -29,8 +34,8 @@ export function Switch({ checked, onChange, label, disabled = false }: SwitchPro
             }
           )}
         />
-      </div>
+      </button>
       {label && <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>}
-    </label>
+    </div>
   );
 }
