@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../index.js';
-import { getPresaleUnavailableReason } from '../lib/presaleUtils.js';
+import { getPresaleUnavailableReason, getRequestedPresaleQuantity } from '../lib/presaleUtils.js';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
 
 const parseImages = (images: string): string[] => {
@@ -442,7 +442,8 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
           return res.status(400).json({ error: `${product.name}: ${unavailableReason}` });
         }
 
-        if (product.presaleMaxQty && item.quantity > product.presaleMaxQty) {
+        const requestedPresaleQuantity = getRequestedPresaleQuantity(items, product.id);
+        if (product.presaleMaxQty && requestedPresaleQuantity > product.presaleMaxQty) {
           return res.status(400).json({ error: `Max quantity for presale is ${product.presaleMaxQty}` });
         }
       }
