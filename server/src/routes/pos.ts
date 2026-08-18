@@ -421,7 +421,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
 
         const existingReservation = await prisma.presaleReservation.findUnique({
           where: { userId_productId: { userId: customerId, productId: product.id } },
-          select: { status: true },
+          select: { status: true, quantity: true },
         });
 
         const hasNotifiedReservation = existingReservation?.status === 'NOTIFIED';
@@ -444,6 +444,11 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
         }
 
         const requestedPresaleQuantity = getRequestedPresaleQuantity(items, product.id);
+        if (requestedPresaleQuantity > existingReservation.quantity) {
+          return res.status(400).json({
+            error: `${product.name}: Solo puedes comprar las ${existingReservation.quantity} unidad(es) reservadas`,
+          });
+        }
         if (product.presaleMaxQty && requestedPresaleQuantity > product.presaleMaxQty) {
           return res.status(400).json({ error: `Max quantity for presale is ${product.presaleMaxQty}` });
         }

@@ -6,12 +6,12 @@ import { CartPanel } from '../../components/store/CartPanel';
 import { Button } from '../../components/design-system/Button';
 import { Card } from '../../components/design-system/Card';
 import { useCartStore } from '../../lib/store';
-import { productsAPI } from '../../lib/api';
+import { presaleAPI, productsAPI } from '../../lib/api';
 
 interface StockIssue {
   cartItemId: string;
   name: string;
-  reason: 'not_found' | 'insufficient';
+  reason: 'not_found' | 'insufficient' | 'presale_reserved';
   available?: number;
 }
 
@@ -19,6 +19,34 @@ export default function CartPage() {
   const { items: cartItems, updateQuantity, removeItem } = useCartStore();
   const [stockIssues, setStockIssues] = useState<StockIssue[]>([]);
   const [stockChecked, setStockChecked] = useState(false);
+  const [presaleLimits, setPresaleLimits] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    presaleAPI.getMyReservations()
+      .then(({ reservations }) => {
+        const limits = Object.fromEntries(
+          reservations
+            .filter((reservation) => reservation.status === 'NOTIFIED')
+            .map((reservation) => [reservation.productId, reservation.quantity]),
+        );
+        setPresaleLimits(limits);
+        const overLimitIssues = cartItems
+          .filter((item) => item.isPresale && limits[item.productId] !== undefined && item.quantity > limits[item.productId])
+          .map((item) => ({
+            cartItemId: item.id,
+            name: item.name,
+            reason: 'presale_reserved' as const,
+            available: limits[item.productId],
+          }));
+        if (overLimitIssues.length > 0) {
+          setStockIssues((prev) => [
+            ...prev.filter((issue) => !overLimitIssues.some((next) => next.cartItemId === issue.cartItemId)),
+            ...overLimitIssues,
+          ]);
+        }
+      })
+      .catch(() => setPresaleLimits({}));
+  }, []);
 
   useEffect(() => {
     if (cartItems.length === 0) return;
@@ -72,6 +100,17 @@ export default function CartPage() {
   }, []);
 
   const handleUpdateQuantity = (id: string, quantity: number) => {
+    const item = cartItems.find((cartItem) => cartItem.id === id);
+    const presaleLimit = item ? presaleLimits[item.productId] : undefined;
+    if (item?.isPresale && presaleLimit !== undefined && quantity > presaleLimit) {
+      setStockIssues((prev) => [
+        ...prev.filter((issue) => issue.cartItemId !== id),
+        { cartItemId: id, name: item.name, reason: 'presale_reserved', available: presaleLimit },
+      ]);
+      return;
+    }
+
+    setStockIssues((prev) => prev.filter((issue) => issue.cartItemId !== id));
     updateQuantity(id, quantity);
   };
 
@@ -109,6 +148,8 @@ export default function CartPage() {
                           <span className="font-medium">{issue.name}</span>
                           {issue.reason === 'not_found'
                             ? ' — ya no está disponible.'
+                            : issue.reason === 'presale_reserved'
+                            ? ` — solo puedes pagar las ${issue.available} unidad(es) reservadas.`
                             : issue.available === 0
                             ? ' — sin stock disponible.'
                             : ` — solo ${issue.available} disponible${issue.available! > 1 ? 's' : ''} (tienes ${cartItems.find(i => i.id === issue.cartItemId)?.quantity}).`}
