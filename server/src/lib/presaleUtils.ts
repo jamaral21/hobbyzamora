@@ -7,6 +7,16 @@ type PresaleCandidate = {
 
 const DEFAULT_PRESALE_EXPIRATION_SECONDS = 86400;
 
+export function getRequestedPresaleQuantity(
+  items: Array<{ productId: string; quantity: number }>,
+  productId: string,
+) {
+  return items.reduce(
+    (total, item) => item.productId === productId ? total + item.quantity : total,
+    0,
+  );
+}
+
 export const PRESALE_EXPIRATION_SECONDS = Math.max(
   1,
   Number.parseInt(process.env.PRESALE_EXPIRATION_SECONDS ?? `${DEFAULT_PRESALE_EXPIRATION_SECONDS}`, 10)
