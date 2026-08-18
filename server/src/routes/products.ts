@@ -636,12 +636,12 @@ router.get('/', optionalAuth, async (req: AuthRequest, res) => {
             productId: { in: presaleIds },
             status: { in: ['PENDING', 'NOTIFIED', 'PAID'] },
           },
-          _count: { _all: true },
+          _sum: { quantity: true },
         })
       : [];
 
     const activeReservedByProduct = Object.fromEntries(
-      reservationGroups.map((row) => [row.productId, row._count._all])
+      reservationGroups.map((row) => [row.productId, row._sum.quantity ?? 0])
     ) as Record<string, number>;
 
     // Parse JSON fields

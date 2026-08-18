@@ -124,7 +124,7 @@ export default function ProductDetailPage() {
     setReserveLoading(true);
     setReserveError('');
     try {
-      const { reservation } = await presaleAPI.reserve(id);
+      const { reservation } = await presaleAPI.reserve(id, quantity);
       setMyReservation(reservation);
       setShowReserveDialog(false);
     } catch (error: any) {
@@ -222,6 +222,12 @@ export default function ProductDetailPage() {
   );
   const isPresaleBlocked = Boolean(user?.presaleBanned);
   const presaleExpiryLabel = product?.isPresale ? getPresaleExpiryLabel(product.presaleEndDate ?? null) : null;
+  const maxPresaleQuantity = product.isPresale
+    ? Math.max(1, Math.min(
+      product.presaleMaxQty || Number.MAX_SAFE_INTEGER,
+      product.presaleAvailQty || Number.MAX_SAFE_INTEGER,
+    ))
+    : product.stock;
 
   return (
     <StoreLayout>
@@ -375,8 +381,8 @@ export default function ProductDetailPage() {
               </div>
             )}
 
-            {/* Quantity — solo para productos normales */}
-            {!product.isPresale && (
+            {/* Quantity */}
+            {(!product.isPresale || product.presaleMaxQty) && (
               <div className="mb-6">
                 <label className="text-sm text-muted-foreground mb-2 block">
                   Cantidad
@@ -391,13 +397,19 @@ export default function ProductDetailPage() {
                   <input
                     type="number"
                     min="1"
-                    max={product.stock}
+                    max={maxPresaleQuantity}
                     value={quantity}
-                    onChange={(e) => setQuantity(parseInt(e.target.value) || 1)}
+                    onChange={(e) => setQuantity(Math.min(
+                      maxPresaleQuantity,
+                      parseInt(e.target.value) || 1,
+                    ))}
                     className="w-20 px-3 py-2 text-center rounded-lg border border-border bg-input-background text-foreground"
                   />
                   <button
-                    onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
+                    onClick={() => setQuantity(Math.min(
+                      maxPresaleQuantity,
+                      quantity + 1,
+                    ))}
                     className="w-10 h-10 rounded-lg border border-border hover:bg-secondary text-foreground transition-colors"
                   >
                     +

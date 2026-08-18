@@ -1047,6 +1047,7 @@ export interface PresaleReservation {
   id: string;
   userId: string;
   productId: string;
+  quantity: number;
   status: PresaleStatus;
   notifiedAt: string | null;
   expiresAt: string | null;
@@ -1071,6 +1072,7 @@ export interface AdminPresaleReservation {
   id: string;
   userId: string;
   productId: string;
+  quantity: number;
   status: PresaleStatus;
   notifiedAt: string | null;
   expiresAt: string | null;
@@ -1102,9 +1104,10 @@ export interface AdminPresaleReservation {
 
 export const presaleAPI = {
   /** Reserve a presale product (authenticated) */
-  reserve: (productId: string) =>
+  reserve: (productId: string, quantity: number) =>
     fetchAPI<{ reservation: PresaleReservation }>(`/presale/reserve/${productId}`, {
       method: 'POST',
+      body: JSON.stringify({ quantity }),
     }, 'customer'),
 
   /** Customer self-cancel is disabled; only admins can cancel a reservation */

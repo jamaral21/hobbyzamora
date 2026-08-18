@@ -368,6 +368,7 @@ model PresaleReservation {
   id        String   @id @default(uuid())
   userId    String
   productId String
+  quantity  Int      @default(1)
 
   // PENDING → arriving stock is notified → NOTIFIED → user pays → PAID
   // If admin cancels the reservation → CANCELLED
@@ -387,7 +388,7 @@ model PresaleReservation {
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  // 1 reservation per user per product
+  // 1 reservation record per user per product; quantity stores requested units
   @@unique([userId, productId])
   @@map("presale_reservations")
 }

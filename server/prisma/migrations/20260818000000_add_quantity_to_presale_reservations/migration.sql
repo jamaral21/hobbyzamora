@@ -1,0 +1,1 @@
+ALTER TABLE "presale_reservations" ADD COLUMN "quantity" INTEGER NOT NULL DEFAULT 1;
