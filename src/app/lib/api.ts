@@ -600,6 +600,8 @@ export const ordersAPI = {
     startDate?: string;
     endDate?: string;
     search?: string;
+    ean?: string;
+    sku?: string;
     productIds?: string[];
     page?: number;
     limit?: number | 'all';
@@ -610,6 +612,8 @@ export const ordersAPI = {
     if (params?.startDate) searchParams.set('startDate', params.startDate);
     if (params?.endDate) searchParams.set('endDate', params.endDate);
     if (params?.search) searchParams.set('search', params.search);
+    if (params?.ean) searchParams.set('ean', params.ean);
+    if (params?.sku) searchParams.set('sku', params.sku);
     if (params?.productIds?.length) searchParams.set('productIds', params.productIds.join(','));
     if (params?.page) searchParams.set('page', String(params.page));
     if (params?.limit !== undefined) searchParams.set('limit', String(params.limit));
