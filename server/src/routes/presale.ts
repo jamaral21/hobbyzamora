@@ -85,7 +85,7 @@ async function promotePendingReservationsFIFO(
 
 /**
  * POST /api/presale/reserve/:productId
- * Authenticated: reserve a presale product (1 per user per product).
+ * Authenticated: reserve or update the quantity of a presale product.
  */
 router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) => {
   try {
@@ -131,7 +131,7 @@ router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) =
       where: { userId_productId: { userId, productId } },
     });
 
-    if (existing && existing.status !== 'CANCELLED' && existing.status !== 'EXPIRED') {
+    if (existing && !['CANCELLED', 'EXPIRED', 'PENDING'].includes(existing.status)) {
       return res.status(400).json({ error: 'Ya tienes una reserva para este producto' });
     }
 
@@ -148,7 +148,7 @@ router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) =
       const unavailableReason = getPresaleUnavailableReason(
         product,
         new Date(),
-        (activeReservationTotal._sum.quantity ?? 0) + quantity,
+        (activeReservationTotal._sum.quantity ?? 0) - (existing?.status === 'PENDING' ? existing.quantity : 0) + quantity,
       );
       if (unavailableReason) {
         throw new Error(unavailableReason);
@@ -231,6 +231,7 @@ router.get('/my', authenticate, async (req: AuthRequest, res) => {
             status: true,
             isPresale: true,
             presaleEndDate: true,
+            presaleMaxQty: true,
           },
         },
       },

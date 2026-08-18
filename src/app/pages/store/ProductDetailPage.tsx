@@ -115,6 +115,7 @@ export default function ProductDetailPage() {
       .then(({ reservations }) => {
         const existing = reservations.find(r => r.product.id === id) ?? null;
         setMyReservation(existing);
+        if (existing?.status === 'PENDING') setQuantity(existing.quantity);
       })
       .catch(() => setMyReservation(null));
   }, [id, isAuthenticated, user?.id]);
@@ -223,10 +224,7 @@ export default function ProductDetailPage() {
   const isPresaleBlocked = Boolean(user?.presaleBanned);
   const presaleExpiryLabel = product?.isPresale ? getPresaleExpiryLabel(product.presaleEndDate ?? null) : null;
   const maxPresaleQuantity = product.isPresale
-    ? Math.max(1, Math.min(
-      product.presaleMaxQty || Number.MAX_SAFE_INTEGER,
-      product.presaleAvailQty || Number.MAX_SAFE_INTEGER,
-    ))
+    ? Math.max(1, product.presaleMaxQty || Number.MAX_SAFE_INTEGER)
     : product.stock;
 
   return (
@@ -434,10 +432,15 @@ export default function ProductDetailPage() {
                   <Button fullWidth size="lg" disabled>
                     Preventa Expirada
                   </Button>
-                ) : myReservation && (myReservation.status === 'PENDING' || myReservation.status === 'NOTIFIED') ? (
+                ) : myReservation?.status === 'NOTIFIED' ? (
                   <Button fullWidth size="lg" disabled variant="outline">
                     <Bookmark className="w-5 h-5" />
-                    {myReservation.status === 'PENDING' ? 'Ya reservado' : 'Pago pendiente'}
+                    Pago pendiente
+                  </Button>
+                ) : myReservation?.status === 'PENDING' && myReservation.quantity >= maxPresaleQuantity ? (
+                  <Button fullWidth size="lg" disabled variant="outline">
+                    <Bookmark className="w-5 h-5" />
+                    Máximo reservado ({myReservation.quantity})
                   </Button>
                 ) : isPresaleBlocked ? (
                   <Button fullWidth size="lg" disabled variant="outline">
@@ -454,7 +457,7 @@ export default function ProductDetailPage() {
                     onClick={isAuthenticated ? () => { setReserveError(''); setShowReserveDialog(true); } : () => setShowAuthModal(true)}
                   >
                     <Bookmark className="w-5 h-5" />
-                    Reservar
+                    {myReservation?.status === 'PENDING' ? 'Actualizar reserva' : 'Reservar'}
                   </Button>
                 )
               ) : (

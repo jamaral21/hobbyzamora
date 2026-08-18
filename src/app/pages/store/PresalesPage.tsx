@@ -160,10 +160,10 @@ function ConfirmReserveDialog({
           id="presale-quantity"
           type="number"
           min="1"
-          max={product.presaleMaxQty || product.presaleAvailQty || undefined}
+          max={product.presaleMaxQty || undefined}
           value={quantity}
           onChange={(event) => onQuantityChange(Math.max(1, Math.min(
-            product.presaleMaxQty || product.presaleAvailQty || Number.MAX_SAFE_INTEGER,
+            product.presaleMaxQty || Number.MAX_SAFE_INTEGER,
             Number.parseInt(event.target.value, 10) || 1,
           )))}
           className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-white mb-5"
@@ -193,6 +193,7 @@ function ConfirmReserveDialog({
 
 function AvailablePresales({
   reservedProductIds,
+  reservationQuantities,
   onReserved,
   isAuthenticated,
   isBanned,
@@ -200,6 +201,7 @@ function AvailablePresales({
   onCategoryOptionsChange,
 }: {
   reservedProductIds: Set<string>;
+  reservationQuantities: Map<string, number>;
   onReserved: (reservation: PresaleReservation) => void;
   isAuthenticated: boolean;
   isBanned?: boolean;
@@ -245,7 +247,7 @@ function AvailablePresales({
     }
 
     setErrors((prev) => ({ ...prev, [product.id]: '' }));
-    setPendingQuantity(1);
+    setPendingQuantity(reservationQuantities.get(product.id) ?? 1);
     setPendingProduct(product);
   };
 
@@ -271,7 +273,7 @@ function AvailablePresales({
 
   const available = products.filter(
     (product) =>
-      !reservedProductIds.has(product.id) &&
+      (!reservedProductIds.has(product.id) || (reservationQuantities.get(product.id) ?? 0) < (product.presaleMaxQty ?? Number.MAX_SAFE_INTEGER)) &&
       (product.presaleAvailQty == null || product.presaleAvailQty > 0) &&
       (!product.presaleEndDate || new Date(product.presaleEndDate) > new Date())
   );
@@ -447,7 +449,10 @@ function PresalesContent() {
   }, [loadReservations]);
 
   const handleReserved = useCallback((newReservation: PresaleReservation) => {
-    setReservations((prev) => [newReservation, ...prev]);
+    setReservations((prev) => [
+      newReservation,
+      ...prev.filter((reservation) => reservation.id !== newReservation.id),
+    ]);
     setActiveTab('reservas');
   }, []);
 
@@ -455,6 +460,11 @@ function PresalesContent() {
     reservations
       .filter((reservation) => ['PENDING', 'NOTIFIED', 'PAID'].includes(reservation.status))
       .map((reservation) => reservation.productId)
+  );
+  const reservationQuantities = new Map(
+    reservations
+      .filter((reservation) => ['PENDING', 'NOTIFIED', 'PAID'].includes(reservation.status))
+      .map((reservation) => [reservation.productId, reservation.quantity]),
   );
 
   const kpis = useMemo(() => {
@@ -620,6 +630,7 @@ function PresalesContent() {
       ) : (
         <AvailablePresales
           reservedProductIds={reservedProductIds}
+          reservationQuantities={reservationQuantities}
           onReserved={handleReserved}
           isAuthenticated={true}
           isBanned={!!user?.presaleBanned}

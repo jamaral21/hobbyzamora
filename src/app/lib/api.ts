@@ -1065,6 +1065,7 @@ export interface PresaleReservation {
     status: string;
     isPresale: boolean;
     presaleEndDate: string | null;
+    presaleMaxQty: number | null;
   };
 }
 
