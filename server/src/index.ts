@@ -121,7 +121,7 @@ async function expirePresaleReservations() {
         status: 'NOTIFIED',
         expiresAt: { lte: now },
       },
-      select: { id: true, productId: true },
+      select: { id: true, productId: true, quantity: true },
     });
 
     if (expired.length === 0) return;
@@ -144,7 +144,7 @@ async function expirePresaleReservations() {
 
       // Restore sellable stock per product (group by productId)
       const countByProduct = expired.reduce<Record<string, number>>((acc, r) => {
-        acc[r.productId] = (acc[r.productId] ?? 0) + 1;
+        acc[r.productId] = (acc[r.productId] ?? 0) + r.quantity;
         return acc;
       }, {});
 
@@ -159,24 +159,30 @@ async function expirePresaleReservations() {
           const pendingToNotify = await tx.presaleReservation.findMany({
             where: { productId, status: 'PENDING' },
             orderBy: { createdAt: 'asc' },
-            take: count,
             include: {
               user: { select: { name: true, email: true } },
               product: { select: { name: true } },
             },
           });
 
-          if (pendingToNotify.length > 0) {
+          let slots = 0;
+          const reservationsToNotify = pendingToNotify.filter((reservation) => {
+            if (slots >= count) return false;
+            slots += reservation.quantity;
+            return true;
+          });
+
+          if (reservationsToNotify.length > 0) {
             await tx.presaleReservation.updateMany({
               where: {
-                id: { in: pendingToNotify.map((r) => r.id) },
+                id: { in: reservationsToNotify.map((r) => r.id) },
                 status: 'PENDING',
               },
               data: { status: 'NOTIFIED', notifiedAt: reassignNow, expiresAt: reassignExpiresAt },
             });
 
-            promotedCount = pendingToNotify.length;
-            promotedForEmail = [...promotedForEmail, ...pendingToNotify];
+            promotedCount = reservationsToNotify.reduce((total, reservation) => total + reservation.quantity, 0);
+            promotedForEmail = [...promotedForEmail, ...reservationsToNotify];
           }
         }
 

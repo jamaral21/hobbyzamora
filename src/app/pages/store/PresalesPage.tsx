@@ -97,11 +97,15 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; Icon: any }>
 
 function ConfirmReserveDialog({
   product,
+  quantity,
+  onQuantityChange,
   onConfirm,
   onCancel,
   loading,
 }: {
   product: Product;
+  quantity: number;
+  onQuantityChange: (quantity: number) => void;
   onConfirm: () => void;
   onCancel: () => void;
   loading: boolean;
@@ -149,6 +153,22 @@ function ConfirmReserveDialog({
           Se te notificará por correo cuando el producto llegue y tendrás un plazo limitado para completar el pago.
         </p>
 
+        <label className="block text-zinc-300 text-sm font-semibold mb-2" htmlFor="presale-quantity">
+          Cantidad
+        </label>
+        <input
+          id="presale-quantity"
+          type="number"
+          min="1"
+          max={product.presaleMaxQty || product.presaleAvailQty || undefined}
+          value={quantity}
+          onChange={(event) => onQuantityChange(Math.max(1, Math.min(
+            product.presaleMaxQty || product.presaleAvailQty || Number.MAX_SAFE_INTEGER,
+            Number.parseInt(event.target.value, 10) || 1,
+          )))}
+          className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-white mb-5"
+        />
+
         <div className="flex gap-3">
           <button
             onClick={onCancel}
@@ -194,6 +214,7 @@ function AvailablePresales({
   const [loading, setLoading] = useState(true);
   const [reserving, setReserving] = useState(false);
   const [pendingProduct, setPendingProduct] = useState<Product | null>(null);
+  const [pendingQuantity, setPendingQuantity] = useState(1);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const loadProducts = useCallback(() => {
@@ -224,6 +245,7 @@ function AvailablePresales({
     }
 
     setErrors((prev) => ({ ...prev, [product.id]: '' }));
+    setPendingQuantity(1);
     setPendingProduct(product);
   };
 
@@ -232,7 +254,7 @@ function AvailablePresales({
 
     setReserving(true);
     try {
-      const data = await presaleAPI.reserve(pendingProduct.id);
+      const data = await presaleAPI.reserve(pendingProduct.id, pendingQuantity);
       setPendingProduct(null);
       onReserved(data.reservation);
       loadProducts();
@@ -294,6 +316,8 @@ function AvailablePresales({
       {pendingProduct && (
         <ConfirmReserveDialog
           product={pendingProduct}
+          quantity={pendingQuantity}
+          onQuantityChange={setPendingQuantity}
           onConfirm={handleConfirm}
           onCancel={() => setPendingProduct(null)}
           loading={reserving}

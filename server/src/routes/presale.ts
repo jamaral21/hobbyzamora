@@ -31,6 +31,7 @@ type ReservationWithUserAndProduct = {
   id: string;
   userId: string;
   productId: string;
+  quantity: number;
   status: string;
   notifiedAt: Date | null;
   expiresAt: Date | null;
@@ -53,24 +54,31 @@ async function promotePendingReservationsFIFO(
   const pendingToNotify = await tx.presaleReservation.findMany({
     where: { productId, status: 'PENDING' },
     orderBy: { createdAt: 'asc' },
-    take: slots,
     include: {
       user: { select: { id: true, name: true, email: true } },
       product: { select: { id: true, name: true } },
     },
   }) as ReservationWithUserAndProduct[];
 
-  if (pendingToNotify.length === 0) return [];
+  const reservationsToNotify: ReservationWithUserAndProduct[] = [];
+  let reservedSlots = 0;
+  for (const reservation of pendingToNotify) {
+    if (reservedSlots >= slots) break;
+    reservationsToNotify.push(reservation);
+    reservedSlots += reservation.quantity;
+  }
+
+  if (reservationsToNotify.length === 0) return [];
 
   await tx.presaleReservation.updateMany({
     where: {
-      id: { in: pendingToNotify.map((r) => r.id) },
+      id: { in: reservationsToNotify.map((r) => r.id) },
       status: 'PENDING',
     },
     data: { status: 'NOTIFIED', notifiedAt: now, expiresAt },
   });
 
-  return pendingToNotify;
+  return reservationsToNotify;
 }
 
 // ─── Customer routes ──────────────────────────────────────────────────────────
@@ -83,6 +91,11 @@ router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) =
   try {
     const productId = req.params.productId as string;
     const userId = req.user!.id;
+    const quantity = Number.parseInt(String(req.body?.quantity ?? 1), 10);
+
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      return res.status(400).json({ error: 'La cantidad debe ser un entero mayor a 0' });
+    }
 
     const [product, user] = await Promise.all([
       prisma.product.findUnique({ where: { id: productId } }),
@@ -109,6 +122,10 @@ router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) =
       return res.status(400).json({ error: unavailableReason });
     }
 
+    if (product.presaleMaxQty && quantity > product.presaleMaxQty) {
+      return res.status(400).json({ error: `La cantidad máxima por cliente es ${product.presaleMaxQty}` });
+    }
+
     // Check if user already has a reservation for this product
     const existing = await prisma.presaleReservation.findUnique({
       where: { userId_productId: { userId, productId } },
@@ -120,14 +137,19 @@ router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) =
 
     // Create reservation & decrement available qty atomically
     const reservation = await prisma.$transaction(async (tx) => {
-      const activeReservationCount = await tx.presaleReservation.count({
+      const activeReservationTotal = await tx.presaleReservation.aggregate({
         where: {
           productId,
           status: { in: ['PENDING', 'NOTIFIED', 'PAID'] },
         },
+        _sum: { quantity: true },
       });
 
-      const unavailableReason = getPresaleUnavailableReason(product, new Date(), activeReservationCount);
+      const unavailableReason = getPresaleUnavailableReason(
+        product,
+        new Date(),
+        (activeReservationTotal._sum.quantity ?? 0) + quantity,
+      );
       if (unavailableReason) {
         throw new Error(unavailableReason);
       }
@@ -137,6 +159,7 @@ router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) =
             where: { id: existing.id },
             data: {
               status: 'PENDING',
+              quantity,
               notifiedAt: null,
               expiresAt: null,
               paidAt: null,
@@ -147,7 +170,7 @@ router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) =
             include: { product: { select: { id: true, name: true, price: true, images: true } } },
           })
         : await tx.presaleReservation.create({
-            data: { userId, productId, status: 'PENDING' },
+            data: { userId, productId, quantity, status: 'PENDING' },
             include: { product: { select: { id: true, name: true, price: true, images: true } } },
           });
     });
@@ -399,9 +422,11 @@ router.post(
         ? `${PRESALE_EXPIRATION_SECONDS / 3600}h`
         : `${PRESALE_EXPIRATION_SECONDS} segundos`;
 
-      const pendingCount = await prisma.presaleReservation.count({
+      const pendingTotal = await prisma.presaleReservation.aggregate({
         where: { productId, status: 'PENDING' },
+        _sum: { quantity: true },
       });
+      const pendingCount = pendingTotal._sum.quantity ?? 0;
 
       if (pendingCount === 0) {
         return res.json({
@@ -482,17 +507,18 @@ router.patch(
         return res.status(400).json({ error: 'Este producto no está en preventa' });
       }
 
-      const paidReservationsCount = await prisma.presaleReservation.count({
+      const paidReservationsTotal = await prisma.presaleReservation.aggregate({
         where: {
           productId,
           status: 'PAID',
         },
+        _sum: { quantity: true },
       });
 
       const configuredPresaleQty = Number(product.presaleAvailQty ?? 0);
       const sellableStock = Math.max(
         Number(product.stock ?? 0),
-        configuredPresaleQty - paidReservationsCount,
+        configuredPresaleQty - (paidReservationsTotal._sum.quantity ?? 0),
         0,
       );
 
@@ -558,7 +584,7 @@ router.post(
           expiresAt: { lt: now },
         },
         include: { product: true, user: { select: { name: true, email: true } } },
-      }) as Array<{ id: string; productId: string; product: any; user: { name: string; email: string } }>;
+      }) as Array<{ id: string; productId: string; quantity: number; product: any; user: { name: string; email: string } }>;
 
       if (expired.length === 0) {
         return res.json({ message: 'No hay reservas expiradas', released: 0 });
@@ -567,7 +593,7 @@ router.post(
       // Group by product to do stock increments efficiently
       const byProduct: Record<string, number> = {};
       for (const r of expired) {
-        byProduct[r.productId] = (byProduct[r.productId] || 0) + 1;
+        byProduct[r.productId] = (byProduct[r.productId] || 0) + r.quantity;
       }
 
       const expiredIds = expired.map((r) => r.id);
@@ -589,7 +615,7 @@ router.post(
           let promotedCount = 0;
           if (product?.isPresale && product.status === 'ACTIVE') {
             const promoted = await promotePendingReservationsFIFO(tx, pid, count, reassignNow, reassignExpiresAt);
-            promotedCount = promoted.length;
+            promotedCount = promoted.reduce((total, reservation) => total + reservation.quantity, 0);
             promotedReservations = [...promotedReservations, ...promoted];
           }
 
