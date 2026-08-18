@@ -63,6 +63,8 @@ router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) =>
       endDate,
       productIds,
       search,
+      ean,
+      sku,
       page = '1', 
       limit = '50' 
     } = req.query;
@@ -104,6 +106,32 @@ router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) =>
         { customerName: { contains: search as string } },
         { customerEmail: { contains: search as string } },
       ];
+    }
+
+    const normalizedEan = typeof ean === 'string' ? ean.trim() : '';
+    const normalizedSku = typeof sku === 'string' ? sku.trim() : '';
+    if (normalizedEan || normalizedSku) {
+      const itemConditions: any[] = [];
+
+      if (normalizedEan) {
+        itemConditions.push({
+          OR: [
+            { sku: { contains: normalizedEan } },
+            { product: { ean: { contains: normalizedEan } } },
+          ],
+        });
+      }
+
+      if (normalizedSku) {
+        itemConditions.push({ sku: { contains: normalizedSku } });
+      }
+
+      baseWhere.items = {
+        some: {
+          ...(filteredProductIds.length > 0 ? { productId: { in: filteredProductIds } } : {}),
+          AND: itemConditions,
+        },
+      };
     }
 
     const where: any = {

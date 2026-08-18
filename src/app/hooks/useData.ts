@@ -94,6 +94,8 @@ export function useOrders(
     startDate?: string;
     endDate?: string;
     search?: string;
+    ean?: string;
+    sku?: string;
     productIds?: string[];
     page?: number;
     limit?: number;
@@ -102,7 +104,7 @@ export function useOrders(
 ) {
   return useFetch(
     () => ordersAPI.getAll(params),
-    [params?.status, params?.source, params?.startDate, params?.endDate, params?.search, params?.productIds?.join(','), params?.page, params?.limit],
+    [params?.status, params?.source, params?.startDate, params?.endDate, params?.search, params?.ean, params?.sku, params?.productIds?.join(','), params?.page, params?.limit],
     options
   );
 }

@@ -104,6 +104,9 @@ export default function OrdersPage() {
       source: sourceFilter !== 'all' ? sourceFilter.toUpperCase() : undefined,
       startDate: dateFrom || undefined,
       endDate: dateTo || undefined,
+      search: searchQuery.trim() || undefined,
+      ean: eanFilter.trim() || undefined,
+      sku: skuFilter.trim() || undefined,
       page,
       limit: PAGE_SIZE,
     },
@@ -118,35 +121,7 @@ export default function OrdersPage() {
       ? order.items.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0)
       : 0;
 
-  const filteredOrders = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-
-    return orders.filter((order: any) => {
-      const matchesText =
-        q === '' ||
-        String(order.orderNumber || '').toLowerCase().includes(q) ||
-        String(order.customerName || '').toLowerCase().includes(q) ||
-        String(order.customerEmail || '').toLowerCase().includes(q);
-
-      const matchesEan =
-        eanFilter === '' ||
-        (Array.isArray(order.items) &&
-          order.items.some((item: any) =>
-            (item.barcode || item.ean || item.product?.barcode || '')
-              .toLowerCase()
-              .includes(eanFilter.toLowerCase())
-          ));
-      const matchesSku =
-        skuFilter === '' ||
-        (Array.isArray(order.items) &&
-          order.items.some((item: any) =>
-            (item.sku || item.product?.sku || '')
-              .toLowerCase()
-              .includes(skuFilter.toLowerCase())
-          ));
-      return matchesText && matchesEan && matchesSku;
-    });
-  }, [orders, searchQuery, eanFilter, skuFilter]);
+  const filteredOrders = orders;
 
   const statusCounts = useMemo(() => {
     const counts = ordersData?.statusCounts ?? {};
@@ -217,7 +192,10 @@ export default function OrdersPage() {
               type="text"
               placeholder="Buscar pedidos..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                resetPage();
+              }}
               className="w-full pl-10 pr-4 py-2 rounded-lg border border-border bg-input-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
