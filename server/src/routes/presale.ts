@@ -11,6 +11,7 @@ import {
   getPresalePaymentExpiry,
   getPresaleUnavailableReason,
   PRESALE_EXPIRATION_SECONDS,
+  sumPresaleReservationQuantities,
 } from '../lib/presaleUtils.js';
 
 const router = Router();
@@ -371,15 +372,14 @@ router.get('/admin/product-reservation-counts', authenticate, requireRole('ADMIN
       where: {
         status: { in: ['PENDING', 'NOTIFIED', 'PAID'] },
       },
-      _count: {
-        _all: true,
+      _sum: {
+        quantity: true,
       },
     });
 
-    const countsByProduct = grouped.reduce<Record<string, number>>((acc, row) => {
-      acc[row.productId] = row._count._all;
-      return acc;
-    }, {});
+    const countsByProduct = sumPresaleReservationQuantities(
+      grouped.map((row) => ({ productId: row.productId, quantity: row._sum.quantity })),
+    );
 
     return res.json({ countsByProduct });
   } catch (error) {
