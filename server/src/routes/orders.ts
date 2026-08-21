@@ -9,6 +9,7 @@ import {
   sendReviewRequestEmail,
 } from '../lib/emailService.js';
 import { getPresaleUnavailableReason, getRequestedPresaleQuantity } from '../lib/presaleUtils.js';
+import { getChileDayRange } from '../lib/chileDate.js';
 
 const router = Router();
 
@@ -83,11 +84,11 @@ router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) =>
 
     if (startDate || endDate) {
       baseWhere.createdAt = {};
-      if (startDate) baseWhere.createdAt.gte = new Date(startDate as string);
-      if (endDate) {
-        const endDateExclusive = new Date(endDate as string);
-        endDateExclusive.setDate(endDateExclusive.getDate() + 1);
-        baseWhere.createdAt.lt = endDateExclusive;
+      try {
+        if (typeof startDate === 'string') baseWhere.createdAt.gte = getChileDayRange(startDate).start;
+        if (typeof endDate === 'string') baseWhere.createdAt.lt = getChileDayRange(endDate).endExclusive;
+      } catch {
+        return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
       }
     }
 
