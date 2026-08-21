@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { Link } from 'react-router';
-import { ArrowLeft, Package, CreditCard, Truck, Loader2, AlertCircle, ShieldAlert, MapPin, PackageSearch, Star, Copy, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Package, CreditCard, Truck, Loader2, AlertCircle, ShieldAlert, MapPin, PackageSearch, Star, Copy, CheckCircle, Printer } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { Button } from '../../components/design-system/Button';
 import { Badge } from '../../components/design-system/Badge';
@@ -11,6 +11,7 @@ import { Modal } from '../../components/design-system/Modal';
 import { useOrder, useUpdateOrderStatus } from '../../hooks/useData';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
 import { ordersAPI } from '../../lib/api';
+import { openShippingLabelPrintPreview } from '../../lib/shippingLabelPrint';
 
 const STATUS_OPTIONS = ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'] as const;
 
@@ -116,9 +117,14 @@ export default function OrderDetailPage() {
               {new Date(order.createdAt).toLocaleString()} &middot; {order.source}
             </p>
           </div>
-          <Badge variant={STATUS_BADGE_VARIANT[order.status] || 'default'} size="md">
-            {order.status.toLowerCase()}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" disabled={!order.shippingStreet} onClick={() => openShippingLabelPrintPreview(order)}>
+              <Printer className="w-4 h-4" /> Etiqueta
+            </Button>
+            <Badge variant={STATUS_BADGE_VARIANT[order.status] || 'default'} size="md">
+              {order.status.toLowerCase()}
+            </Badge>
+          </div>
         </div>
       </div>
 
