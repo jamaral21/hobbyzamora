@@ -1,12 +1,13 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { Search, Filter, Download, Eye, Loader2, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Filter, Download, Eye, Loader2, X, ChevronLeft, ChevronRight, Printer } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { Button } from '../../components/design-system/Button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/design-system/Table';
 import { Badge } from '../../components/design-system/Badge';
 import { useOrders } from '../../hooks/useData';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
+import { openShippingLabelPrintPreview } from '../../lib/shippingLabelPrint';
 
 function getPaymentLabel(method?: string): string {
   switch ((method || '').toUpperCase()) {
@@ -389,6 +390,16 @@ export default function OrdersPage() {
               </TableCell>
               <TableCell>
                 <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    title="Imprimir etiqueta de envío"
+                    aria-label="Imprimir etiqueta de envío"
+                    disabled={!order.shippingStreet}
+                    onClick={() => openShippingLabelPrintPreview(order)}
+                  >
+                    <Printer className="w-4 h-4" />
+                  </Button>
                   <Button variant="ghost" size="sm" onClick={() => navigate(`/admin/orders/${order.id}`)}>
                     <Eye className="w-4 h-4" />
                   </Button>
