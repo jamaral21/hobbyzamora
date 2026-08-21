@@ -144,16 +144,6 @@ export default function OrdersPage() {
     };
   }, [ordersData]);
 
-  if (isLoading) {
-    return (
-      <AdminLayout>
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        </div>
-      </AdminLayout>
-    );
-  }
-
   return (
     <AdminLayout>
       <div className="mb-8">
@@ -352,7 +342,21 @@ export default function OrdersPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {filteredOrders.map((order: any) => (
+          {isLoading && filteredOrders.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={9}>
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                </div>
+              </TableCell>
+            </TableRow>
+          ) : filteredOrders.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={9}>
+                <p className="py-12 text-center text-muted-foreground">No se encontraron pedidos.</p>
+              </TableCell>
+            </TableRow>
+          ) : filteredOrders.map((order: any) => (
             <TableRow key={order.id}>
               <TableCell>
                 <p className="text-sm text-foreground">{order.orderNumber}</p>

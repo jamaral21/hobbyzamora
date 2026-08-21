@@ -41,31 +41,31 @@ export default function ProductsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 1 });
-  const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [sectionCategories, setSectionCategories] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
+  const hasLoadedProductsRef = useRef(false);
 
   const createProduct = useMutation(productsAPI.create);
   const updateProduct = useMutation(productsAPI.update);
 
+  const productQuery = useMemo(() => ({
+    status: statusFilter === 'ALL' ? 'ALL' : statusFilter,
+    category: categoryFilter === 'ALL' ? undefined : categoryFilter,
+    search: debouncedSearchTerm.trim() || undefined,
+    presale: isPresalesView,
+    featured: featuredFilter === 'ALL' ? undefined : featuredFilter === 'FEATURED',
+    page: currentPage,
+    limit: 50,
+  }), [statusFilter, categoryFilter, debouncedSearchTerm, isPresalesView, featuredFilter, currentPage]);
+
   const loadProducts = useCallback(async () => {
     if (!isAuthenticated) return;
 
-    setIsLoading(true);
+    setIsLoading(!hasLoadedProductsRef.current);
     try {
-      const response = await productsAPI.getAll(
-        {
-          status: statusFilter === 'ALL' ? 'ALL' : statusFilter,
-          category: categoryFilter === 'ALL' ? undefined : categoryFilter,
-          search: searchTerm.trim() || undefined,
-          presale: isPresalesView ? true : false,
-          featured: featuredFilter === 'ALL' ? undefined : featuredFilter === 'FEATURED',
-          page: currentPage,
-          limit: 50,
-        },
-        'admin'
-      );
+      const response = await productsAPI.getAll(productQuery, 'admin');
       setProducts(response.products || []);
       setPagination({
         page: Number(response.pagination?.page || currentPage),
@@ -73,19 +73,25 @@ export default function ProductsPage() {
         total: Number(response.pagination?.total || 0),
         totalPages: Math.max(1, Number(response.pagination?.totalPages || 1)),
       });
+      hasLoadedProductsRef.current = true;
     } catch {
       setProducts([]);
       setPagination({ page: 1, limit: 50, total: 0, totalPages: 1 });
     } finally {
       setIsLoading(false);
     }
-  }, [isAuthenticated, statusFilter, categoryFilter, featuredFilter, searchTerm, isPresalesView, currentPage]);
+  }, [isAuthenticated, productQuery]);
 
   useEffect(() => {
-    const timeout = setTimeout(() => {
+    const timeout = window.setTimeout(() => setDebouncedSearchTerm(searchQuery), 400);
+    return () => clearTimeout(timeout);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
       void loadProducts();
     }, 250);
-    return () => clearTimeout(timeout);
+    return () => window.clearTimeout(timeout);
   }, [loadProducts]);
 
   useEffect(() => {
@@ -94,7 +100,7 @@ export default function ProductsPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm]);
+  }, [searchQuery]);
 
   useEffect(() => {
     let cancelled = false;
@@ -127,7 +133,7 @@ export default function ProductsPage() {
 
   const categoryOptions = useMemo(() => ['ALL', ...sectionCategories], [sectionCategories]);
 
-  const filteredProducts = products || [];
+  const filteredProducts = useMemo(() => products || [], [products]);
 
   const handleDeactivate = async (id: string) => {
     if (confirm('¿Estás seguro de que quieres desactivar este producto?')) {
@@ -327,16 +333,6 @@ export default function ProductsPage() {
       setIsImportingDriveImages(false);
     }
   };
-
-  if (isLoading) {
-    return (
-      <AdminLayout>
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        </div>
-      </AdminLayout>
-    );
-  }
 
   return (
     <AdminLayout>
@@ -544,7 +540,21 @@ export default function ProductsPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {filteredProducts.map((product) => (
+          {isLoading && filteredProducts.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={isPresalesView ? 10 : 9}>
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                </div>
+              </TableCell>
+            </TableRow>
+          ) : filteredProducts.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={isPresalesView ? 10 : 9}>
+                <p className="py-12 text-center text-muted-foreground">No se encontraron productos.</p>
+              </TableCell>
+            </TableRow>
+          ) : filteredProducts.map((product) => (
             <TableRow key={product.id}>
               <TableCell>
                 <div className="flex items-center gap-3">

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Search, User, Loader2 } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { Button } from '../../components/design-system/Button';
@@ -16,11 +16,12 @@ export default function CustomersPage() {
   const [search, setSearch] = useState('');
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 1 });
   const [summary, setSummary] = useState<CustomersSummary>({ totalSpent: 0, totalOrders: 0 });
+  const searchParam = useMemo(() => search.trim() || undefined, [search]);
 
-  const fetchCustomers = async (page = 1) => {
+  const fetchCustomers = async (page = 1, query = searchParam) => {
     setLoading(true);
     try {
-      const res = await customersAPI.getAll({ search: search || undefined, page, limit: 50 });
+      const res = await customersAPI.getAll({ search: query, page, limit: 50 });
       setCustomers(res.customers);
       setPagination(res.pagination);
       setSummary(res.summary);
@@ -37,9 +38,9 @@ export default function CustomersPage() {
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    const timeout = setTimeout(() => fetchCustomers(), 300);
+    const timeout = setTimeout(() => fetchCustomers(1, searchParam), 300);
     return () => clearTimeout(timeout);
-  }, [search, isAuthenticated]);
+  }, [searchParam, isAuthenticated]);
 
   const totalSpentAll = summary.totalSpent;
   const avgSpent = pagination.total > 0 ? totalSpentAll / pagination.total : 0;
@@ -156,7 +157,7 @@ export default function CustomersPage() {
                 key={p}
                 variant={p === pagination.page ? 'primary' : 'outline'}
                 size="sm"
-                onClick={() => fetchCustomers(p)}
+                onClick={() => fetchCustomers(p, searchParam)}
               >
                 {p}
               </Button>

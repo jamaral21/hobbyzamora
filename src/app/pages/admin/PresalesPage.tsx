@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Link } from 'react-router';
 import { formatChileDate, formatChileDateTime } from '../../lib/chileDate';
 import {
@@ -205,6 +205,7 @@ export function PresalesPage() {
   const [activeReservationCountsByProduct, setActiveReservationCountsByProduct] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const searchParam = useMemo(() => search.trim() || undefined, [search]);
   const [statusFilter, setStatusFilter] = useState('');
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [releasingExpired, setReleasingExpired] = useState(false);
@@ -374,7 +375,7 @@ export function PresalesPage() {
     try {
       const data = await presaleAPI.adminList({
         status: statusFilter || undefined,
-        search: search.trim() || undefined,
+        search: searchParam,
         page,
         limit: 30,
       });
@@ -385,7 +386,7 @@ export function PresalesPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, search]);
+  }, [statusFilter, searchParam]);
 
   const loadProducts = useCallback(async () => {
     try {

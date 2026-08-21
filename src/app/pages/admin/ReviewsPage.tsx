@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Star, CheckCircle, XCircle, Image, Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { Card } from '../../components/design-system/Card';
@@ -15,11 +15,12 @@ export default function ReviewsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 1 });
   const [counts, setCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
+  const searchParam = useMemo(() => search.trim() || undefined, [search]);
 
-  const loadReviews = async (page = 1) => {
+  const loadReviews = async (page = 1, query = searchParam) => {
     setIsLoading(true);
     try {
-      const data = await reviewsAPI.adminList({ status: filter, search: search.trim() || undefined, page, limit: 20 });
+      const data = await reviewsAPI.adminList({ status: filter, search: query, page, limit: 20 });
       setReviews(data.reviews);
       setPagination(data.pagination);
       setCounts({
@@ -33,18 +34,18 @@ export default function ReviewsPage() {
   };
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => { void loadReviews(1); }, 400);
+    const timeout = window.setTimeout(() => { void loadReviews(1, searchParam); }, 400);
     return () => window.clearTimeout(timeout);
-  }, [filter, search]);
+  }, [filter, searchParam]);
 
   const handleApprove = async (id: string) => {
     await reviewsAPI.updateStatus(id, 'APPROVED');
-    await loadReviews(pagination.page);
+    await loadReviews(pagination.page, searchParam);
   };
 
   const handleReject = async (id: string) => {
     await reviewsAPI.updateStatus(id, 'REJECTED');
-    await loadReviews(pagination.page);
+    await loadReviews(pagination.page, searchParam);
   };
 
   return (

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Loader2, Plus, Search, Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { Button } from '../../components/design-system/Button';
@@ -44,12 +44,13 @@ export default function AdminUsersPage() {
   const [form, setForm] = useState<FormState>(defaultForm);
   const [search, setSearch] = useState('');
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 1 });
+  const searchParam = useMemo(() => search.trim() || undefined, [search]);
 
-  const loadUsers = async (page = 1) => {
+  const loadUsers = async (page = 1, query = searchParam) => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await adminUsersAPI.getAll({ search: search.trim() || undefined, page, limit: 50 });
+      const response = await adminUsersAPI.getAll({ search: query, page, limit: 50 });
       setUsers(response.users || []);
       setPagination(response.pagination);
     } catch (err: any) {
@@ -61,9 +62,9 @@ export default function AdminUsersPage() {
   };
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => { void loadUsers(1); }, 400);
+    const timeout = window.setTimeout(() => { void loadUsers(1, searchParam); }, 400);
     return () => window.clearTimeout(timeout);
-  }, [search]);
+  }, [searchParam]);
 
   const openCreate = () => {
     setEditingUser(null);
@@ -118,7 +119,7 @@ export default function AdminUsersPage() {
       setIsModalOpen(false);
       setEditingUser(null);
       setForm(defaultForm);
-      await loadUsers(pagination.page);
+      await loadUsers(pagination.page, searchParam);
     } catch (err: any) {
       setError(err?.message || 'No se pudo guardar el usuario');
     } finally {
