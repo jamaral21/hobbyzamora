@@ -3,6 +3,9 @@ import { prisma } from '../index.js';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
 
 const router = Router();
+const validSalesWhere = {
+  status: { notIn: ['PENDING', 'CANCELLED'] },
+};
 
 // Get all customers
 router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) => {
@@ -23,7 +26,7 @@ router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) =>
 
     const skip = (parseInt(page as string) - 1) * parseInt(limit as string);
 
-    const [users, total] = await Promise.all([
+    const [users, total, summary] = await Promise.all([
       prisma.user.findMany({
         where,
         select: {
@@ -33,9 +36,10 @@ router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) =>
           phone: true,
           createdAt: true,
           _count: {
-            select: { orders: true },
+            select: { orders: { where: validSalesWhere } },
           },
           orders: {
+            where: validSalesWhere,
             select: { total: true },
           },
         },
@@ -44,6 +48,14 @@ router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) =>
         orderBy: { createdAt: 'desc' },
       }),
       prisma.user.count({ where }),
+      prisma.order.aggregate({
+        where: {
+          ...validSalesWhere,
+          user: { role: 'CUSTOMER' },
+        },
+        _sum: { total: true },
+        _count: { id: true },
+      }),
     ]);
 
     const customers = users.map(u => ({
@@ -58,6 +70,10 @@ router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) =>
 
     res.json({
       customers,
+      summary: {
+        totalSpent: Number(summary._sum.total ?? 0),
+        totalOrders: summary._count.id,
+      },
       pagination: {
         page: parseInt(page as string),
         limit: parseInt(limit as string),
@@ -97,7 +113,19 @@ router.get('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res)
       return res.status(404).json({ error: 'Customer not found' });
     }
 
-    const totalSpent = user.orders.reduce((sum, o) => sum + parseFloat(o.total.toString()), 0);
+    const [salesSummary, recentOrders] = await Promise.all([
+      prisma.order.aggregate({
+        where: { userId: user.id, ...validSalesWhere },
+        _sum: { total: true },
+        _count: { id: true },
+      }),
+      prisma.order.findMany({
+        where: { userId: user.id },
+        include: { items: true },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
+    ]);
 
     res.json({
       id: user.id,
@@ -106,9 +134,9 @@ router.get('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res)
       phone: user.phone,
       joinDate: user.createdAt,
       addresses: user.addresses,
-      totalOrders: user.orders.length,
-      totalSpent,
-      recentOrders: user.orders.map(o => ({
+      totalOrders: salesSummary._count.id,
+      totalSpent: Number(salesSummary._sum.total ?? 0),
+      recentOrders: recentOrders.map(o => ({
         ...o,
         subtotal: parseFloat(o.subtotal.toString()),
         tax: parseFloat(o.tax.toString()),
@@ -163,9 +191,10 @@ router.get('/stats/top', authenticate, requireRole('ADMIN', 'STAFF'), async (req
         name: true,
         email: true,
         orders: {
+          where: validSalesWhere,
           select: { total: true },
         },
-        _count: { select: { orders: true } },
+        _count: { select: { orders: { where: validSalesWhere } } },
       },
     });
 
