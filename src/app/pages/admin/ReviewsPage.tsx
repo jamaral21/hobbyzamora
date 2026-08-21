@@ -1,35 +1,50 @@
-import { useMemo, useState } from 'react';
-import { Star, CheckCircle, XCircle, Clock, Image, Loader2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Star, CheckCircle, XCircle, Image, Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { Card } from '../../components/design-system/Card';
 import { Button } from '../../components/design-system/Button';
 import { Badge } from '../../components/design-system/Badge';
-import { useReviews } from '../../hooks/useData';
 import { reviewsAPI, type Review } from '../../lib/api';
 
 type ReviewStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
 export default function ReviewsPage() {
   const [filter, setFilter] = useState<'ALL' | ReviewStatus>('ALL');
-  const { data, isLoading, refetch } = useReviews({ status: filter, limit: 50 }, { authMode: 'admin' });
-  const reviews = useMemo(() => data || [], [data]);
+  const [search, setSearch] = useState('');
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 1 });
+  const [counts, setCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
 
-  const filteredReviews = reviews;
-
-  const counts = {
-    pending: reviews.filter((r) => r.status === 'PENDING').length,
-    approved: reviews.filter((r) => r.status === 'APPROVED').length,
-    rejected: reviews.filter((r) => r.status === 'REJECTED').length,
+  const loadReviews = async (page = 1) => {
+    setIsLoading(true);
+    try {
+      const data = await reviewsAPI.adminList({ status: filter, search: search.trim() || undefined, page, limit: 20 });
+      setReviews(data.reviews);
+      setPagination(data.pagination);
+      setCounts({
+        pending: data.statusCounts.PENDING || 0,
+        approved: data.statusCounts.APPROVED || 0,
+        rejected: data.statusCounts.REJECTED || 0,
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => { void loadReviews(1); }, 400);
+    return () => window.clearTimeout(timeout);
+  }, [filter, search]);
 
   const handleApprove = async (id: string) => {
     await reviewsAPI.updateStatus(id, 'APPROVED');
-    await refetch();
+    await loadReviews(pagination.page);
   };
 
   const handleReject = async (id: string) => {
     await reviewsAPI.updateStatus(id, 'REJECTED');
-    await refetch();
+    await loadReviews(pagination.page);
   };
 
   return (
@@ -77,6 +92,16 @@ export default function ReviewsPage() {
           ))}
         </div>
 
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Buscar cliente, producto o pedido..."
+            className="w-full rounded-lg border border-border bg-input-background py-2 pl-9 pr-3 text-sm text-foreground"
+          />
+        </div>
+
         {/* Reviews List */}
         <div className="space-y-4">
           {isLoading && (
@@ -84,13 +109,13 @@ export default function ReviewsPage() {
               <Loader2 className="w-6 h-6 animate-spin text-primary" />
             </div>
           )}
-          {filteredReviews.length === 0 ? (
+          {reviews.length === 0 ? (
             <Card className="text-center py-12">
               <Star className="w-8 h-8 text-muted-foreground/30 mx-auto mb-3" />
               <p className="text-muted-foreground">No hay reseñas en esta categoría</p>
             </Card>
           ) : (
-            filteredReviews.map((review) => (
+            reviews.map((review) => (
               <Card key={review.id} padding="md">
                 <div className="flex items-start gap-4">
                   {/* Photo or placeholder */}
@@ -144,6 +169,16 @@ export default function ReviewsPage() {
             ))
           )}
         </div>
+
+        {pagination.totalPages > 1 && (
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Página {pagination.page} de {pagination.totalPages} ({pagination.total} reseñas)</span>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" disabled={pagination.page <= 1} onClick={() => void loadReviews(pagination.page - 1)}><ChevronLeft className="w-4 h-4" /></Button>
+              <Button size="sm" variant="outline" disabled={pagination.page >= pagination.totalPages} onClick={() => void loadReviews(pagination.page + 1)}><ChevronRight className="w-4 h-4" /></Button>
+            </div>
+          </div>
+        )}
       </div>
     </AdminLayout>
   );

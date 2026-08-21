@@ -61,6 +61,49 @@ router.get('/', optionalAuth, async (req: AuthRequest, res) => {
   }
 });
 
+router.get('/admin/list', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
+  try {
+    const requestedStatus = typeof req.query.status === 'string' ? req.query.status.trim().toUpperCase() : '';
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const page = Math.max(1, Number.parseInt(String(req.query.page || '1'), 10) || 1);
+    const limit = Math.min(50, Math.max(1, Number.parseInt(String(req.query.limit || '20'), 10) || 20));
+    const searchWhere = search ? {
+      OR: [
+        { customerName: { contains: search } },
+        { product: { name: { contains: search } } },
+        { order: { orderNumber: { contains: search } } },
+      ],
+    } : {};
+    const where: any = {
+      ...searchWhere,
+      ...(requestedStatus && requestedStatus !== 'ALL' ? { status: requestedStatus } : {}),
+    };
+
+    const [reviews, total, statusCounts] = await Promise.all([
+      prisma.review.findMany({
+        where,
+        include: { product: { select: { name: true, images: true } }, order: { select: { orderNumber: true } } },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.review.count({ where }),
+      prisma.review.groupBy({ by: ['status'], where: searchWhere, _count: { status: true } }),
+    ]);
+    const counts = { PENDING: 0, APPROVED: 0, REJECTED: 0 };
+    for (const row of statusCounts) counts[row.status as keyof typeof counts] = row._count.status;
+
+    return res.json({
+      reviews: reviews.map(serializeReview),
+      pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+      statusCounts: counts,
+    });
+  } catch (error) {
+    console.error('Get admin reviews error:', error);
+    return res.status(500).json({ error: 'Failed to get admin reviews' });
+  }
+});
+
 router.get('/token/:token', async (req, res) => {
   try {
     const token = req.params.token as string;
