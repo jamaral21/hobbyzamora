@@ -8,6 +8,7 @@ import { Card } from '../../components/design-system/Card';
 import { VariantSelector } from '../../components/store/VariantSelector';
 import { productsAPI, ordersAPI } from '../../lib/api';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
+import { formatChileDate } from '../../lib/chileDate';
 
 export default function AdminProductDetailPage() {
   const { id } = useParams();
@@ -188,7 +189,7 @@ export default function AdminProductDetailPage() {
                     )}
                     {product.presaleEndDate && (
                       <p className="text-sm text-muted-foreground">
-                        Hasta {new Date(product.presaleEndDate).toLocaleDateString('es-CL')}
+                        Hasta {formatChileDate(product.presaleEndDate)}
                       </p>
                     )}
                   </div>

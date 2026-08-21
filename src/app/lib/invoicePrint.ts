@@ -1,4 +1,5 @@
 import type { Invoice, InvoiceItem } from '../data/shipmentsMockData';
+import { formatChileDate } from './chileDate';
 
 interface OpenInvoicePrintPreviewParams {
   invoice: Invoice;
@@ -50,7 +51,7 @@ export function openInvoicePrintPreview({
     })
     .join('');
 
-  const formattedDate = new Date(invoice.fecha).toLocaleDateString('es-CL');
+  const formattedDate = formatChileDate(invoice.fecha);
 
   const html = `<!doctype html>
 <html lang="es">

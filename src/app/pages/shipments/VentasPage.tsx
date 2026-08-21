@@ -9,6 +9,7 @@ import { Badge } from '../../components/design-system/Badge';
 import { PriceDisplay } from '../../components/shipments/PriceDisplay';
 import { EmptyState } from '../../components/design-system/EmptyState';
 import { getAnyAuthToken } from '../../lib/authStorage';
+import { formatChileDate } from '../../lib/chileDate';
 
 const CANALES = ['Instagram', 'TikTok', 'Mercado Libre', 'Web', 'Local'] as const;
 type SalesChannel = (typeof CANALES)[number];
@@ -234,7 +235,7 @@ export default function VentasPage() {
               {ventas.map((v) => (
                 <TableRow key={v.id}>
                   <TableCell className="font-[family-name:var(--font-mono)] text-xs">{v.id}</TableCell>
-                  <TableCell>{new Date(v.fecha).toLocaleDateString('es-CL')}</TableCell>
+                  <TableCell>{formatChileDate(v.fecha)}</TableCell>
                   <TableCell className="max-w-[220px] truncate">{v.producto}</TableCell>
                   <TableCell className="text-right">{v.cant}</TableCell>
                   <TableCell className="text-right"><PriceDisplay amount={v.precioVenta} currency="CLP" /></TableCell>

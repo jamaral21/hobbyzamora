@@ -10,6 +10,7 @@ import { PriceDisplay } from '../../components/shipments/PriceDisplay';
 import { StatusBadge } from '../../components/shipments/StatusBadge';
 import { calcInvoiceTotals, type Invoice, type InvoiceItem } from '../../data/shipmentsMockData';
 import { openInvoicePrintPreview } from '../../lib/invoicePrint';
+import { formatChileMonth } from '../../lib/chileDate';
 
 interface EditableLine {
   nombre: string;
@@ -41,7 +42,7 @@ export default function GAVJaponPage() {
 
   const tcReferencia = compras.length > 0 ? (compras[compras.length - 1].tc || 6.0) : 6.0;
   const now = new Date();
-  const currentMonth = now.toLocaleString('es-CL', { month: 'long', year: 'numeric' });
+  const currentMonth = formatChileMonth(now);
 
   const [arrBodegaJP, setArrBodegaJP] = useState<number>(config.arrBodegaJP);
   const [appBeyblade, setAppBeyblade] = useState<number>(config.appBeyblade);
@@ -68,7 +69,7 @@ export default function GAVJaponPage() {
   }, [selectedYear, selectedMonth]);
 
   const selectedPeriodLabel = selectedPeriodDate
-    ? selectedPeriodDate.toLocaleString('es-CL', { month: 'long', year: 'numeric' })
+    ? formatChileMonth(selectedPeriodDate)
     : 'periodo inválido';
 
   const hasSelectedPeriodGAV = useMemo(() => {
@@ -111,7 +112,7 @@ export default function GAVJaponPage() {
     for (let i = 0; i < 6; i++) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       months.push({
-        label: d.toLocaleString('es-CL', { month: 'long', year: 'numeric' }),
+        label: formatChileMonth(d),
         year: d.getFullYear(),
         month: d.getMonth(),
       });

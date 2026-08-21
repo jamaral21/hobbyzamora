@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Modal } from '../../components/design-system/Modal';
 import { Select } from '../../components/design-system/Input';
 import { adminUsersAPI, type AdminUser } from '../../lib/api';
+import { formatChileDate } from '../../lib/chileDate';
 
 const SHIPMENTS_ROLES = [
   { value: 'admin', label: 'Admin Shipments' },
@@ -183,7 +184,7 @@ export default function AdminUsersPage() {
                   <TableCell>{user.email}</TableCell>
                   <TableCell>{user.role}</TableCell>
                   <TableCell>{user.shipmentsRole}</TableCell>
-                  <TableCell>{new Date(user.createdAt).toLocaleDateString('es-CL')}</TableCell>
+                  <TableCell>{formatChileDate(user.createdAt)}</TableCell>
                   <TableCell>
                     <Button variant="outline" size="sm" onClick={() => openEdit(user)}>Editar</Button>
                   </TableCell>

@@ -9,6 +9,7 @@ import {
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { MoreHorizontal, AlertTriangle } from 'lucide-react';
+import { formatChileDate } from '../../lib/chileDate';
 
 interface InventoryBatch {
   id: string;
@@ -78,7 +79,7 @@ export function InventoryTable({ batches, onEdit }: InventoryTableProps) {
                   ${totalValue.toFixed(2)}
                 </TableCell>
                 <TableCell className="text-gray-500">
-                  {new Date(batch.date).toLocaleDateString()}
+                  {formatChileDate(batch.date)}
                 </TableCell>
                 <TableCell>
                   <Button

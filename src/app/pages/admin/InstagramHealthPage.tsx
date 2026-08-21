@@ -3,6 +3,7 @@ import { Card } from '../../components/design-system/Card';
 import { useInstagramStats, useInstagramConversations, useInstagramHealth } from '../../hooks/useData';
 import { Loader2, CheckCircle2, XCircle, RefreshCw } from 'lucide-react';
 import { Button } from '../../components/design-system/Button';
+import { formatChileDateTime } from '../../lib/chileDate';
 
 export default function InstagramHealthPage() {
   const { data: health, isLoading: healthLoading, refetch: refetchHealth } = useInstagramHealth();
@@ -79,7 +80,7 @@ export default function InstagramHealthPage() {
                   </div>
                   <div className="text-right text-xs text-muted-foreground">
                     <div>{conv.status}</div>
-                    <div>{new Date(conv.lastMessageAt).toLocaleString()}</div>
+                    <div>{formatChileDateTime(conv.lastMessageAt)}</div>
                   </div>
                 </li>
               ))}

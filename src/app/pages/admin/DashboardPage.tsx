@@ -9,6 +9,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../components/desig
 import { Badge } from '../../components/design-system/Badge';
 import { useDashboardStats, useSalesChart, useOrders, useInventoryDiscrepancy } from '../../hooks/useData';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
+import { formatChileDate } from '../../lib/chileDate';
 
 type DatePreset = 'today' | 'week' | 'month' | 'custom';
 
@@ -228,7 +229,7 @@ export default function DashboardPage() {
         .filter((item) => selectedProductIds.includes(item.productId))
         .map((item) => ({
           orderNumber: order.orderNumber,
-          date: new Date(order.createdAt).toLocaleDateString('es-CL'),
+          date: formatChileDate(order.createdAt),
           customerName: order.customerName,
           customerEmail: order.customerEmail,
           customerPhone: order.customerPhone || '',
@@ -562,7 +563,7 @@ export default function DashboardPage() {
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            {order.customerName} • {new Date(order.createdAt).toLocaleDateString('es-CL')}
+                            {order.customerName} • {formatChileDate(order.createdAt)}
                           </p>
                         </div>
                       </div>

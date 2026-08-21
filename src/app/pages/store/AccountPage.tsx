@@ -10,6 +10,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { ordersAPI, wishlistAPI, presaleAPI, addressesAPI, Order, WishlistItem, PresaleReservation, type Address } from '../../lib/api';
 import { User, Package, LogOut, Loader2, ChevronRight, Heart, X, ShoppingCart, Camera, Clock, CheckCircle, XCircle, AlertCircle, ShoppingBag, Sparkles, MapPin, Plus, Pencil, Trash2, Check } from 'lucide-react';
 import { useCartStore } from '../../lib/store';
+import { formatChileDate, formatChileDateTime } from '../../lib/chileDate';
 
 export default function AccountPage() {
   return (
@@ -358,7 +359,7 @@ function AccountContent() {
                   <div className="space-y-1">
                     <p className="text-sm font-medium text-foreground font-[family-name:var(--font-mono)]">{order.orderNumber}</p>
                     <p className="text-xs text-muted-foreground">
-                      {new Date(order.createdAt).toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      {formatChileDate(order.createdAt, { day: 'numeric', month: 'long', year: 'numeric' })}
                       {' · '}{order.items.length} {order.items.length === 1 ? 'artículo' : 'artículos'}
                     </p>
                   </div>
@@ -640,7 +641,7 @@ function AccountContent() {
                         {s.label}
                         {isNotified && r.expiresAt && (
                           <span className="text-amber-500/70 ml-1">
-                            · expira {new Date(r.expiresAt).toLocaleString('es-CL', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
+                            · expira {formatChileDateTime(r.expiresAt, { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
                           </span>
                         )}
                       </div>

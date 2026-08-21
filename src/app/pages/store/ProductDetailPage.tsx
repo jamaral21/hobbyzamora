@@ -10,6 +10,7 @@ import { productsAPI, wishlistAPI, presaleAPI, type PresaleReservation } from '.
 import { useCartStore } from '../../lib/store';
 import { useAuth } from '../../contexts/AuthContext';
 import { AuthModal } from '../../components/auth/AuthModal';
+import { formatChileDate } from '../../lib/chileDate';
 import { buildProductImageVariantUrl, type ProductImageVariant } from '../../lib/productImageVariants';
 
 function ProductImageWithVariant({
@@ -351,7 +352,7 @@ export default function ProductDetailPage() {
                     </p>
                     {product.presaleEndDate && (
                       <p className="text-sm text-muted-foreground">
-                        Disponible hasta el {new Date(product.presaleEndDate).toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' })}
+                        Disponible hasta el {formatChileDate(product.presaleEndDate, { day: 'numeric', month: 'long', year: 'numeric' })}
                       </p>
                     )}
                     {product.presaleEndDate && new Date(product.presaleEndDate) < new Date() && (

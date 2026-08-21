@@ -8,6 +8,7 @@ import {
   nextSku, nextBoletaId,
 } from '../data/shipmentsDomain';
 import { getAdminToken, getCustomerToken } from '../lib/authStorage';
+import { formatChileMonth } from '../lib/chileDate';
 
 // Input types for mutations
 interface NewBoletaInput {
@@ -1200,7 +1201,7 @@ export function ShipmentsDataProvider({ children }: { children: React.ReactNode 
     const totalJPY = Math.round(subtotalJPY * (1 + config.comisionPct / 100));
     const tc = period?.tc ?? (compras.length > 0 ? compras[compras.length - 1].tc || 6.0 : 6.0);
     const totalCLP = Math.round(totalJPY * tc);
-    const monthLabel = targetDate.toLocaleString('es-CL', { month: 'long', year: 'numeric' });
+    const monthLabel = formatChileMonth(targetDate);
     const targetDateOnly = targetDate.toISOString().split('T')[0];
     const invoice: Invoice = {
       id,

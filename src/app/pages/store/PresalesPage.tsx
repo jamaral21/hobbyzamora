@@ -23,6 +23,7 @@ import { Card } from '../../components/design-system/Card';
 import { Button } from '../../components/design-system/Button';
 import { presaleAPI, productsAPI, type PresaleReservation, type Product } from '../../lib/api';
 import { useCartStore } from '../../lib/store';
+import { formatChileDate } from '../../lib/chileDate';
 import { useAuth } from '../../contexts/AuthContext';
 import { useStoreSections } from '../../hooks/useData';
 import { buildSectionGroups, matchesCategoryFilter, orderSectionLabels, slugifySection } from '../../lib/sections';
@@ -587,7 +588,7 @@ function PresalesContent() {
                       )}
 
                       <p className="text-xs text-muted-foreground mt-2">
-                        Reservado el {new Date(reservation.createdAt).toLocaleDateString('es-CL')}
+                        Reservado el {formatChileDate(reservation.createdAt)}
                       </p>
                     </div>
                   </div>

@@ -10,6 +10,7 @@ import { Modal } from '../../components/design-system/Modal';
 import { ProductEditor } from '../../components/admin/ProductEditor';
 import { useMutation } from '../../hooks/useData';
 import { productsAPI } from '../../lib/api';
+import { formatChileDate } from '../../lib/chileDate';
 import type { Product } from '../../lib/api';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
 import { orderSectionLabels } from '../../lib/sections';
@@ -582,7 +583,7 @@ export default function ProductsPage() {
                   {product.presaleEndDate ? (
                     <div>
                       <span className="text-xs text-muted-foreground">
-                        {new Date(product.presaleEndDate).toLocaleDateString('es-CL', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        {formatChileDate(product.presaleEndDate, { day: 'numeric', month: 'short', year: 'numeric' })}
                       </span>
                       {new Date(product.presaleEndDate) < new Date() && (
                         <Badge variant="danger" size="sm" className="ml-1.5">Vencida</Badge>

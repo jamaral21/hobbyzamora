@@ -2,6 +2,7 @@ import { Send, User } from 'lucide-react';
 import { Card } from '../design-system/Card';
 import { Button } from '../design-system/Button';
 import { useState } from 'react';
+import { formatChileTime } from '../../lib/chileDate';
 
 interface Message {
   id: string;
@@ -72,7 +73,7 @@ export function ChatInterface({
               )}
               <p className="text-sm">{message.content}</p>
               <p className="text-xs mt-1 opacity-75">
-                {new Date(message.timestamp).toLocaleTimeString()}
+                {formatChileTime(message.timestamp)}
               </p>
             </div>
           </div>

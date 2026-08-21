@@ -8,6 +8,7 @@ import { Badge } from '../../components/design-system/Badge';
 import { useOrders } from '../../hooks/useData';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
 import { openShippingLabelPrintPreview } from '../../lib/shippingLabelPrint';
+import { formatChileDate } from '../../lib/chileDate';
 
 function getPaymentLabel(method?: string): string {
   switch ((method || '').toUpperCase()) {
@@ -171,7 +172,7 @@ export default function OrdersPage() {
                 o.customerName || '',
                 o.customerEmail || '',
                 getShippingAddress(o),
-                new Date(o.createdAt).toLocaleDateString(),
+                formatChileDate(o.createdAt),
                 getItemsCount(o),
                 getPaymentLabel(o.payments?.[0]?.method),
                 o.total.toLocaleString('es-CL', { maximumFractionDigits: 0 }),
@@ -366,7 +367,7 @@ export default function OrdersPage() {
                 <p className="text-xs text-muted-foreground max-w-56 break-words">{getShippingAddress(order)}</p>
               </TableCell>
               <TableCell>
-                {new Date(order.createdAt).toLocaleDateString()}
+                {formatChileDate(order.createdAt)}
               </TableCell>
               <TableCell>{getItemsCount(order)}</TableCell>
               <TableCell>{getPaymentLabel(order.payments?.[0]?.method)}</TableCell>

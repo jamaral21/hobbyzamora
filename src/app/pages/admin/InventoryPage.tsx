@@ -8,6 +8,7 @@ import { Modal } from '../../components/design-system/Modal';
 import { Input, Select } from '../../components/design-system/Input';
 import { useInventory, useDashboardStats, useProducts, useMutation } from '../../hooks/useData';
 import { inventoryAPI } from '../../lib/api';
+import { formatChileDate } from '../../lib/chileDate';
 
 export default function InventoryPage() {
   const { data: inventoryData, isLoading: inventoryLoading, refetch } = useInventory();
@@ -58,7 +59,7 @@ export default function InventoryPage() {
       b.remaining,
       b.unitCost.toFixed(2),
       (b.remaining * b.unitCost).toFixed(2),
-      new Date(b.receivedAt).toLocaleDateString(),
+      formatChileDate(b.receivedAt),
     ]);
     const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });

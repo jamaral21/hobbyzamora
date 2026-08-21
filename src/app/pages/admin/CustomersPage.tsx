@@ -5,6 +5,7 @@ import { Button } from '../../components/design-system/Button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/design-system/Table';
 import { customersAPI, type Customer, type CustomersSummary } from '../../lib/api';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
+import { formatChileDate } from '../../lib/chileDate';
 
 const formatAmount = (value: number) => `$${new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 }).format(value)}`;
 
@@ -138,7 +139,7 @@ export default function CustomersPage() {
                       {formatAmount(customer.totalOrders > 0 ? customer.totalSpent / customer.totalOrders : 0)}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {new Date(customer.joinDate).toLocaleDateString()}
+                      {formatChileDate(customer.joinDate)}
                     </TableCell>
                   </TableRow>
                 ))}

@@ -2,6 +2,7 @@ import { AlertTriangle } from 'lucide-react';
 import { Card } from '../design-system/Card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../design-system/Table';
 import { Badge } from '../design-system/Badge';
+import { formatChileDate } from '../../lib/chileDate';
 
 export interface FlatBatch {
   id: string;
@@ -53,7 +54,7 @@ export function InventoryTable({ inventory, lowStockThreshold = 10 }: InventoryT
                 <TableCell>{item.remaining}</TableCell>
                 <TableCell>${item.unitCost.toFixed(2)}</TableCell>
                 <TableCell>${totalValue.toFixed(2)}</TableCell>
-                <TableCell>{new Date(item.receivedAt).toLocaleDateString()}</TableCell>
+                <TableCell>{formatChileDate(item.receivedAt)}</TableCell>
                 <TableCell>
                   {isLowStock ? (
                     <Badge variant="warning">Stock Bajo</Badge>

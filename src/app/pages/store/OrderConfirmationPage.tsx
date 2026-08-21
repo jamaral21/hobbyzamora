@@ -7,6 +7,7 @@ import { Button } from '../../components/design-system/Button';
 import { Badge } from '../../components/design-system/Badge';
 import { ordersAPI, paymentsAPI } from '../../lib/api';
 import { useCartStore } from '../../lib/store';
+import { formatChileDate } from '../../lib/chileDate';
 
 export default function OrderConfirmationPage() {
   const [searchParams] = useSearchParams();
@@ -103,7 +104,7 @@ export default function OrderConfirmationPage() {
   deliveryStart.setDate(deliveryStart.getDate() + 5);
   const deliveryEnd = new Date();
   deliveryEnd.setDate(deliveryEnd.getDate() + 7);
-  const fmt = (d: Date) => d.toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' });
+  const fmt = (d: Date) => formatChileDate(d, { day: 'numeric', month: 'long', year: 'numeric' });
 
   const statusLabel: Record<string, string> = {
     PENDING: 'Pendiente',

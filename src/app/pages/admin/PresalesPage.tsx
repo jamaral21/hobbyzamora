@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router';
+import { formatChileDate, formatChileDateTime } from '../../lib/chileDate';
 import {
   Plus,
   Search,
@@ -872,19 +873,19 @@ export function PresalesPage() {
                       </td>
                       {/* Notified at */}
                       <td className="px-4 py-3 text-xs text-muted-foreground">
-                        {r.notifiedAt ? new Date(r.notifiedAt).toLocaleString('es-CL') : '—'}
+                        {r.notifiedAt ? formatChileDateTime(r.notifiedAt) : '—'}
                       </td>
                       {/* Expires at */}
                       <td className="px-4 py-3 text-xs">
                         {r.expiresAt ? (
                           <span className={isExpired ? 'text-red-500 font-semibold' : 'text-muted-foreground'}>
-                            {new Date(r.expiresAt).toLocaleString('es-CL')}
+                            {formatChileDateTime(r.expiresAt)}
                           </span>
                         ) : '—'}
                       </td>
                       {/* Created at */}
                       <td className="px-4 py-3 text-xs text-muted-foreground">
-                        {new Date(r.createdAt).toLocaleDateString('es-CL')}
+                        {formatChileDate(r.createdAt)}
                       </td>
                       {/* Actions */}
                       <td className="px-4 py-3 text-right">

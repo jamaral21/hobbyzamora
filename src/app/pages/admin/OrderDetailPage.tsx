@@ -12,6 +12,7 @@ import { useOrder, useUpdateOrderStatus } from '../../hooks/useData';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
 import { ordersAPI } from '../../lib/api';
 import { openShippingLabelPrintPreview } from '../../lib/shippingLabelPrint';
+import { formatChileDateTime } from '../../lib/chileDate';
 
 const STATUS_OPTIONS = ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'] as const;
 
@@ -114,7 +115,7 @@ export default function OrderDetailPage() {
               {order.orderNumber}
             </h1>
             <p className="text-muted-foreground">
-              {new Date(order.createdAt).toLocaleString()} &middot; {order.source}
+              {formatChileDateTime(order.createdAt)} &middot; {order.source}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -241,7 +242,7 @@ export default function OrderDetailPage() {
                       </p>
                       {payment.paidAt && (
                         <p className="text-xs text-muted-foreground">
-                          {new Date(payment.paidAt).toLocaleString()}
+                          {formatChileDateTime(payment.paidAt)}
                         </p>
                       )}
                     </div>

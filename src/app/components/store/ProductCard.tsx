@@ -7,6 +7,7 @@ import { Badge } from '../design-system/Badge';
 import { Product } from '../../lib/api';
 import { useCartStore } from '../../lib/store';
 import { buildProductImageVariantUrl } from '../../lib/productImageVariants';
+import { formatChileDate } from '../../lib/chileDate';
 
 export interface ProductCardProps {
   product: Product;
@@ -78,7 +79,7 @@ export function ProductCard({ product, hideStock = false }: ProductCardProps) {
                 <Badge variant="danger" className="text-[10px]">Expirada</Badge>
               ) : (
                 <Badge variant="default" className="text-[10px] bg-background/80 backdrop-blur-sm">
-                  Hasta {new Date(product.presaleEndDate).toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })}
+                  Hasta {formatChileDate(product.presaleEndDate, { day: 'numeric', month: 'short' })}
                 </Badge>
               )}
             </div>
