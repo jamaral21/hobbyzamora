@@ -56,10 +56,10 @@ export function buildShippingLabelHtml(order: Order): string {
     button { border: 1px solid #9ca3af; border-radius: 6px; background: #fff; padding: 7px 10px; font-size: 13px; cursor: pointer; }
     button.primary { background: #111827; color: #fff; border-color: #111827; }
     .label { width: 104mm; height: 80mm; margin: 0 auto; padding: 6mm 7mm; background: #fff; border: 1px solid #d1d5db; border-radius: 4mm; box-shadow: 0 4mm 8mm rgba(15, 23, 42, .24); display: flex; flex-direction: column; overflow: hidden; }
-    .order-number { margin: 0 0 7mm; color: #6b7280; font-size: 11pt; }
-    .recipient p { margin: 0 0 2.5mm; font-size: 15pt; line-height: 1.18; overflow-wrap: anywhere; }
-    .recipient strong { font-size: 15pt; }
-    .items { margin-top: auto; padding-top: 4mm; font-size: 10.5pt; line-height: 1.35; overflow-wrap: anywhere; }
+    .order-number { margin: 0 0 7mm; color: #6b7280; font-size: 8.25pt; }
+    .recipient p { margin: 0 0 2.5mm; font-size: 11.25pt; line-height: 1.18; overflow-wrap: anywhere; }
+    .recipient strong { font-size: 11.25pt; }
+    .items { margin-top: auto; padding-top: 4mm; font-size: 7.875pt; line-height: 1.35; overflow-wrap: anywhere; }
     @media print {
       @page { size: 104mm 80mm; margin: 0; }
       body { padding: 0; background: #fff; }

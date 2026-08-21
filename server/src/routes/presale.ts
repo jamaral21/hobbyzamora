@@ -64,7 +64,7 @@ async function promotePendingReservationsFIFO(
   const reservationsToNotify: ReservationWithUserAndProduct[] = [];
   let reservedSlots = 0;
   for (const reservation of pendingToNotify) {
-    if (reservedSlots >= slots) break;
+    if (reservedSlots + reservation.quantity > slots) continue;
     reservationsToNotify.push(reservation);
     reservedSlots += reservation.quantity;
   }
@@ -468,7 +468,8 @@ router.post(
         await Promise.all(emailPromises);
       }
 
-      const pendingAfter = Math.max(0, pendingCount - notifiedReservations.length);
+      const notifiedQuantity = notifiedReservations.reduce((total, reservation) => total + reservation.quantity, 0);
+      const pendingAfter = Math.max(0, pendingCount - notifiedQuantity);
 
       return res.json({
         message: notifiedReservations.length > 0
@@ -477,7 +478,7 @@ router.post(
         notified: notifiedReservations.length,
         pendingBefore: pendingCount,
         pendingAfter,
-        partial: notifiedReservations.length < pendingCount,
+        partial: notifiedQuantity < pendingCount,
       });
     } catch (error) {
       console.error('Presale confirm arrival error:', error);

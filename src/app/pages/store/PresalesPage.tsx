@@ -599,7 +599,7 @@ function PresalesContent() {
                         <Button
                           size="sm"
                           onClick={() => {
-                            if (!alreadyInCart) addItem(reservation.product as any, 1);
+                            if (!alreadyInCart) addItem(reservation.product as any, reservation.quantity);
                           }}
                         >
                           {alreadyInCart ? (

@@ -654,7 +654,7 @@ function AccountContent() {
                         className="shrink-0"
                         onClick={() => {
                           const alreadyInCart = cartItems.some(i => i.productId === r.productId);
-                          if (!alreadyInCart) addItem(r.product as any, 1);
+                          if (!alreadyInCart) addItem(r.product as any, r.quantity);
                         }}
                       >
                         <ShoppingBag className="w-3.5 h-3.5 mr-1" />
