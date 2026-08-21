@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Search, Filter, Download, Eye, Loader2, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
@@ -72,6 +72,7 @@ export default function OrdersPage() {
   const { isAuthenticated } = useAdminAuth();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sourceFilter, setSourceFilter] = useState('all');
   const [dateFromInput, setDateFromInput] = useState('');
@@ -81,6 +82,14 @@ export default function OrdersPage() {
   const [skuFilter, setSkuFilter] = useState('');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 25;
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 600);
+
+    return () => window.clearTimeout(timeout);
+  }, [searchQuery]);
 
   const hasActiveExtraFilters = sourceFilter !== 'all' || dateFromInput !== '' || dateToInput !== '' || eanFilter !== '' || skuFilter !== '';
 
@@ -104,7 +113,7 @@ export default function OrdersPage() {
       source: sourceFilter !== 'all' ? sourceFilter.toUpperCase() : undefined,
       startDate: dateFrom || undefined,
       endDate: dateTo || undefined,
-      search: searchQuery.trim() || undefined,
+      search: debouncedSearchQuery.trim() || undefined,
       ean: eanFilter.trim() || undefined,
       sku: skuFilter.trim() || undefined,
       page,
