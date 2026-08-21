@@ -153,6 +153,11 @@ export interface Customer {
   totalSpent: number;
 }
 
+export interface CustomersSummary {
+  totalSpent: number;
+  totalOrders: number;
+}
+
 export interface DashboardStats {
   dailySales: number;
   weeklySales: number;
@@ -853,7 +858,7 @@ export const customersAPI = {
     if (params?.limit) searchParams.set('limit', String(params.limit));
     
     const query = searchParams.toString();
-    return fetchAPI<{ customers: Customer[]; pagination: any }>(`/customers${query ? `?${query}` : ''}`, undefined, 'admin');
+    return fetchAPI<{ customers: Customer[]; summary: CustomersSummary; pagination: any }>(`/customers${query ? `?${query}` : ''}`, undefined, 'admin');
   },
 
   getById: (id: string) => fetchAPI<Customer & { recentOrders: Order[] }>(`/customers/${id}`, undefined, 'admin'),

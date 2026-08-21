@@ -3,7 +3,7 @@ import { Search, User, Loader2 } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { Button } from '../../components/design-system/Button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/design-system/Table';
-import { customersAPI, type Customer } from '../../lib/api';
+import { customersAPI, type Customer, type CustomersSummary } from '../../lib/api';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
 
 const formatAmount = (value: number) => `$${new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 }).format(value)}`;
@@ -14,6 +14,7 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 1 });
+  const [summary, setSummary] = useState<CustomersSummary>({ totalSpent: 0, totalOrders: 0 });
 
   const fetchCustomers = async (page = 1) => {
     setLoading(true);
@@ -21,6 +22,7 @@ export default function CustomersPage() {
       const res = await customersAPI.getAll({ search: search || undefined, page, limit: 50 });
       setCustomers(res.customers);
       setPagination(res.pagination);
+      setSummary(res.summary);
     } catch (err) {
       console.error('Error fetching customers:', err);
     } finally {
@@ -38,8 +40,8 @@ export default function CustomersPage() {
     return () => clearTimeout(timeout);
   }, [search, isAuthenticated]);
 
-  const totalSpentAll = customers.reduce((s, c) => s + c.totalSpent, 0);
-  const avgSpent = customers.length > 0 ? totalSpentAll / customers.length : 0;
+  const totalSpentAll = summary.totalSpent;
+  const avgSpent = pagination.total > 0 ? totalSpentAll / pagination.total : 0;
 
   if (loading && customers.length === 0) {
     return (
