@@ -12,23 +12,34 @@ import { useAdminAuth } from '../../contexts/AdminAuthContext';
 
 type DatePreset = 'today' | 'week' | 'month' | 'custom';
 
+function getChileDateKey(value = new Date()): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Santiago',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(value).filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function addDateDays(value: string, days: number): string {
+  const result = new Date(`${value}T12:00:00.000Z`);
+  result.setUTCDate(result.getUTCDate() + days);
+  return result.toISOString().slice(0, 10);
+}
+
 function getDateRange(preset: DatePreset): { start: string; end: string } {
-  const now = new Date();
-  const end = now.toISOString().split('T')[0];
+  const end = getChileDateKey();
 
   switch (preset) {
     case 'today':
       return { start: end, end };
-    case 'week': {
-      const date = new Date(now);
-      date.setDate(date.getDate() - 7);
-      return { start: date.toISOString().split('T')[0], end };
-    }
-    case 'month': {
-      const date = new Date(now);
-      date.setMonth(date.getMonth() - 1);
-      return { start: date.toISOString().split('T')[0], end };
-    }
+    case 'week':
+      return { start: addDateDays(end, -7), end };
+    case 'month':
+      return { start: addDateDays(end, -30), end };
     default:
       return { start: end, end };
   }
@@ -61,6 +72,7 @@ function getPaymentLabel(method?: string): string {
   switch (method) {
     case 'CARD':
     case 'GETNET':
+    case 'GETNET_POS':
       return '💳 Tarjeta';
     case 'CASH':
       return '💵 Efectivo';
@@ -141,7 +153,7 @@ export default function DashboardPage() {
       };
     }
 
-    const validOrders = allOrders.filter((order) => order.status !== 'CANCELLED' && order.status !== 'REFUNDED');
+    const validOrders = allOrders.filter((order) => order.status !== 'PENDING' && order.status !== 'CANCELLED');
     const sales = validOrders.reduce((sum, order) => sum + order.total, 0);
     const cost = validOrders.reduce(
       (sum, order) => sum + (order.items || []).reduce((itemCost, item) => itemCost + (item.cost || 0) * item.quantity, 0),
@@ -233,7 +245,7 @@ export default function DashboardPage() {
   }, [allOrders, selectedProductIds]);
 
   const paymentMethodSummary = useMemo(() => {
-    const validOrders = allOrders.filter((order) => order.status !== 'CANCELLED' && order.status !== 'REFUNDED');
+    const validOrders = allOrders.filter((order) => order.status !== 'PENDING' && order.status !== 'CANCELLED');
     const map: Record<string, { label: string; total: number; count: number }> = {
       CARD: { label: '💳 Tarjeta (Getnet)', total: 0, count: 0 },
       CASH: { label: '💵 Efectivo', total: 0, count: 0 },
@@ -242,7 +254,7 @@ export default function DashboardPage() {
 
     for (const order of validOrders) {
       const method = order.payments?.[0]?.method;
-      if (method === 'CARD' || method === 'GETNET') {
+      if (method === 'CARD' || method === 'GETNET' || method === 'GETNET_POS') {
         map.CARD.total += order.total;
         map.CARD.count += 1;
       } else if (method === 'CASH') {

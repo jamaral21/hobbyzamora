@@ -1,15 +1,19 @@
 import { Router } from 'express';
 import { prisma } from '../index.js';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
+import { addChileDays, getChileDateKey, getChileDateRange, getChileDayRange } from '../lib/chileDate.js';
 
 const router = Router();
 
-function parseDateParam(value: unknown): Date | null {
+function parseDateParam(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-
-  const date = new Date(`${value}T00:00:00.000Z`);
-  return Number.isNaN(date.getTime()) ? null : date;
+  try {
+    getChileDayRange(value);
+    return value;
+  } catch {
+    return null;
+  }
 }
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -26,12 +30,10 @@ function parseProductIdsParam(value: unknown): string[] {
 // Get dashboard stats
 router.get('/dashboard', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) => {
   try {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const weekAgo = new Date(today);
-    weekAgo.setDate(weekAgo.getDate() - 7);
-    const monthAgo = new Date(today);
-    monthAgo.setMonth(monthAgo.getMonth() - 1);
+    const todayKey = getChileDateKey();
+    const todayRange = getChileDayRange(todayKey);
+    const weekRange = getChileDateRange(addChileDays(todayKey, -7), todayKey);
+    const monthRange = getChileDateRange(addChileDays(todayKey, -30), todayKey);
 
     const { startDate, endDate, productIds } = req.query;
     const parsedStartDate = parseDateParam(startDate);
@@ -45,19 +47,12 @@ router.get('/dashboard', authenticate, requireRole('ADMIN', 'STAFF'), async (req
 
     const hasCustomRange = Boolean(parsedStartDate || parsedEndDate);
 
-    const defaultRangeEnd = new Date(today);
-    defaultRangeEnd.setDate(defaultRangeEnd.getDate() + 1);
-    const defaultRangeStart = new Date(defaultRangeEnd);
-    defaultRangeStart.setDate(defaultRangeStart.getDate() - 30);
-
-    const rangeStart = parsedStartDate ?? defaultRangeStart;
-    const rangeEndExclusive = parsedEndDate
-      ? new Date(parsedEndDate.getTime() + 24 * 60 * 60 * 1000)
-      : defaultRangeEnd;
-
-    if (rangeStart >= rangeEndExclusive) {
+    const selectedStartDate = parsedStartDate ?? addChileDays(todayKey, -30);
+    const selectedEndDate = parsedEndDate ?? todayKey;
+    if (selectedStartDate > selectedEndDate) {
       return res.status(400).json({ error: 'startDate must be before or equal to endDate' });
     }
+    const { start: rangeStart, endExclusive: rangeEndExclusive } = getChileDateRange(selectedStartDate, selectedEndDate);
 
     const rangeWhere = {
       createdAt: {
@@ -71,21 +66,21 @@ router.get('/dashboard', authenticate, requireRole('ADMIN', 'STAFF'), async (req
     const [todayOrders, weekOrders, monthOrders, rangeOrders, rangeOrderItems, monthOrderItems] = await Promise.all([
       prisma.order.findMany({
         where: {
-          createdAt: { gte: today },
+          createdAt: { gte: todayRange.start, lt: todayRange.endExclusive },
           status: { notIn: ['CANCELLED', 'REFUNDED'] },
         },
         select: { total: true },
       }),
       prisma.order.findMany({
         where: {
-          createdAt: { gte: weekAgo },
+          createdAt: { gte: weekRange.start, lt: weekRange.endExclusive },
           status: { notIn: ['CANCELLED', 'REFUNDED'] },
         },
         select: { total: true, subtotal: true },
       }),
       prisma.order.findMany({
         where: {
-          createdAt: { gte: monthAgo },
+          createdAt: { gte: monthRange.start, lt: monthRange.endExclusive },
           status: { notIn: ['CANCELLED', 'REFUNDED'] },
         },
         select: { total: true, subtotal: true },
@@ -122,7 +117,7 @@ router.get('/dashboard', authenticate, requireRole('ADMIN', 'STAFF'), async (req
       prisma.orderItem.findMany({
         where: {
           order: {
-            createdAt: { gte: monthAgo },
+            createdAt: { gte: monthRange.start, lt: monthRange.endExclusive },
             status: { notIn: ['CANCELLED', 'REFUNDED'] },
           },
         },
@@ -200,10 +195,8 @@ router.get('/dashboard', authenticate, requireRole('ADMIN', 'STAFF'), async (req
       marginPercent: Math.round(marginPercent * 100) / 100,
       orderCount,
       range: {
-        startDate: rangeStart.toISOString().slice(0, 10),
-        endDate: new Date(rangeEndExclusive.getTime() - 24 * 60 * 60 * 1000)
-          .toISOString()
-          .slice(0, 10),
+        startDate: selectedStartDate,
+        endDate: selectedEndDate,
         hasCustomRange,
       },
     });
@@ -228,26 +221,17 @@ router.get('/sales-chart', authenticate, requireRole('ADMIN', 'STAFF'), async (r
       return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD' });
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const rangeEndExclusive = parsedEndDate
-      ? new Date(parsedEndDate.getTime() + 24 * 60 * 60 * 1000)
-      : new Date(today.getTime() + 24 * 60 * 60 * 1000);
-    const rangeStart = parsedStartDate
-      ? parsedStartDate
-      : new Date(rangeEndExclusive.getTime() - numDays * 24 * 60 * 60 * 1000);
-
-    if (rangeStart >= rangeEndExclusive) {
+    const todayKey = getChileDateKey();
+    const selectedEndDate = parsedEndDate ?? todayKey;
+    const selectedStartDate = parsedStartDate ?? addChileDays(selectedEndDate, -(numDays - 1));
+    if (selectedStartDate > selectedEndDate) {
       return res.status(400).json({ error: 'startDate must be before or equal to endDate' });
     }
 
     const chartData: Array<{ date: string; sales: number; revenue: number }> = [];
 
-    for (let date = new Date(rangeStart); date < rangeEndExclusive; date.setDate(date.getDate() + 1)) {
-      const currentDate = new Date(date);
-      const nextDate = new Date(date);
-      nextDate.setDate(nextDate.getDate() + 1);
+    for (let dateKey = selectedStartDate; dateKey <= selectedEndDate; dateKey = addChileDays(dateKey, 1)) {
+      const { start: currentDate, endExclusive: nextDate } = getChileDayRange(dateKey);
 
       if (hasProductFilter) {
         const items = await prisma.orderItem.findMany({
@@ -270,7 +254,7 @@ router.get('/sales-chart', authenticate, requireRole('ADMIN', 'STAFF'), async (r
         );
 
         chartData.push({
-          date: currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          date: new Date(`${dateKey}T12:00:00.000Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
           sales: Math.round(filteredRevenue * 100) / 100,
           revenue: Math.round(filteredRevenue * 100) / 100,
         });
@@ -293,7 +277,7 @@ router.get('/sales-chart', authenticate, requireRole('ADMIN', 'STAFF'), async (r
       const revenue = orders.reduce((sum, o) => sum + parseFloat(o.total.toString()), 0);
 
       chartData.push({
-        date: currentDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        date: new Date(`${dateKey}T12:00:00.000Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }),
         sales: Math.round(sales * 100) / 100,
         revenue: Math.round(revenue * 100) / 100,
       });
