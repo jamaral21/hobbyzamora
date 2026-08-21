@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Loader2, Plus, Users } from 'lucide-react';
+import { Loader2, Plus, Search, Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { Button } from '../../components/design-system/Button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/design-system/Table';
@@ -41,13 +41,16 @@ export default function AdminUsersPage() {
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [form, setForm] = useState<FormState>(defaultForm);
+  const [search, setSearch] = useState('');
+  const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 1 });
 
-  const loadUsers = async () => {
+  const loadUsers = async (page = 1) => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await adminUsersAPI.getAll({ page: 1, limit: 100 });
+      const response = await adminUsersAPI.getAll({ search: search.trim() || undefined, page, limit: 50 });
       setUsers(response.users || []);
+      setPagination(response.pagination);
     } catch (err: any) {
       setError(err?.message || 'No se pudieron cargar los usuarios');
       setUsers([]);
@@ -57,8 +60,9 @@ export default function AdminUsersPage() {
   };
 
   useEffect(() => {
-    void loadUsers();
-  }, []);
+    const timeout = window.setTimeout(() => { void loadUsers(1); }, 400);
+    return () => window.clearTimeout(timeout);
+  }, [search]);
 
   const openCreate = () => {
     setEditingUser(null);
@@ -113,7 +117,7 @@ export default function AdminUsersPage() {
       setIsModalOpen(false);
       setEditingUser(null);
       setForm(defaultForm);
-      await loadUsers();
+      await loadUsers(pagination.page);
     } catch (err: any) {
       setError(err?.message || 'No se pudo guardar el usuario');
     } finally {
@@ -140,6 +144,16 @@ export default function AdminUsersPage() {
             {error}
           </div>
         )}
+
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Buscar por nombre o email..."
+            className="w-full rounded-lg border border-border bg-input-background py-2 pl-9 pr-3 text-sm text-foreground"
+          />
+        </div>
 
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
@@ -177,6 +191,16 @@ export default function AdminUsersPage() {
               ))}
             </TableBody>
           </Table>
+        )}
+
+        {pagination.totalPages > 1 && (
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Página {pagination.page} de {pagination.totalPages} ({pagination.total} usuarios)</span>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" disabled={pagination.page <= 1} onClick={() => void loadUsers(pagination.page - 1)}><ChevronLeft className="w-4 h-4" /></Button>
+              <Button size="sm" variant="outline" disabled={pagination.page >= pagination.totalPages} onClick={() => void loadUsers(pagination.page + 1)}><ChevronRight className="w-4 h-4" /></Button>
+            </div>
+          </div>
         )}
       </div>
 

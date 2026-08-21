@@ -945,6 +945,15 @@ export const reviewsAPI = {
     return fetchAPI<Review[]>(`/reviews${query ? `?${query}` : ''}`, undefined, authMode);
   },
 
+  adminList: (params?: { status?: 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'; search?: string; page?: number; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.search) query.set('search', params.search);
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.limit) query.set('limit', String(params.limit));
+    return fetchAPI<{ reviews: Review[]; pagination: { page: number; limit: number; total: number; totalPages: number }; statusCounts: Record<'PENDING' | 'APPROVED' | 'REJECTED', number> }>(`/reviews/admin/list${query.size ? `?${query}` : ''}`, undefined, 'admin');
+  },
+
   getByToken: (token: string) =>
     fetchAPI<ReviewTokenPayload>(`/reviews/token/${token}`, undefined, 'public'),
 
