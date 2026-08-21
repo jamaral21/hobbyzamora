@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getRequestedPresaleQuantity } from './presaleUtils.js';
+import { getRequestedPresaleQuantity, sumPresaleReservationQuantities } from './presaleUtils.js';
 
 describe('getRequestedPresaleQuantity', () => {
   it('sums all lines for the same product', () => {
@@ -14,5 +14,14 @@ describe('getRequestedPresaleQuantity', () => {
     expect(getRequestedPresaleQuantity([
       { productId: 'product-1', quantity: 2 },
     ], 'product-2')).toBe(0);
+  });
+
+  it('sums reserved units per product instead of reservation rows', () => {
+    expect(sumPresaleReservationQuantities([
+      { productId: 'product-1', quantity: 1 },
+      { productId: 'product-1', quantity: 3 },
+      { productId: 'product-1', quantity: 2 },
+      { productId: 'product-2', quantity: 1 },
+    ])).toEqual({ 'product-1': 6, 'product-2': 1 });
   });
 });

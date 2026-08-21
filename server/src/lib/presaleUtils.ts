@@ -17,6 +17,15 @@ export function getRequestedPresaleQuantity(
   );
 }
 
+export function sumPresaleReservationQuantities(
+  rows: Array<{ productId: string; quantity: number | null }>,
+): Record<string, number> {
+  return rows.reduce<Record<string, number>>((totals, row) => {
+    totals[row.productId] = (totals[row.productId] || 0) + (row.quantity || 0);
+    return totals;
+  }, {});
+}
+
 export const PRESALE_EXPIRATION_SECONDS = Math.max(
   1,
   Number.parseInt(process.env.PRESALE_EXPIRATION_SECONDS ?? `${DEFAULT_PRESALE_EXPIRATION_SECONDS}`, 10)
