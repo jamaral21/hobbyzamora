@@ -11,6 +11,6 @@ describe('buildShippingLabelHtml', () => {
     expect(html).toContain('16.917.933-6');
     expect(html).toContain('Alen 2034, Llaillay, Valparaiso, 2220077, Chile');
     expect(html).toContain('Producto 1 ×2');
-    expect(html).toContain('@page { size: 70mm 90mm;');
+    expect(html).toContain('@page { size: 90mm 70mm;');
   });
 });
