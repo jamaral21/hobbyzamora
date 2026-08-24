@@ -58,7 +58,7 @@ export function getPresaleUnavailableReason(
       return 'No hay cupos disponibles para esta preventa';
     }
 
-    if (activeReservedCount >= product.presaleAvailQty) {
+    if (activeReservedCount > product.presaleAvailQty) {
       return 'No hay cupos disponibles para esta preventa';
     }
   }
