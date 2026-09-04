@@ -72,6 +72,9 @@ export default function HomePage() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const allProducts = products && products.length > 0 ? products : mockProducts;
+  const inStockProducts = useMemo(() => {
+    return allProducts.filter((product: any) => product.stock > 0);
+  }, [allProducts]);
   const instagramPosts = instagramFeed?.posts || [];
   const showInstagramSection = INSTAGRAM_FEED_ENABLED && instagramFeed?.source === 'instagram' && instagramPosts.length > 0;
   const homepageReviews = approvedReviews && approvedReviews.length > 0
@@ -87,22 +90,22 @@ export default function HomePage() {
       }];
 
   const sortedByNewest = useMemo(() => {
-    return [...allProducts].sort((a: any, b: any) => {
+    return [...inStockProducts].sort((a: any, b: any) => {
       const aDate = new Date(a.createdAt || a.updatedAt || 0).getTime();
       const bDate = new Date(b.createdAt || b.updatedAt || 0).getTime();
       return bDate - aDate;
     });
-  }, [allProducts]);
+  }, [inStockProducts]);
 
   const featuredProducts = useMemo(() => {
     return sortedByNewest
-      .filter((p: any) => Boolean(p.featured) && !p.isPresale)
+      .filter((p: any) => Boolean(p.featured) && !p.isPresale && p.stock > 0)
       .slice(0, 8);
   }, [sortedByNewest]);
 
   const presaleProducts = useMemo(() => {
-    return allProducts.filter((p: any) => p.isPresale);
-  }, [allProducts]);
+    return inStockProducts.filter((p: any) => p.isPresale);
+  }, [inStockProducts]);
 
   const categoryProducts = useMemo(() => {
     if (!categoryGroups.length || !sortedByNewest.length) return [];
@@ -113,7 +116,7 @@ export default function HomePage() {
     }
 
     for (const product of sortedByNewest) {
-      if (product.isPresale) continue;
+      if (product.isPresale || product.stock <= 0) continue;
       const parent = resolveParentCategory(String(product.category || ''), categoryGroups);
       if (!grouped.has(parent)) continue;
       grouped.get(parent)?.push(product);

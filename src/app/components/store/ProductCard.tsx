@@ -67,6 +67,9 @@ export function ProductCard({ product, hideStock = false }: ProductCardProps) {
               }
             }}
           />
+          {product.stock <= 0 && (
+            <div className="absolute inset-0 bg-gray-900/45" aria-label="Producto agotado" />
+          )}
           {product.isPresale && (
             <Badge variant="presale" pixel className="absolute top-3 left-3">
               <Flame className="w-3 h-3 mr-1" />
@@ -127,7 +130,7 @@ export function ProductCard({ product, hideStock = false }: ProductCardProps) {
           <Button
             size="sm"
             disabled={isDisabled}
-            className="bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground border border-primary/20 hover:shadow-[0_0_12px_rgba(255,214,10,0.3)]"
+            className="border border-primary hover:shadow-[0_0_12px_rgba(255,214,10,0.3)] disabled:bg-gray-700 disabled:text-white disabled:border-gray-500 disabled:opacity-100"
             onClick={handleAddToCart}
           >
             <ShoppingCart className="w-4 h-4" />
