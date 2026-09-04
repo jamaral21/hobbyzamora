@@ -99,6 +99,9 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
         return matchesSearch && matchesCategory;
       })
       .sort((a: any, b: any) => {
+        const aOutOfStock = a.stock <= 0;
+        const bOutOfStock = b.stock <= 0;
+        if (aOutOfStock !== bOutOfStock) return aOutOfStock ? 1 : -1;
         if (sortBy === 'price-low') return a.price - b.price;
         if (sortBy === 'price-high') return b.price - a.price;
         if (sortBy === 'name') return a.name.localeCompare(b.name);
