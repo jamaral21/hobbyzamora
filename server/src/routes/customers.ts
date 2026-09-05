@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { prisma } from '../index.js';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
 
@@ -6,6 +8,44 @@ const router = Router();
 const validSalesWhere = {
   status: { notIn: ['PENDING', 'CANCELLED'] },
 };
+
+// Create a customer from the POS without requiring a customer account password.
+router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) => {
+  try {
+    const name = String(req.body.name || '').trim();
+    const phone = String(req.body.phone || '').trim() || null;
+    const providedEmail = String(req.body.email || '').trim().toLowerCase();
+    const email = providedEmail || `pos-${crypto.randomUUID()}@internal.hobbyzamora.local`;
+
+    if (!name) {
+      return res.status(400).json({ error: 'El nombre es obligatorio' });
+    }
+
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      return res.status(400).json({ error: 'Ya existe un cliente con ese email' });
+    }
+
+    const password = await bcrypt.hash(crypto.randomUUID(), 10);
+    const user = await prisma.user.create({
+      data: { name, email, phone, password, role: 'CUSTOMER' },
+      select: { id: true, name: true, email: true, phone: true, createdAt: true },
+    });
+
+    res.status(201).json({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone || '',
+      joinDate: user.createdAt,
+      totalOrders: 0,
+      totalSpent: 0,
+    });
+  } catch (error) {
+    console.error('Create customer error:', error);
+    res.status(500).json({ error: 'No se pudo crear el cliente' });
+  }
+});
 
 // Get all customers
 router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) => {

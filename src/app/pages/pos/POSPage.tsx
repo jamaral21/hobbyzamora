@@ -7,7 +7,7 @@ import { POSProductGrid } from '../../components/pos/POSProductGrid';
 import { PaymentSelector, PaymentMethod } from '../../components/pos/PaymentSelector';
 import { Modal } from '../../components/design-system/Modal';
 import { usePOSProducts, useCustomers, useMutation } from '../../hooks/useData';
-import { posAPI, Customer } from '../../lib/api';
+import { customersAPI, posAPI, Customer } from '../../lib/api';
 
 interface Product {
   id: string;
@@ -31,6 +31,7 @@ export default function POSPage() {
   const [presaleAttemptProduct, setPresaleAttemptProduct] = useState<Product | null>(null);
   const [customerTab, setCustomerTab] = useState<'search' | 'create'>('search');
   const [newCustomerForm, setNewCustomerForm] = useState({ name: '', email: '', phone: '' });
+  const [customerError, setCustomerError] = useState<string | null>(null);
   const [saleResult, setSaleResult] = useState<{ orderNumber: string; change: number; method: PaymentMethod } | null>(null);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
@@ -45,11 +46,12 @@ export default function POSPage() {
   } | null>(null);
 
   const { data: products, isLoading } = usePOSProducts(searchQuery || undefined);
-  const { data: customers, isLoading: customersLoading } = useCustomers(
+  const { data: customers, isLoading: customersLoading, refetch: refetchCustomers } = useCustomers(
     { search: customerSearch || undefined },
     { enabled: isCustomerModalOpen }
   );
   const createSale = useMutation(posAPI.createSale);
+  const createCustomer = useMutation(customersAPI.create);
 
   useEffect(() => {
     if (scanMessage) {
@@ -124,6 +126,7 @@ export default function POSPage() {
 
   const handleSelectCustomer = (customer: Customer) => {
     setSelectedCustomer(customer);
+    setCustomerError(null);
     setIsCustomerModalOpen(false);
     setCustomerSearch('');
     setCustomerTab('search');
@@ -148,18 +151,21 @@ export default function POSPage() {
     }
   };
 
-  const handleCreateCustomer = () => {
+  const handleCreateCustomer = async () => {
     if (!newCustomerForm.name.trim()) return;
-    const newCustomer: Customer = {
-      id: `new-${Date.now()}`,
-      name: newCustomerForm.name.trim(),
-      email: newCustomerForm.email.trim(),
-      phone: newCustomerForm.phone.trim(),
-      totalOrders: 0,
-      totalSpent: 0,
-      joinDate: new Date().toISOString().split('T')[0],
-    };
-    handleSelectCustomer(newCustomer);
+    setCustomerError(null);
+
+    try {
+      const newCustomer = await createCustomer.mutate({
+        name: newCustomerForm.name.trim(),
+        email: newCustomerForm.email.trim() || undefined,
+        phone: newCustomerForm.phone.trim() || undefined,
+      });
+      handleSelectCustomer(newCustomer);
+      await refetchCustomers();
+    } catch (error: any) {
+      setCustomerError(error?.message || 'No se pudo crear el cliente.');
+    }
   };
 
   const handlePayment = async (method: PaymentMethod, amountPaid?: number) => {
@@ -581,10 +587,11 @@ export default function POSPage() {
               <Button
                 fullWidth
                 onClick={handleCreateCustomer}
-                disabled={!newCustomerForm.name.trim()}
+                disabled={!newCustomerForm.name.trim() || createCustomer.isLoading}
               >
-                Crear y Asociar Cliente
+                {createCustomer.isLoading ? 'Guardando...' : 'Crear y Asociar Cliente'}
               </Button>
+              {customerError && <p className="text-sm text-destructive">{customerError}</p>}
             </div>
           )}
         </div>

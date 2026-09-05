@@ -851,6 +851,12 @@ export const analyticsAPI = {
 
 // Customers API
 export const customersAPI = {
+  create: (data: { name: string; email?: string; phone?: string }) =>
+    fetchAPI<Customer>('/customers', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }, 'admin'),
+
   getAll: (params?: { search?: string; page?: number; limit?: number }) => {
     const searchParams = new URLSearchParams();
     if (params?.search) searchParams.set('search', params.search);

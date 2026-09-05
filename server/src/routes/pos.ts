@@ -563,6 +563,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
     const order = await prisma.order.create({
       data: {
         orderNumber: generatePOSOrderNumber(),
+        userId: customerId || null,
         customerName,
         customerEmail,
         customerPhone,
