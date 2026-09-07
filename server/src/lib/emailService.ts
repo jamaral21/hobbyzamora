@@ -409,14 +409,20 @@ export async function sendPresaleReservationEmail(
   name: string,
   productName: string,
   productPrice: number,
+  quantity: number,
 ): Promise<void> {
   const link = `${BASE_URL}/store/presales`;
+  const totalPrice = productPrice * quantity;
   const html = layout(`Reserva confirmada – ${productName}`, `
     <h2>¡Hola, ${name}! 🎉</h2>
     <p>Tu reserva de preventa ha sido confirmada para:</p>
     <div class="info-box" style="text-align:center;padding:20px">
       <span style="font-size:18px;font-weight:700;color:#ffd60a">${productName}</span><br>
-      <span style="font-size:15px;color:#e8e6f0;margin-top:6px;display:block">Precio de preventa: ${formatPrice(productPrice)}</span>
+      <div style="font-size:15px;color:#e8e6f0;margin-top:14px;display:grid;gap:6px;text-align:left">
+        <span>Cantidad: <strong>${quantity}</strong></span>
+        <span>Costo unitario: <strong>${formatPrice(productPrice)}</strong></span>
+        <span>Costo total: <strong style="color:#ffd60a">${formatPrice(totalPrice)}</strong></span>
+      </div>
     </div>
     <p>Te avisaremos cuando el producto llegue a nuestra tienda. En ese momento tendrás <strong style="color:#ffd60a">24 horas</strong> para completar el pago.</p>
     <div style="text-align:center">

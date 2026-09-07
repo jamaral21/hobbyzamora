@@ -182,6 +182,7 @@ router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) =
       user.name,
       reservation.product.name,
       parseFloat((reservation.product.price as any).toString()),
+      reservation.quantity,
     ).catch((err) => console.error('[presale] Error al enviar email de reserva:', err));
 
     return res.status(201).json({
