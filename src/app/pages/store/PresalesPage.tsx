@@ -580,6 +580,10 @@ function PresalesContent() {
 
                       <p className="text-lg font-bold text-primary">{formatCLP(reservation.product.price)}</p>
 
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Cantidad reservada: <span className="text-foreground font-semibold">{reservation.quantity}</span>
+                      </p>
+
                       {isNotified && reservation.expiresAt && (
                         <p className="text-xs text-amber-500 font-semibold mt-1">
                           <Clock className="w-3 h-3 inline mr-1" />
@@ -599,13 +603,13 @@ function PresalesContent() {
                         <Button
                           size="sm"
                           onClick={() => {
-                            if (!alreadyInCart) addItem(reservation.product as any, reservation.quantity);
+                            addItem(reservation.product as any, reservation.quantity);
                           }}
                         >
                           {alreadyInCart ? (
                             <>
                               <CheckCircle className="w-4 h-4" />
-                              En el carrito
+                              Agregar cantidad
                             </>
                           ) : (
                             <>

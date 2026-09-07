@@ -653,12 +653,11 @@ function AccountContent() {
                         size="sm"
                         className="shrink-0"
                         onClick={() => {
-                          const alreadyInCart = cartItems.some(i => i.productId === r.productId);
-                          if (!alreadyInCart) addItem(r.product as any, r.quantity);
+                          addItem(r.product as any, r.quantity);
                         }}
                       >
                         <ShoppingBag className="w-3.5 h-3.5 mr-1" />
-                        {cartItems.some(i => i.productId === r.productId) ? 'En carrito' : 'Al carrito'}
+                        {cartItems.some(i => i.productId === r.productId) ? 'Sumar al carrito' : 'Al carrito'}
                       </Button>
                     )}
                   </div>
