@@ -41,8 +41,8 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
         return true;
       });
     }
-    return isAuthenticated ? products : products.filter((p: any) => !p.isPresale);
-  }, [products, presalesOnly, isAuthenticated]);
+    return products.filter((p: any) => !p.isPresale);
+  }, [products, presalesOnly]);
 
   const groups = useMemo(() => buildSectionGroups(sectionData || []), [sectionData]);
 

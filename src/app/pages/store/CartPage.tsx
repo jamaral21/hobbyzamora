@@ -130,7 +130,7 @@ export default function CartPage() {
             <p className="text-muted-foreground mb-6">
               Agrega productos increíbles para comenzar
             </p>
-            <Link to="/store/products">
+            <Link to="/">
               <Button>Ver Productos</Button>
             </Link>
           </Card>
