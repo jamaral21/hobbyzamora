@@ -128,7 +128,9 @@ export default function ProductDetailPage() {
     try {
       const { reservation } = await presaleAPI.reserve(id, quantity);
       setMyReservation(reservation);
-      setShowReserveDialog(false);
+      requestAnimationFrame(() => {
+        setShowReserveDialog(false);
+      });
     } catch (error: any) {
       setReserveError(error?.message ?? 'No se pudo completar la reserva. Intenta de nuevo.');
     } finally {
