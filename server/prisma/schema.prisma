@@ -125,17 +125,26 @@ model ProductVariant {
 // ==================== INVENTORY (FIFO) ====================
 
 model InventoryBatch {
-  id         String   @id @default(uuid())
-  productId  String
-  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  batchCode  String
-  quantity   Int
-  remaining  Int
-  unitCost   Decimal
-  receivedAt DateTime @default(now())
+  id                  String   @id @default(uuid())
+  productId           String?
+  product             Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
+  shipmentBoxId       String?
+  shipmentBox         ShipmentsBox? @relation(fields: [shipmentBoxId], references: [id], onDelete: SetNull)
+  batchCode           String
+  ean                 String?
+  disposition         String   @default("SELLABLE")
+  quantity            Int
+  remaining           Int
+  unitCost            Decimal
+  receivedAt          DateTime @default(now())
 
-  inventoryMovements InventoryMovement[]
+  inventoryMovements   InventoryMovement[]
+  inventoryConsumptions InventoryConsumption[]
 
+  @@index([productId, receivedAt])
+  @@index([ean])
+  @@index([shipmentBoxId])
+  @@index([disposition])
   @@map("inventory_batches")
 }
 
@@ -212,8 +221,24 @@ model OrderItem {
   cost        Decimal
   quantity    Int
   variantName String?
+  inventoryConsumptions InventoryConsumption[]
 
   @@map("order_items")
+}
+
+model InventoryConsumption {
+  id          String   @id @default(uuid())
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  batchId     String
+  batch       InventoryBatch @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  quantity    Int
+  unitCost    Decimal
+  createdAt   DateTime @default(now())
+
+  @@index([orderItemId])
+  @@index([batchId])
+  @@map("inventory_consumptions")
 }
 
 // ==================== PAYMENTS ====================
@@ -479,11 +504,14 @@ model ShipmentsBox {
   // Internación (puede ser null o tener datos)
   internacionArancel   Decimal?                // arancel en CLP
   internacionIva       Decimal?                // IVA en CLP
+  isHistorical         Boolean  @default(false)
+  deductPurchaseUnits  Boolean  @default(false)
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  productos ShipmentsBoxProduct[]
+  productos        ShipmentsBoxProduct[]
+  inventoryBatches InventoryBatch[]
   
   @@index([boxId])
   @@index([estado])
@@ -528,6 +556,24 @@ model ShipmentsChileStock {
 
   @@index([sku])
   @@map("shipments_chile_stock")
+}
+
+model InventoryReconciliation {
+  id          String   @id @default(uuid())
+  productId   String?
+  ean         String?
+  nombre      String
+  quantity    Int
+  type        String
+  reason      String?
+  importedVia String   @default("manual")
+  occurredAt  DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([productId])
+  @@index([ean])
+  @@index([occurredAt])
+  @@map("inventory_reconciliations")
 }
 
 // 7. Pedidos Web

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../index.js';
 import { getPresaleUnavailableReason, getRequestedPresaleQuantity } from '../lib/presaleUtils.js';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
+import { consumeOrderInventory, restoreOrderInventory } from '../lib/orderInventoryService.js';
 
 const parseImages = (images: string): string[] => {
   try { return JSON.parse(images); } catch { return images ? [images] : []; }
@@ -533,15 +534,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
       // Deduct stock for non-presale items. Las reservas de preventa se marcan como
       // PAID recien cuando el terminal confirme la aprobacion (ver /pos/getnet/status),
       // para no dejarlas bloqueadas si el pago con tarjeta termina siendo rechazado.
-      for (const item of orderItems) {
-        const product = await prisma.product.findUnique({ where: { id: item.productId }, select: { isPresale: true } });
-        if (!product?.isPresale) {
-          await prisma.product.update({
-            where: { id: item.productId },
-            data: { stock: { decrement: item.quantity } },
-          });
-        }
-      }
+      await prisma.$transaction((tx) => consumeOrderInventory(tx, order.id));
 
       return res.status(201).json({
         ...order,
@@ -610,13 +603,10 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
             create: { userId: customerId, productId: item.productId, status: 'PAID', paidAt: new Date() },
           });
         }
-      } else {
-        await prisma.product.update({
-          where: { id: item.productId },
-          data: { stock: { decrement: item.quantity } },
-        });
       }
     }
+
+    await prisma.$transaction((tx) => consumeOrderInventory(tx, order.id));
 
     // Calculate change if cash payment
     const change = paymentMethod === 'CASH' && amountPaid ? amountPaid - total : 0;
@@ -716,19 +706,7 @@ router.post('/getnet/status', authenticate, requireRole('ADMIN', 'STAFF'), async
         });
 
         if (payment.order.status !== 'CANCELLED') {
-          for (const item of payment.order.items) {
-            const product = await tx.product.findUnique({
-              where: { id: item.productId },
-              select: { isPresale: true },
-            });
-
-            if (!product?.isPresale) {
-              await tx.product.update({
-                where: { id: item.productId },
-                data: { stock: { increment: item.quantity } },
-              });
-            }
-          }
+          await restoreOrderInventory(tx, payment.orderId);
 
           await tx.order.update({
             where: { id: payment.orderId },

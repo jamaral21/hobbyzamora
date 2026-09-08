@@ -1,5 +1,6 @@
 import { prisma } from '../index.js';
 import { Decimal } from '@prisma/client/runtime/library';
+import { planCosteoDestinations } from './shipmentInventoryService.js';
 import type {
   ShipmentsBox,
   ShipmentsBoxProduct,
@@ -17,10 +18,14 @@ interface CosteoItemInput {
   cant: number;
   pct: number;
   costoUnit?: number;
+  sellable?: number;
+  collection?: number;
+  personal?: number;
 }
 
 interface ConfirmCosteoPayload {
   productos: CosteoItemInput[];
+  holdUnassigned?: boolean;
 }
 
 interface CosteoBoxItem {
@@ -284,14 +289,76 @@ export async function confirmCosteoCaja(
         };
       });
 
-      await tx.shipmentsChileStock.createMany({
-        data: stockEntriesData,
+      const batchEntriesData: Array<{
+        productId: string | null;
+        shipmentBoxId: string;
+        batchCode: string;
+        ean: string | null;
+        disposition: string;
+        quantity: number;
+        remaining: number;
+        unitCost: Decimal;
+        receivedAt: Date;
+      }> = [];
+
+      for (const item of normalizedItems) {
+        const boxProduct = boxProductsByCompraId.get(item.compraId)!;
+        const costoUnit = calculateCostoUnit(totals, item.pct, boxProduct.cant);
+        const destinations = planCosteoDestinations({
+          received: boxProduct.cant,
+          sellable: item.sellable ?? 0,
+          collection: item.collection ?? 0,
+          personal: item.personal ?? 0,
+          holdUnassigned: payload.holdUnassigned === true,
+        });
+
+        const product = boxProduct.ean
+          ? await tx.product.findFirst({ where: { ean: boxProduct.ean }, select: { id: true } })
+          : null;
+
+        for (const destination of destinations) {
+          if (destination.disposition === 'SELLABLE' && !product) {
+            throw new Error(`PRODUCT_NOT_ASSOCIATED:${boxProduct.ean || boxProduct.sku}`);
+          }
+
+          batchEntriesData.push({
+            productId: product?.id ?? null,
+            shipmentBoxId: box.id,
+            batchCode: `${box.boxId}-${boxProduct.sku}-${destination.disposition}`,
+            ean: boxProduct.ean,
+            disposition: destination.disposition,
+            quantity: destination.quantity,
+            remaining: destination.disposition === 'SELLABLE' ? destination.quantity : 0,
+            unitCost: new Decimal(costoUnit),
+            receivedAt: box.fecha,
+          });
+        }
+      }
+
+      const sellableStockEntries = stockEntriesData.flatMap((entry, index) => {
+        const sellable = normalizedItems[index].sellable ?? 0;
+        return sellable > 0 ? [{ ...entry, cant: sellable }] : [];
       });
+
+      if (sellableStockEntries.length > 0) {
+        await tx.shipmentsChileStock.createMany({ data: sellableStockEntries });
+      }
+
+      if (batchEntriesData.length > 0) {
+        await tx.inventoryBatch.createMany({ data: batchEntriesData });
+      }
+
+      for (const batch of batchEntriesData.filter((entry) => entry.disposition === 'SELLABLE' && entry.productId)) {
+        await tx.product.update({
+          where: { id: batch.productId! },
+          data: { stock: { increment: batch.quantity } },
+        });
+      }
 
       const stockEntries = (await tx.shipmentsChileStock.findMany({
         where: { cajaId: box.boxId },
         orderBy: { createdAt: 'desc' },
-        take: stockEntriesData.length,
+        take: sellableStockEntries.length,
       })) as ShipmentsChileStock[];
 
       const updatedBox = (await tx.shipmentsBox.update({
@@ -377,6 +444,24 @@ export async function confirmCosteoCaja(
         error: {
           code: 'VALIDATION_ERROR',
           message: 'El detalle de productos no coincide con los productos de la caja',
+        },
+      };
+    }
+
+    if (error.message?.startsWith('PRODUCT_NOT_ASSOCIATED:')) {
+      return {
+        error: {
+          code: 'CONFLICT',
+          message: `No existe un producto asociado para ${error.message.split(':')[1]}. Sincronice el EAN/JAN antes de ingresar unidades vendibles.`,
+        },
+      };
+    }
+
+    if (error.message === 'DESTINATION_EXCEEDS_RECEIVED' || error.message === 'INVALID_DESTINATION_QUANTITY') {
+      return {
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Las cantidades por destino son inválidas',
         },
       };
     }

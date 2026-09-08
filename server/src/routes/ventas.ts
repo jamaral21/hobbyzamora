@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../index.js';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
+import { consumeOrderInventory } from '../lib/orderInventoryService.js';
 
 const router = Router();
 
@@ -85,10 +86,6 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
       return res.status(404).json({ error: 'Producto no encontrado' });
     }
 
-    if (quantity > product.stock) {
-      return res.status(400).json({ error: `Stock insuficiente. Disponible: ${product.stock}` });
-    }
-
     const total = salePrice * quantity;
     const now = new Date();
 
@@ -133,14 +130,9 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
         },
       });
 
-      await tx.product.update({
-        where: { id: product.id },
-        data: {
-          stock: { decrement: quantity },
-        },
-      });
+      await consumeOrderInventory(tx, order.id);
 
-      return order;
+      return tx.order.findUniqueOrThrow({ where: { id: order.id }, include: { items: true } });
     });
 
     const item = created.items[0];
@@ -163,6 +155,9 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
     });
   } catch (error) {
     console.error('POST /shipments/ventas error:', error);
+    if (error instanceof Error && error.message.startsWith('INSUFFICIENT_STOCK:')) {
+      return res.status(400).json({ error: 'Stock insuficiente en lotes FIFO' });
+    }
     return res.status(500).json({ error: 'No se pudo registrar la venta' });
   }
 });
