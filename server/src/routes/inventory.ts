@@ -1,6 +1,9 @@
 import { Router } from 'express';
 import { prisma } from '../index.js';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
+import { deductStockFIFO, returnStockFIFO } from '../lib/inventoryService.js';
+
+export { deductStockFIFO, returnStockFIFO } from '../lib/inventoryService.js';
 
 const router = Router();
 
@@ -17,6 +20,7 @@ router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) =>
     const batches = await prisma.inventoryBatch.findMany({
       where: {
         ...where,
+        productId: { not: null },
         remaining: { gt: 0 },
       },
       include: {
@@ -29,6 +33,8 @@ router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) =>
 
     // Calculate totals per product
     const byProduct = batches.reduce((acc, batch) => {
+      if (!batch.productId || !batch.product) return acc;
+
       const key = batch.productId;
       if (!acc[key]) {
         acc[key] = {
@@ -308,89 +314,5 @@ router.post('/import', authenticate, requireRole('ADMIN', 'STAFF'), async (req: 
     res.status(500).json({ error: 'Failed to import inventory' });
   }
 });
-
-// FIFO: Deduct stock (internal function used by orders)
-export async function deductStockFIFO(
-  productId: string, 
-  quantity: number, 
-  reference: string
-): Promise<{ success: boolean; cost: number; error?: string }> {
-  let remainingToDeduct = quantity;
-  let totalCost = 0;
-
-  // Get batches ordered by FIFO (oldest first)
-  const batches = await prisma.inventoryBatch.findMany({
-    where: {
-      productId,
-      remaining: { gt: 0 },
-    },
-    orderBy: { receivedAt: 'asc' },
-  });
-
-  const totalAvailable = batches.reduce((sum, b) => sum + b.remaining, 0);
-  if (totalAvailable < quantity) {
-    return { 
-      success: false, 
-      cost: 0, 
-      error: `Insufficient stock. Available: ${totalAvailable}, Requested: ${quantity}` 
-    };
-  }
-
-  for (const batch of batches) {
-    if (remainingToDeduct <= 0) break;
-
-    const deductFromBatch = Math.min(batch.remaining, remainingToDeduct);
-    totalCost += deductFromBatch * parseFloat(batch.unitCost.toString());
-    remainingToDeduct -= deductFromBatch;
-
-    // Update batch
-    await prisma.inventoryBatch.update({
-      where: { id: batch.id },
-      data: { remaining: batch.remaining - deductFromBatch },
-    });
-
-    // Record movement
-    await prisma.inventoryMovement.create({
-      data: {
-        batchId: batch.id,
-        type: 'OUT',
-        quantity: -deductFromBatch,
-        reference,
-      },
-    });
-  }
-
-  return { success: true, cost: totalCost };
-}
-
-// FIFO: Return stock (for returns/cancellations)
-export async function returnStockFIFO(
-  productId: string,
-  quantity: number,
-  unitCost: number,
-  reference: string
-): Promise<{ success: boolean; batchId: string }> {
-  // Create a new batch for returned items
-  const batch = await prisma.inventoryBatch.create({
-    data: {
-      productId,
-      batchCode: `RETURN-${Date.now()}`,
-      quantity,
-      remaining: quantity,
-      unitCost,
-    },
-  });
-
-  await prisma.inventoryMovement.create({
-    data: {
-      batchId: batch.id,
-      type: 'RETURN',
-      quantity,
-      reference,
-    },
-  });
-
-  return { success: true, batchId: batch.id };
-}
 
 export default router;

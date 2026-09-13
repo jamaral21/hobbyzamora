@@ -10,6 +10,7 @@ import {
 } from '../lib/emailService.js';
 import { getPresaleUnavailableReason, getRequestedPresaleQuantity } from '../lib/presaleUtils.js';
 import { getChileDayRange } from '../lib/chileDate.js';
+import { consumeOrderInventory, restoreOrderInventory } from '../lib/orderInventoryService.js';
 
 const router = Router();
 
@@ -485,13 +486,10 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
             create: { userId, productId: item.productId, status: 'PAID', paidAt: new Date() },
           });
         }
-      } else {
-        await prisma.product.update({
-          where: { id: item.productId },
-          data: { stock: { decrement: item.quantity } },
-        });
       }
     }
+
+    await prisma.$transaction((tx) => consumeOrderInventory(tx, order.id));
 
     const orderResponse = {
       ...order,
@@ -569,12 +567,7 @@ router.patch('/:id/status', authenticate, requireRole('ADMIN', 'STAFF'), async (
 
     // Handle cancellation - return stock
     if (status === 'CANCELLED' && order.status !== 'CANCELLED') {
-      for (const item of order.items) {
-        await prisma.product.update({
-          where: { id: item.productId },
-          data: { stock: { increment: item.quantity } },
-        });
-      }
+      await prisma.$transaction((tx) => restoreOrderInventory(tx, order.id));
     }
 
     const updated = await prisma.order.update({

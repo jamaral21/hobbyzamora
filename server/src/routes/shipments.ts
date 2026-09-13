@@ -19,6 +19,7 @@ import balanceRoutes from './balance.js';
 import flujoRoutes from './flujo.js';
 import dashboardRoutes from './dashboard.js';
 import configRoutes from './config.js';
+import historicoInventarioRoutes from './shipments/historico-inventario.js';
 
 const router = express.Router();
 
@@ -47,6 +48,7 @@ router.use('/bodega-transito', bodegaTransitoRoutes);
 router.use('/compras-web', comprasWebRoutes);
 router.use('/internacion', internacionRoutes);
 router.use('/costeo', costeoRoutes);
+router.use('/historico-inventario', historicoInventarioRoutes);
 
 // ==================== MÓDULOS CHILE ====================
 router.use('/bodega-chile', bodegaChileRoutes);
