@@ -119,7 +119,7 @@ export default function OrderDetailPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" disabled={!order.shippingStreet} onClick={() => openShippingLabelPrintPreview(order)}>
+            <Button variant="outline" size="sm" disabled={!order.shippingStreet && order.deliveryMethod !== 'starken-sucursal'} onClick={() => openShippingLabelPrintPreview(order)}>
               <Printer className="w-4 h-4" /> Etiqueta
             </Button>
             <Badge variant={STATUS_BADGE_VARIANT[order.status] || 'default'} size="md">

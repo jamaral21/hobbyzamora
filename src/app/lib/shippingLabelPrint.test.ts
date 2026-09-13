@@ -13,4 +13,14 @@ describe('buildShippingLabelHtml', () => {
     expect(html).toContain('Producto 1 ×2');
     expect(html).toContain('@page { size: 90mm 70mm;');
   });
+
+  it('prints the selected branch for Starken branch deliveries', () => {
+    const html = buildShippingLabelHtml({
+      id: 'order-2', orderNumber: 'ORD-002', customerName: 'Cliente', customerEmail: 'cliente@example.com', deliveryMethod: 'starken-sucursal', notes: 'Método de entrega: Starken – Retiro en sucursal | Ciudad sucursal: Viña del Mar', createdAt: '2026-08-21T00:00:00.000Z', subtotal: 0, tax: 0, shipping: 0, discount: 0, total: 0, status: 'PENDING', source: 'ONLINE', items: [],
+    });
+
+    expect(html).toContain('<strong>Sucursal:</strong> Viña del Mar');
+    expect(html).not.toContain('<strong>Entrega:</strong>');
+    expect(html).not.toContain('Dirección:</strong> No informada');
+  });
 });

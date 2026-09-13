@@ -29,6 +29,11 @@ function getShippingAddress(order: Pick<Order, 'shippingStreet' | 'shippingCity'
   ].filter((part): part is string => Boolean(part?.trim())).join(', ') || 'No informada';
 }
 
+function getSucursalName(notes?: string | null): string {
+  const match = notes?.match(/(?:^|\|)\s*Ciudad sucursal:\s*([^|]+)/i);
+  return match?.[1]?.trim() || 'No informada';
+}
+
 export function buildShippingLabelHtml(order: Order): string {
   const products = order.items
     .map((item) => `${item.name}${item.quantity > 1 ? ` ×${item.quantity}` : ''}`)
@@ -39,8 +44,14 @@ export function buildShippingLabelHtml(order: Order): string {
     ['Rut', order.customerRut || 'No informado'],
     ['Email', order.customerEmail],
     ['Teléfono', order.customerPhone || 'No informado'],
-    ['Tipo de entrega', getDeliveryMethodLabel(order.deliveryMethod)],
-    ['Dirección', getShippingAddress(order)],
+    ...(order.deliveryMethod === 'starken-sucursal'
+      ? [
+          ['Sucursal', getSucursalName(order.notes)],
+        ]
+      : [
+          ['Tipo de entrega', getDeliveryMethodLabel(order.deliveryMethod)],
+          ['Dirección', getShippingAddress(order)],
+        ]),
   ].map(([label, value]) => `<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}</p>`).join('');
 
   return `<!doctype html>

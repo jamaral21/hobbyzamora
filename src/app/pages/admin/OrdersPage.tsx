@@ -400,7 +400,7 @@ export default function OrdersPage() {
                     size="sm"
                     title="Imprimir etiqueta de envío"
                     aria-label="Imprimir etiqueta de envío"
-                    disabled={!order.shippingStreet}
+                    disabled={!order.shippingStreet && order.deliveryMethod !== 'starken-sucursal'}
                     onClick={() => openShippingLabelPrintPreview(order)}
                   >
                     <Printer className="w-4 h-4" />
