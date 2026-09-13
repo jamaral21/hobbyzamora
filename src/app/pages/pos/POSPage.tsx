@@ -443,7 +443,7 @@ export default function POSPage() {
               <Button
                 variant="outline"
                 fullWidth
-                onClick={checkGetnetPayment}
+                onClick={() => checkGetnetPayment()}
                 disabled={getnetPending.isChecking}
               >
                 {getnetPending.isChecking ? 'Verificando...' : 'Verificar Estado de Pago'}

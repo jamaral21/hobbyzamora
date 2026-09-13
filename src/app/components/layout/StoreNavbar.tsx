@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { Search, ShoppingCart, User, Menu, X, Star, ChevronDown } from 'lucide-react';
 import { Button } from '../design-system/Button';
@@ -94,7 +93,7 @@ export function StoreNavbar() {
       </div>
 
       {/* Mobile Menu */}
-      {isMounted && isMenuOpen && createPortal(
+      {isMounted && isMenuOpen && (
         <>
           <button
             type="button"
@@ -159,8 +158,7 @@ export function StoreNavbar() {
               ))}
             </div>
           </div>
-        </>,
-        document.body,
+        </>
       )}
 
       {/* Category Bar */}
