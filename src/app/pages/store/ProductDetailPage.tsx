@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router';
-import { ShoppingCart, Heart, Share2, AlertCircle, Clock, Loader2, Bookmark } from 'lucide-react';
+import { ShoppingCart, Heart, Share2, AlertCircle, Clock, Loader2, Bookmark, CreditCard } from 'lucide-react';
 import { StoreLayout } from '../../components/layout/StoreLayout';
 import { Button } from '../../components/design-system/Button';
 import { Badge } from '../../components/design-system/Badge';
@@ -430,15 +430,21 @@ export default function ProductDetailPage() {
 
             <div className="flex gap-3 mb-8">
               {product.isPresale ? (
-                // Presale expired → disabled
-                product.presaleEndDate && new Date(product.presaleEndDate) < new Date() ? (
+                myReservation?.status === 'NOTIFIED' ? (
+                  <Button
+                    fullWidth
+                    size="lg"
+                    onClick={() => {
+                      addItem(product, myReservation.quantity);
+                      window.location.href = '/store/checkout';
+                    }}
+                  >
+                    <CreditCard className="w-5 h-5 mr-2" />
+                    Pagar reserva ({myReservation.quantity} unid.)
+                  </Button>
+                ) : product.presaleEndDate && new Date(product.presaleEndDate) < new Date() ? (
                   <Button fullWidth size="lg" disabled>
                     Preventa Expirada
-                  </Button>
-                ) : myReservation?.status === 'NOTIFIED' ? (
-                  <Button fullWidth size="lg" disabled variant="outline">
-                    <Bookmark className="w-5 h-5" />
-                    Pago pendiente
                   </Button>
                 ) : myReservation?.status === 'PENDING' && myReservation.quantity >= maxPresaleQuantity ? (
                   <Button fullWidth size="lg" disabled variant="outline">

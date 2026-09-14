@@ -274,6 +274,8 @@ function AvailablePresales({
 
   const available = products.filter(
     (product) =>
+      Boolean(product.isPresale) &&
+      (product.status ? product.status === 'ACTIVE' : true) &&
       (!reservedProductIds.has(product.id) || (reservationQuantities.get(product.id) ?? 0) < (product.presaleMaxQty ?? Number.MAX_SAFE_INTEGER)) &&
       (product.presaleAvailQty == null || product.presaleAvailQty > 0) &&
       (!product.presaleEndDate || new Date(product.presaleEndDate) > new Date())

@@ -363,7 +363,16 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
         });
 
         const unavailableReason = getPresaleUnavailableReason(product, new Date(), activeReservedTotal._sum.quantity ?? 0);
-        if (unavailableReason && !(hasNotifiedReservation && unavailableReason === 'No hay cupos disponibles para esta preventa')) {
+        if (
+          unavailableReason &&
+          !(
+            hasNotifiedReservation &&
+            (
+              unavailableReason === 'No hay cupos disponibles para esta preventa' ||
+              unavailableReason === 'Esta preventa ya venció'
+            )
+          )
+        ) {
           return res.status(400).json({ error: `${product.name}: ${unavailableReason}` });
         }
 

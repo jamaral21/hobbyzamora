@@ -558,17 +558,14 @@ router.get('/', optionalAuth, async (req: AuthRequest, res) => {
       where.isPresale = true;
     } else if (presale === 'false') {
       where.isPresale = false;
+    } else if (!req.user) {
+      where.isPresale = false;
     }
 
     if (featured === 'true') {
       where.featured = true;
     } else if (featured === 'false') {
       where.featured = false;
-    }
-
-    // Usuarios no autenticados no pueden ver productos de preventa
-    if (!req.user) {
-      where.isPresale = false;
     }
 
     if (search) {
