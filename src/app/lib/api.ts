@@ -631,7 +631,7 @@ export const ordersAPI = {
     }>(`/orders${query ? `?${query}` : ''}`, undefined, 'admin');
   },
 
-  getById: (id: string) => fetchAPI<Order>(`/orders/${id}`),
+  getById: (id: string) => fetchAPI<Order>(`/orders/${id}`, undefined, 'admin'),
 
   updateTracking: (id: string, data: { trackingNumber: string; shippingCompany: string }) =>
     fetchAPI<Order>(`/orders/${id}/tracking`, {
@@ -672,6 +672,12 @@ export const ordersAPI = {
     fetchAPI<Order>(`/orders/${id}/status`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
+    }, 'admin'),
+
+  updatePaymentMethod: (id: string, method: Payment['method']) =>
+    fetchAPI<Order>(`/orders/${id}/payment-method`, {
+      method: 'PATCH',
+      body: JSON.stringify({ method }),
     }, 'admin'),
 
   getMyOrders: () => fetchAPI<Order[]>('/orders/my/orders', undefined, 'customer'),

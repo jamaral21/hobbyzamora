@@ -618,6 +618,80 @@ router.patch('/:id/status', authenticate, requireRole('ADMIN', 'STAFF'), async (
   }
 });
 
+router.patch('/:id/payment-method', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
+  try {
+    const id = req.params.id as string;
+    const method = typeof req.body?.method === 'string' ? req.body.method.toUpperCase() : '';
+    const allowedMethods = ['CARD', 'GETNET', 'CASH', 'TRANSFER'];
+
+    if (!allowedMethods.includes(method)) {
+      return res.status(400).json({ error: 'Invalid payment method' });
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: { payments: { orderBy: { createdAt: 'desc' } } },
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    if (order.payments.length > 0) {
+      await prisma.payment.update({
+        where: { id: order.payments[0].id },
+        data: {
+          method,
+          getnetPaymentId: null,
+          getnetOrderId: null,
+          getnetCheckoutUrl: null,
+          cardLast4: null,
+          cardBrand: null,
+        },
+      });
+    } else {
+      await prisma.payment.create({
+        data: {
+          orderId: id,
+          method,
+          status: 'PENDING',
+          amount: order.total,
+        },
+      });
+    }
+
+    const updated = await prisma.order.findUnique({
+      where: { id },
+      include: { items: true, payments: true },
+    });
+
+    if (!updated) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    res.json({
+      ...updated,
+      subtotal: parseFloat(updated.subtotal.toString()),
+      tax: parseFloat(updated.tax.toString()),
+      shipping: parseFloat(updated.shipping.toString()),
+      discount: parseFloat(updated.discount.toString()),
+      total: parseFloat(updated.total.toString()),
+      items: updated.items.map(i => ({
+        ...i,
+        price: parseFloat(i.price.toString()),
+        cost: parseFloat(i.cost.toString()),
+      })),
+      payments: updated.payments.map(payment => ({
+        ...payment,
+        amount: parseFloat(payment.amount.toString()),
+      })),
+    });
+  } catch (error) {
+    console.error('Update order payment method error:', error);
+    res.status(500).json({ error: 'Failed to update payment method' });
+  }
+});
+
 router.patch('/:id/tracking', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
   try {
     const id = req.params.id as string;

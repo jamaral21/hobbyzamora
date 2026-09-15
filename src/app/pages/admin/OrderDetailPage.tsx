@@ -11,10 +11,17 @@ import { Modal } from '../../components/design-system/Modal';
 import { useOrder, useUpdateOrderStatus } from '../../hooks/useData';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
 import { ordersAPI } from '../../lib/api';
+import type { Order, Payment } from '../../lib/api';
 import { openShippingLabelPrintPreview } from '../../lib/shippingLabelPrint';
 import { formatChileDateTime } from '../../lib/chileDate';
 
 const STATUS_OPTIONS = ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED'] as const;
+const PAYMENT_METHOD_OPTIONS: Array<{ value: Payment['method']; label: string }> = [
+  { value: 'CARD', label: 'Tarjeta' },
+  { value: 'GETNET', label: 'Getnet' },
+  { value: 'CASH', label: 'Efectivo' },
+  { value: 'TRANSFER', label: 'Transferencia' },
+];
 
 const STATUS_BADGE_VARIANT: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
   PENDING: 'default',
@@ -227,6 +234,7 @@ export default function OrderDetailPage() {
           </Card>
 
           {/* Payments */}
+          <PaymentMethodCard order={order} onSaved={refetch} />
           {order.payments && order.payments.length > 0 && (
             <Card>
               <div className="flex items-center gap-2 mb-4">
@@ -365,6 +373,57 @@ export default function OrderDetailPage() {
         </div>
       </div>
     </AdminLayout>
+  );
+}
+
+function PaymentMethodCard({ order, onSaved }: { order: Order; onSaved: () => Promise<void> }) {
+  const currentMethod = order.payments?.[0]?.method || 'CARD';
+  const [method, setMethod] = useState<Payment['method']>(currentMethod);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setError(null);
+    setSaved(false);
+    try {
+      await ordersAPI.updatePaymentMethod(order.id, method);
+      await onSaved();
+      setSaved(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo actualizar el método de pago');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <div className="flex items-center gap-2 mb-4">
+        <CreditCard className="w-5 h-5 text-muted-foreground" />
+        <h2 className="text-lg font-semibold text-foreground">Tipo de pago</h2>
+      </div>
+      <div className="space-y-3">
+        <select
+          value={method}
+          onChange={(event) => setMethod(event.target.value as Payment['method'])}
+          className="w-full px-3 py-2 rounded-lg border border-border bg-input-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+          disabled={isSaving}
+        >
+          {PAYMENT_METHOD_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+        <div className="flex items-center gap-3">
+          <Button size="sm" onClick={handleSave} disabled={isSaving || method === currentMethod}>
+            {isSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Guardar'}
+          </Button>
+          {saved && <span className="text-xs text-emerald-500">Guardado</span>}
+          {error && <span className="text-xs text-destructive">{error}</span>}
+        </div>
+      </div>
+    </Card>
   );
 }
 
