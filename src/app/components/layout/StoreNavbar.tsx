@@ -38,7 +38,7 @@ export function StoreNavbar() {
   };
 
   return (
-    <nav className={`sticky top-0 isolate overflow-visible bg-background/80 backdrop-blur-xl border-b border-border ${isMenuOpen ? 'z-[120]' : 'z-[80]'}`}>
+    <nav className={`sticky top-0 isolate relative overflow-visible bg-background/80 backdrop-blur-xl border-b border-border ${isMenuOpen ? 'z-[120]' : 'z-[80]'}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20 gap-6">
           {/* Mobile — Hamburger */}
@@ -98,12 +98,12 @@ export function StoreNavbar() {
           <button
             type="button"
             aria-label="Cerrar menú"
-            className="fixed inset-0 z-[100] md:hidden bg-black/45 backdrop-blur-[2px]"
+            className="absolute inset-x-0 top-full z-[100] h-[calc(100dvh-5rem)] md:hidden bg-black/45 backdrop-blur-[2px]"
             onClick={() => setIsMenuOpen(false)}
           />
           <div
             id="store-mobile-menu"
-            className="md:hidden fixed left-0 right-0 top-20 bottom-0 z-[110] overflow-y-auto overscroll-contain border-t border-border bg-background/98 shadow-2xl"
+            className="absolute inset-x-0 top-full z-[110] h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain border-t border-border bg-background/98 shadow-2xl md:hidden"
           >
             <div className="px-4 py-4 space-y-3 pb-20">
               <div className="relative">
