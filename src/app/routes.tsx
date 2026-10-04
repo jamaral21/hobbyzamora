@@ -9,6 +9,7 @@ import NavigationPage from './pages/NavigationPage';
 import HomePage from './pages/store/HomePage';
 import MaintenancePage from './pages/store/MaintenancePage';
 import ProductListingPage from './pages/store/ProductListingPage';
+import { OffersPage } from './pages/store/ProductListingPage';
 import ProductDetailPage from './pages/store/ProductDetailPage';
 import CartPage from './pages/store/CartPage';
 import CheckoutPage from './pages/store/CheckoutPage';
@@ -136,6 +137,10 @@ export const router = createBrowserRouter([
   {
     path: '/store/products',
     Component: withStoreMaintenance(ProductListingPage),
+  },
+  {
+    path: '/store/offers',
+    Component: withStoreMaintenance(OffersPage),
   },
   {
     path: '/store/presales',

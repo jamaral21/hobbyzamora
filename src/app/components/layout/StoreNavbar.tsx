@@ -1,13 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
-import { Search, ShoppingCart, User, Menu, X, Star, ChevronDown } from 'lucide-react';
+import { Search, ShoppingCart, User, Menu, X, Star, ChevronDown, BadgePercent } from 'lucide-react';
 import { Button } from '../design-system/Button';
 import { Badge } from '../design-system/Badge';
 import { useCartStore } from '../../lib/store';
 import { useStoreSections } from '../../hooks/useData';
 import { buildSectionGroups, slugifySection } from '../../lib/sections';
 
-export function StoreNavbar() {
+export function StoreNavbar({ hasActiveOffers = false }: { hasActiveOffers?: boolean }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [search, setSearch] = useState('');
@@ -120,6 +120,12 @@ export function StoreNavbar() {
               </div>
               <Link to="/store" onClick={() => setIsMenuOpen(false)} className="block py-2 text-muted-foreground hover:text-primary transition-colors">Tienda</Link>
               <Link to="/store/products" onClick={() => setIsMenuOpen(false)} className="block py-2 text-muted-foreground hover:text-primary transition-colors">Productos</Link>
+              {hasActiveOffers && (
+                <Link to="/store/offers" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 py-2 text-red-500 hover:text-red-400 font-medium transition-colors">
+                  <BadgePercent className="w-4 h-4" />
+                  Cyber Week
+                </Link>
+              )}
               <Link to="/store/presales" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 py-2 text-amber-500 hover:text-amber-400 font-medium transition-colors">
                 <Star className="w-4 h-4 fill-amber-500" />
                 Preventas
@@ -180,6 +186,19 @@ export function StoreNavbar() {
                 />
               );
             })}
+            {hasActiveOffers && (
+              <Link
+                to="/store/offers"
+                className={`shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-md text-[0.9rem] transition-colors whitespace-nowrap font-medium ${
+                  location.pathname === '/store/offers'
+                    ? 'text-red-500 bg-red-500/10'
+                    : 'text-red-500 hover:bg-red-500/10'
+                }`}
+              >
+                <BadgePercent className="w-3.5 h-3.5" />
+                Cyber Week
+              </Link>
+            )}
             <Link
               to="/store/presales"
               className={`shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-md text-[0.9rem] transition-colors whitespace-nowrap font-medium ${

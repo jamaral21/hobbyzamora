@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { cartAPI, CartItem, Product } from '../lib/api';
 import { getCustomerToken } from './authStorage';
+import { getDiscountedPrice, getProductBasePrice, getProductDiscountPercent } from './productPricing';
 
 interface LocalCartItem {
   id: string;
@@ -10,6 +11,8 @@ interface LocalCartItem {
   quantity: number;
   name: string;
   price: number;
+  originalPrice?: number;
+  discountPercent?: number;
   image?: string;
   variant?: string;
   stock?: number;
@@ -41,6 +44,10 @@ export const useCartStore = create<CartState>()(
       isLoading: false,
 
       addItem: (product, quantity = 1, variantId, variantName) => {
+        const originalPrice = getProductBasePrice(product, variantId);
+        const discountPercent = getProductDiscountPercent(product);
+        const price = getDiscountedPrice(originalPrice, discountPercent);
+
         set((state) => {
           const existingIndex = state.items.findIndex(
             (item) => item.productId === product.id && item.variantId === (variantId || null)
@@ -53,12 +60,14 @@ export const useCartStore = create<CartState>()(
             newItems[existingIndex] = {
               ...existing,
               quantity: Math.min(existing.quantity + quantity, maxStock),
+              price,
+              originalPrice,
+              discountPercent,
             };
             return { items: newItems };
           }
 
           const variantData = variantId ? product.variants?.find(v => v.id === variantId) : undefined;
-          const variantPrice = variantData?.price;
           const variantStock = variantData?.stock;
 
           return {
@@ -70,7 +79,9 @@ export const useCartStore = create<CartState>()(
                 variantId: variantId || null,
                 quantity,
                 name: product.name,
-                price: variantPrice || product.price,
+                price,
+                originalPrice,
+                discountPercent,
                 image: product.images[0],
                 variant: variantName,
                 stock: variantStock ?? product.stock,
@@ -127,7 +138,12 @@ export const useCartStore = create<CartState>()(
             variantId: item.variantId,
             quantity: item.quantity,
             name: item.product.name,
-            price: item.variant?.price || item.product.price,
+            price: getDiscountedPrice(
+              getProductBasePrice(item.product, item.variantId),
+              getProductDiscountPercent(item.product),
+            ),
+            originalPrice: getProductBasePrice(item.product, item.variantId),
+            discountPercent: getProductDiscountPercent(item.product),
             image: item.product.images[0],
             variant: item.variant ? `${item.variant.name}: ${item.variant.options.join(', ')}` : undefined,
           }));

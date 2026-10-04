@@ -8,6 +8,7 @@ import { Product } from '../../lib/api';
 import { useCartStore } from '../../lib/store';
 import { buildProductImageVariantUrl } from '../../lib/productImageVariants';
 import { formatChileDate } from '../../lib/chileDate';
+import { getDiscountedPrice, getProductDiscountPercent } from '../../lib/productPricing';
 
 export interface ProductCardProps {
   product: Product;
@@ -39,6 +40,8 @@ export function ProductCard({ product, hideStock = false }: ProductCardProps) {
   const originalImage = String(product.images?.[0] || '');
   const [imageSrc, setImageSrc] = useState(() => buildProductImageVariantUrl(originalImage, 'card'));
   const presaleExpiryLabel = product.isPresale ? getPresaleExpiryLabel(product.presaleEndDate ?? null) : null;
+  const discountPercent = getProductDiscountPercent(product);
+  const discountedPrice = getDiscountedPrice(product.price, discountPercent);
 
   useEffect(() => {
     setImageSrc(buildProductImageVariantUrl(originalImage, 'card'));
@@ -87,6 +90,11 @@ export function ProductCard({ product, hideStock = false }: ProductCardProps) {
               )}
             </div>
           )}
+          {discountPercent > 0 && (
+            <Badge variant="danger" className="absolute top-3 right-3">
+              -{discountPercent}%
+            </Badge>
+          )}
           {/* Hover gradient */}
           <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
         </div>
@@ -114,9 +122,16 @@ export function ProductCard({ product, hideStock = false }: ProductCardProps) {
 
         <div className="flex items-end justify-between mt-auto">
           <div>
-            <span className="text-xl text-primary font-bold font-[family-name:var(--font-mono)]">
-              ${product.price.toLocaleString('es-CL')}
-            </span>
+            <div className="flex flex-col items-start">
+              {discountPercent > 0 && (
+                <span className="text-xs text-muted-foreground line-through font-[family-name:var(--font-mono)]">
+                  ${product.price.toLocaleString('es-CL')}
+                </span>
+              )}
+              <span className={`text-xl font-bold font-[family-name:var(--font-mono)] ${discountPercent > 0 ? 'text-red-500' : 'text-primary'}`}>
+                ${discountedPrice.toLocaleString('es-CL')}
+              </span>
+            </div>
             <div className="mt-1.5 min-h-[18px]">
               {isLowStock && (
                 <div className="flex items-center gap-1">

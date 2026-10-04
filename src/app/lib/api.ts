@@ -13,6 +13,7 @@ export interface Product {
   name: string;
   category: string;
   price: number;
+  discountPercent?: number;
   cost: number;
   stock: number;
   initialStock: number;
@@ -480,6 +481,8 @@ export const productsAPI = {
     fetchAPI<{ message: string }>(`/products/${id}`, { method: 'DELETE' }, 'admin'),
 
   getCategories: () => fetchAPI<string[]>('/products/meta/categories'),
+
+  hasActiveOffers: () => fetchAPI<{ hasActiveOffers: boolean }>('/products/meta/active-offers'),
 
   getSections: () => fetchAPI<ProductSectionGroup[]>('/products/meta/sections'),
 

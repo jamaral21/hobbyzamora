@@ -12,6 +12,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { AuthModal } from '../../components/auth/AuthModal';
 import { formatChileDate } from '../../lib/chileDate';
 import { buildProductImageVariantUrl, type ProductImageVariant } from '../../lib/productImageVariants';
+import { getDiscountedPrice, getProductBasePrice, getProductDiscountPercent } from '../../lib/productPricing';
 
 function ProductImageWithVariant({
   src,
@@ -71,6 +72,7 @@ export default function ProductDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
+  const [selectedVariant, setSelectedVariant] = useState<{ id: string; option: string } | null>(null);
   const [isFavorite, setIsFavorite] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const [shareStatus, setShareStatus] = useState<'idle' | 'shared' | 'copied' | 'error'>('idle');
@@ -85,6 +87,8 @@ export default function ProductDetailPage() {
   useEffect(() => {
     async function loadProduct() {
       if (!id) return;
+      setSelectedVariant(null);
+      setSelectedImage(0);
       try {
         const data = await productsAPI.getById(id);
         setProduct(data);
@@ -229,6 +233,18 @@ export default function ProductDetailPage() {
   const maxPresaleQuantity = product.isPresale
     ? Math.max(1, product.presaleMaxQty || Number.MAX_SAFE_INTEGER)
     : product.stock;
+  const discountPercent = getProductDiscountPercent(product);
+  const originalPrice = getProductBasePrice(product, selectedVariant?.id);
+  const displayedPrice = getDiscountedPrice(originalPrice, discountPercent);
+  const selectedVariantData = selectedVariant
+    ? product.variants?.find((variant: any) => variant.id === selectedVariant.id)
+    : null;
+  const addCurrentProductToCart = () => addItem(
+    product,
+    quantity,
+    selectedVariant?.id,
+    selectedVariantData ? `${selectedVariantData.name}: ${selectedVariant?.option}` : undefined,
+  );
 
   return (
     <StoreLayout>
@@ -325,8 +341,16 @@ export default function ProductDetailPage() {
             )}
 
             <div className="mb-6">
-              <span className="text-4xl text-primary font-bold font-[family-name:var(--font-mono)]">
-                ${product.price.toLocaleString('es-CL')}
+              {discountPercent > 0 && (
+                <div className="flex items-center gap-3 mb-1">
+                  <span className="text-lg text-muted-foreground line-through font-[family-name:var(--font-mono)]">
+                    ${originalPrice.toLocaleString('es-CL')}
+                  </span>
+                  <Badge variant="danger">-{discountPercent}%</Badge>
+                </div>
+              )}
+              <span className={`text-4xl font-bold font-[family-name:var(--font-mono)] ${discountPercent > 0 ? 'text-red-500' : 'text-primary'}`}>
+                ${displayedPrice.toLocaleString('es-CL')}
               </span>
             </div>
 
@@ -377,7 +401,7 @@ export default function ProductDetailPage() {
               <div className="mb-6">
                 <VariantSelector
                   variants={product.variants}
-                  onSelect={(variantId, option) => console.log('Selected:', variantId, option)}
+                  onSelect={(variantId, option) => setSelectedVariant({ id: variantId, option })}
                 />
               </div>
             )}
@@ -471,11 +495,11 @@ export default function ProductDetailPage() {
                 )
               ) : (
                 <>
-                  <Button fullWidth size="lg" onClick={() => addItem(product, quantity)} disabled={product.stock === 0}>
+                  <Button fullWidth size="lg" onClick={addCurrentProductToCart} disabled={product.stock === 0}>
                     <ShoppingCart className="w-5 h-5" />
                     Agregar al Carrito
                   </Button>
-                  <Button variant="outline" size="lg" onClick={() => { addItem(product, quantity); window.location.href = '/store/checkout'; }} disabled={product.stock === 0}>
+                  <Button variant="outline" size="lg" onClick={() => { addCurrentProductToCart(); window.location.href = '/store/checkout'; }} disabled={product.stock === 0}>
                     Comprar Ahora
                   </Button>
                 </>

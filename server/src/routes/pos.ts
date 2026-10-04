@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../index.js';
 import { getPresaleUnavailableReason, getRequestedPresaleQuantity } from '../lib/presaleUtils.js';
+import { calculateProductPricing } from '../lib/productPricing.js';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
 
 const parseImages = (images: string): string[] => {
@@ -17,6 +18,7 @@ const formatPOSProduct = (product: any) => {
     category: product.category,
     ean: product.ean ?? null,
     price: parseFloat(product.price.toString()),
+    discountPercent: product.discountPercent,
     cost: parseFloat(product.cost.toString()),
     images: parseImages(product.images),
     isPresale: product.isPresale,
@@ -390,6 +392,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
     // Validate items and prepare order items
     const orderItems: any[] = [];
     let subtotal = 0;
+    let discount = 0;
 
     for (const item of items) {
       const product = await prisma.product.findUnique({
@@ -463,8 +466,14 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
         }
       }
 
-      const itemPrice = item.price || parseFloat(product.price.toString());
-      subtotal += itemPrice * item.quantity;
+      const pricing = calculateProductPricing(
+        parseFloat(product.price.toString()),
+        product.discountPercent,
+        product.isPresale,
+      );
+      const itemPrice = pricing.discountedPrice;
+      subtotal += pricing.originalPrice * item.quantity;
+      discount += pricing.discountAmount * item.quantity;
 
       orderItems.push({
         productId: product.id,
@@ -479,7 +488,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
 
     // Calculate totals (POS typically includes tax in price)
     const tax = 0; // Tax already included in displayed prices
-    const total = subtotal;
+    const total = subtotal - discount;
 
     // --- Getnet C2C card payment: create pending order and send command to POS terminal ---
     if (paymentMethod === 'CARD' && isGetnetC2CConfigured()) {
@@ -495,7 +504,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
           subtotal,
           tax,
           shipping: 0,
-          discount: 0,
+          discount,
           total,
           status: 'PENDING',
           source: 'POS',
@@ -556,6 +565,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
         ...order,
         orderNumber,
         subtotal: parseFloat(order.subtotal.toString()),
+        discount: parseFloat(order.discount.toString()),
         total: parseFloat(order.total.toString()),
         change: 0,
         getnetOperationId: saleCommand.posTxId,
@@ -579,7 +589,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
         subtotal,
         tax,
         shipping: 0,
-        discount: 0,
+        discount,
         total,
         status: 'DELIVERED',
         source: 'POS',
@@ -633,6 +643,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
     res.status(201).json({
       ...order,
       subtotal: parseFloat(order.subtotal.toString()),
+      discount: parseFloat(order.discount.toString()),
       total: parseFloat(order.total.toString()),
       change: change > 0 ? Math.round(change * 100) / 100 : 0,
       items: order.items.map(i => ({

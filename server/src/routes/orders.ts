@@ -9,6 +9,7 @@ import {
   sendReviewRequestEmail,
 } from '../lib/emailService.js';
 import { getPresaleUnavailableReason, getRequestedPresaleQuantity } from '../lib/presaleUtils.js';
+import { calculateProductPricing } from '../lib/productPricing.js';
 import { getChileDayRange } from '../lib/chileDate.js';
 
 const router = Router();
@@ -314,6 +315,7 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
     // Validate and get product details
     const orderItems: any[] = [];
     let subtotal = 0;
+    let discount = 0;
     let totalCost = 0;
 
     for (const item of items) {
@@ -389,19 +391,26 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
         }
       }
 
-      let itemPrice = parseFloat(product.price.toString());
+      let originalItemPrice = parseFloat(product.price.toString());
       let variantName = null;
 
       // Handle variant
       if (item.variantId) {
         const variant = product.variants.find(v => v.id === item.variantId);
         if (variant) {
-          itemPrice = variant.price ? parseFloat(variant.price.toString()) : itemPrice;
+          originalItemPrice = variant.price ? parseFloat(variant.price.toString()) : originalItemPrice;
           variantName = `${variant.name}: ${variant.options}`;
         }
       }
 
-      subtotal += itemPrice * item.quantity;
+      const pricing = calculateProductPricing(
+        originalItemPrice,
+        product.discountPercent,
+        product.isPresale,
+      );
+      const itemPrice = pricing.discountedPrice;
+      subtotal += pricing.originalPrice * item.quantity;
+      discount += pricing.discountAmount * item.quantity;
 
       orderItems.push({
         productId: product.id,
@@ -417,9 +426,9 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
 
     // Calculate totals
     // Los precios ya incluyen IVA (19%). Se extrae el IVA del subtotal.
-    const tax = Math.round(subtotal * 19 / 119 * 100) / 100; // IVA débito (incluido en precio)
+    const discountedSubtotal = subtotal - discount;
+    const tax = Math.round(discountedSubtotal * 19 / 119 * 100) / 100; // IVA débito (incluido en precio)
     const shippingCost = shipping?.cost || 0;
-    const discount = 0;
     const total = subtotal + shippingCost - discount; // IVA ya incluido, no se suma
 
     // Create order

@@ -511,6 +511,23 @@ async function resolveValidCategoryInput(category: string) {
 }
 
 // Get all products (public)
+router.get('/meta/active-offers', async (_req, res) => {
+  try {
+    const product = await prisma.product.findFirst({
+      where: {
+        status: 'ACTIVE',
+        isPresale: false,
+        discountPercent: { gt: 0 },
+      },
+      select: { id: true },
+    });
+    res.json({ hasActiveOffers: Boolean(product) });
+  } catch (error) {
+    console.error('Check active offers error:', error);
+    res.status(500).json({ error: 'Failed to check active offers' });
+  }
+});
+
 router.get('/', optionalAuth, async (req: AuthRequest, res) => {
   try {
     const {
@@ -653,6 +670,7 @@ router.get('/', optionalAuth, async (req: AuthRequest, res) => {
           ...product,
           images: parseImages(product.images),
           price: parseFloat(product.price.toString()),
+          discountPercent: product.discountPercent,
           cost: parseFloat(product.cost.toString()),
           stock: product.stock,
           presaleAvailQty: isAdminOrStaff ? product.presaleAvailQty : remainingPresaleQty,
@@ -707,6 +725,7 @@ router.get('/:id', optionalAuth, async (req: AuthRequest, res) => {
       ...p,
       images: parseImages(p.images),
       price: parseFloat(p.price.toString()),
+      discountPercent: p.discountPercent,
       cost: parseFloat(p.cost.toString()),
       stock: p.stock,
       variants: p.variants.map((v: any) => ({
@@ -738,6 +757,7 @@ router.get('/admin-detail/:id', authenticate, requireRole('ADMIN', 'STAFF'), asy
       ...p,
       images: parseImages(p.images),
       price: parseFloat(p.price.toString()),
+      discountPercent: p.discountPercent,
       cost: parseFloat(p.cost.toString()),
       stock: p.stock,
       variants: p.variants.map((v: any) => ({
@@ -761,6 +781,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
       description, 
       category, 
       price, 
+      discountPercent,
       cost, 
       stock,
       images, 
@@ -784,6 +805,11 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
 
     if (!isValidCategory) {
       return res.status(400).json({ error: 'La categoría debe ser una sección principal o una subsección válida' });
+    }
+
+    const parsedDiscountPercent = Number(discountPercent ?? 0);
+    if (!Number.isInteger(parsedDiscountPercent) || parsedDiscountPercent < 0 || parsedDiscountPercent > 100) {
+      return res.status(400).json({ error: 'El descuento debe ser un porcentaje entero entre 0 y 100' });
     }
 
     const parsedEan: string | null = ean !== undefined
@@ -810,6 +836,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
         description,
         category: normalizedCategory,
         price,
+        discountPercent: isPresale ? 0 : parsedDiscountPercent,
         cost,
         stock: parsedStock,
         initialStock: parsedInitialStock,
@@ -837,6 +864,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
     res.status(201).json({
       ...product,
       price: parseFloat(product.price.toString()),
+      discountPercent: product.discountPercent,
       cost: parseFloat(product.cost.toString()),
       stock: product.stock,
     });
@@ -856,6 +884,7 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
       description,
       category,
       price,
+      discountPercent,
       cost,
       stock,
       initialStock,
@@ -934,6 +963,12 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
     }
 
     const nextIsPresale = isPresale ?? existing.isPresale;
+    const nextDiscountPercent = discountPercent === undefined
+      ? Number(existing.discountPercent)
+      : Number(discountPercent);
+    if (!Number.isInteger(nextDiscountPercent) || nextDiscountPercent < 0 || nextDiscountPercent > 100) {
+      return res.status(400).json({ error: 'El descuento debe ser un porcentaje entero entre 0 y 100' });
+    }
     const nextCost = cost ?? Number(existing.cost);
     const shouldSyncHistoricalCost = cost !== undefined && Number(nextCost) !== Number(existing.cost);
 
@@ -946,6 +981,7 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
           description,
           category: nextCategory,
           price,
+          discountPercent: nextIsPresale ? 0 : nextDiscountPercent,
           cost,
           stock,
           initialStock,
@@ -981,6 +1017,7 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
       ...product,
       images: parseImages(product.images),
       price: parseFloat(product.price.toString()),
+      discountPercent: product.discountPercent,
       cost: parseFloat(product.cost.toString()),
       stock: product.stock,
       variants: product.variants.map((v: any) => ({

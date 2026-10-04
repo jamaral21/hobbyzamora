@@ -8,11 +8,13 @@ import { PaymentSelector, PaymentMethod } from '../../components/pos/PaymentSele
 import { Modal } from '../../components/design-system/Modal';
 import { usePOSProducts, useCustomers, useMutation } from '../../hooks/useData';
 import { customersAPI, posAPI, Customer } from '../../lib/api';
+import { getDiscountedPrice, getProductDiscountPercent } from '../../lib/productPricing';
 
 interface Product {
   id: string;
   name: string;
   price: number;
+  discountPercent?: number;
   sku: string;
   category?: string;
   ean?: string | number | null;
@@ -23,7 +25,14 @@ interface Product {
 
 export default function POSPage() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [cartItems, setCartItems] = useState<Array<{ id: string; name: string; price: number; quantity: number }>>([]);
+  const [cartItems, setCartItems] = useState<Array<{
+    id: string;
+    name: string;
+    price: number;
+    originalPrice: number;
+    discountPercent: number;
+    quantity: number;
+  }>>([]);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
@@ -67,17 +76,21 @@ export default function POSPage() {
       return;
     }
 
+    const discountPercent = getProductDiscountPercent(product);
+    const price = getDiscountedPrice(product.price, discountPercent);
     const existingItem = cartItems.find((item) => item.id === product.id);
     if (existingItem) {
       setCartItems(
         cartItems.map((item) =>
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+          item.id === product.id
+            ? { ...item, price, originalPrice: product.price, discountPercent, quantity: item.quantity + 1 }
+            : item
         )
       );
     } else {
       setCartItems([
         ...cartItems,
-        { id: product.id, name: product.name, price: product.price, quantity: 1 },
+        { id: product.id, name: product.name, price, originalPrice: product.price, discountPercent, quantity: 1 },
       ]);
     }
   };
@@ -135,17 +148,21 @@ export default function POSPage() {
     if (presaleAttemptProduct) {
       const product = presaleAttemptProduct;
       setPresaleAttemptProduct(null);
+      const discountPercent = getProductDiscountPercent(product);
+      const price = getDiscountedPrice(product.price, discountPercent);
       const existingItem = cartItems.find((item) => item.id === product.id);
       if (existingItem) {
         setCartItems(
           cartItems.map((item) =>
-            item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+            item.id === product.id
+              ? { ...item, price, originalPrice: product.price, discountPercent, quantity: item.quantity + 1 }
+              : item
           )
         );
       } else {
         setCartItems([
           ...cartItems,
-          { id: product.id, name: product.name, price: product.price, quantity: 1 },
+          { id: product.id, name: product.name, price, originalPrice: product.price, discountPercent, quantity: 1 },
         ]);
       }
     }

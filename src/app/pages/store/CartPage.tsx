@@ -7,6 +7,7 @@ import { Button } from '../../components/design-system/Button';
 import { Card } from '../../components/design-system/Card';
 import { useCartStore } from '../../lib/store';
 import { presaleAPI, productsAPI } from '../../lib/api';
+import { getDiscountedPrice, getProductBasePrice, getProductDiscountPercent } from '../../lib/productPricing';
 
 interface StockIssue {
   cartItemId: string;
@@ -63,24 +64,20 @@ export default function CartPage() {
           } catch {
             product = await productsAPI.getById(item.productId);
           }
-          // Hidratar isPresale si el item venía de localStorage sin ese campo
-          if (item.isPresale === undefined && product.isPresale !== undefined) {
-            useCartStore.setState(state => ({
-              items: state.items.map(i =>
-                i.id === item.id ? { ...i, isPresale: product.isPresale } : i
-              ),
-            }));
-          }
+          const originalPrice = getProductBasePrice(product, item.variantId);
+          const discountPercent = getProductDiscountPercent(product);
+          useCartStore.setState(state => ({
+            items: state.items.map(i => i.id === item.id ? {
+              ...i,
+              price: getDiscountedPrice(originalPrice, discountPercent),
+              originalPrice,
+              discountPercent,
+              stock: product.stock,
+              isPresale: product.isPresale,
+            } : i),
+          }));
           // Los productos de preventa no tienen stock físico — no validar
           if (product.isPresale) return;
-          // Update stock in store if missing
-          if (item.stock === undefined) {
-            useCartStore.setState(state => ({
-              items: state.items.map(i =>
-                i.id === item.id ? { ...i, stock: product.stock } : i
-              ),
-            }));
-          }
           if (product.stock < item.quantity) {
             issues.push({
               cartItemId: item.id,

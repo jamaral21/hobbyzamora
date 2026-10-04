@@ -103,6 +103,12 @@ export default function HomePage() {
       .slice(0, 8);
   }, [sortedByNewest]);
 
+  const discountedProducts = useMemo(() => {
+    return allProducts
+      .filter((product: any) => !product.isPresale && Number(product.discountPercent) > 0)
+      .slice(0, 8);
+  }, [allProducts]);
+
   const presaleProducts = useMemo(() => {
     return inStockProducts.filter((p: any) => p.isPresale);
   }, [inStockProducts]);
@@ -199,6 +205,30 @@ export default function HomePage() {
           </div>
         )}
       </section>
+
+      {discountedProducts.length > 0 && (
+        <section className="py-14 border-y border-border bg-card/30">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between gap-4 mb-8">
+              <div>
+                <h2 className="text-primary mb-2">CYBER WEEK</h2>
+                <p className="text-muted-foreground">Productos seleccionados con precio especial</p>
+              </div>
+              <Link to="/store/offers">
+                <Button variant="outline" size="sm">
+                  Ver Cyber Week
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              {discountedProducts.map((product: any) => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ═══════════════════════════════════════════
           PREVENTAS — Acceso exclusivo

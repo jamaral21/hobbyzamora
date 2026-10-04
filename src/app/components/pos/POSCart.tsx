@@ -6,6 +6,8 @@ interface POSCartItem {
   id: string;
   name: string;
   price: number;
+  originalPrice?: number;
+  discountPercent?: number;
   quantity: number;
 }
 
@@ -19,6 +21,8 @@ export interface POSCartProps {
 
 export function POSCart({ items, onUpdateQuantity, onRemove, onCheckout, onClear }: POSCartProps) {
   const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotal = items.reduce((sum, item) => sum + (item.originalPrice ?? item.price) * item.quantity, 0);
+  const discount = subtotal - total;
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
   return (
@@ -59,8 +63,14 @@ export function POSCart({ items, onUpdateQuantity, onRemove, onCheckout, onClear
             >
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-foreground truncate">{item.name}</p>
-                <p className="text-xs text-muted-foreground">
+                {item.originalPrice != null && item.originalPrice > item.price && (
+                  <p className="text-[10px] text-muted-foreground line-through">
+                    ${item.originalPrice.toLocaleString('es-CL')} c/u
+                  </p>
+                )}
+                <p className={`text-xs ${item.discountPercent ? 'text-red-500' : 'text-muted-foreground'}`}>
                   ${item.price.toLocaleString('es-CL')} c/u
+                  {item.discountPercent ? ` · -${item.discountPercent}%` : ''}
                 </p>
               </div>
 
@@ -99,6 +109,18 @@ export function POSCart({ items, onUpdateQuantity, onRemove, onCheckout, onClear
       </div>
 
       <div className="border-t border-border pt-4 space-y-3">
+        {discount > 0 && (
+          <div className="space-y-1.5 text-sm">
+            <div className="flex justify-between text-muted-foreground">
+              <span>Subtotal</span>
+              <span className="tabular-nums">${subtotal.toLocaleString('es-CL')}</span>
+            </div>
+            <div className="flex justify-between text-emerald-600">
+              <span>Descuento</span>
+              <span className="tabular-nums">-${discount.toLocaleString('es-CL')}</span>
+            </div>
+          </div>
+        )}
         <div className="flex justify-between items-baseline">
           <span className="text-sm text-muted-foreground">Total</span>
           <span className="text-2xl text-foreground tabular-nums">

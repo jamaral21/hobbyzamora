@@ -14,6 +14,7 @@ import { formatChileDate } from '../../lib/chileDate';
 import type { Product } from '../../lib/api';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
 import { orderSectionLabels } from '../../lib/sections';
+import { getDiscountedPrice, getProductDiscountPercent } from '../../lib/productPricing';
 
 export default function ProductsPage() {
   const { isAuthenticated } = useAdminAuth();
@@ -573,7 +574,19 @@ export default function ProductsPage() {
               </TableCell>
               <TableCell>{product.sku}</TableCell>
               <TableCell>{product.category}</TableCell>
-              <TableCell>${product.price.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</TableCell>
+              <TableCell>
+                <div className="flex flex-col">
+                  <span>${product.price.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</span>
+                  {getProductDiscountPercent(product) > 0 && (
+                    <span className="text-xs text-emerald-600">
+                      Oferta {getProductDiscountPercent(product)}% · ${getDiscountedPrice(
+                        product.price,
+                        getProductDiscountPercent(product),
+                      ).toLocaleString('es-CL', { maximumFractionDigits: 0 })}
+                    </span>
+                  )}
+                </div>
+              </TableCell>
               <TableCell>{product.initialStock ?? 0}</TableCell>
               <TableCell>
                 <div className="flex items-center gap-2">

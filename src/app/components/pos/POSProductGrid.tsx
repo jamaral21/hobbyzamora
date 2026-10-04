@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 import { Package } from 'lucide-react';
 import { Badge } from '../design-system/Badge';
 import { buildProductImageVariantUrl } from '../../lib/productImageVariants';
+import { getDiscountedPrice, getProductDiscountPercent } from '../../lib/productPricing';
 
 interface Product {
   id: string;
   name: string;
   price: number;
+  discountPercent?: number;
   sku: string;
   category?: string;
   ean?: string | number | null;
@@ -62,6 +64,8 @@ export function POSProductGrid({ products, onSelect }: POSProductGridProps) {
       {products.map((product) => {
         const outOfStock = !product.isPresale && product.stock <= 0;
         const lowStock = !product.isPresale && product.stock > 0 && product.stock < 10;
+        const discountPercent = getProductDiscountPercent(product);
+        const discountedPrice = getDiscountedPrice(product.price, discountPercent);
 
         return (
           <button
@@ -100,8 +104,20 @@ export function POSProductGrid({ products, onSelect }: POSProductGridProps) {
               )}
             </div>
             <div className="flex items-center justify-between gap-1">
-              <span className="text-sm text-foreground font-medium tabular-nums">
-                ${product.price.toLocaleString('es-CL')}
+              <span className="flex flex-col text-sm font-medium tabular-nums">
+                {discountPercent > 0 && (
+                  <span className="text-[10px] text-muted-foreground line-through">
+                    ${product.price.toLocaleString('es-CL')}
+                  </span>
+                )}
+                <span className={discountPercent > 0 ? 'text-red-500' : 'text-foreground'}>
+                  ${discountedPrice.toLocaleString('es-CL')}
+                </span>
+                {discountPercent > 0 && (
+                  <span className="text-[9px] leading-tight font-semibold text-red-500">
+                    -{discountPercent}%
+                  </span>
+                )}
               </span>
               <span className={`text-[10px] tabular-nums ${
                 outOfStock ? 'text-destructive' : lowStock ? 'text-[#ffab00]' : 'text-muted-foreground'

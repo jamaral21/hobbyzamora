@@ -8,6 +8,7 @@ import { Select } from '../../components/design-system/Input';
 import { useProducts, useStoreSections } from '../../hooks/useData';
 import { useAuth } from '../../contexts/AuthContext';
 import { buildSectionGroups, matchesCategoryFilter, orderSectionLabels, slugifySection } from '../../lib/sections';
+import { getDiscountedPrice, getProductDiscountPercent } from '../../lib/productPricing';
 
 export default function ProductListingPage() {
   return (
@@ -17,7 +18,21 @@ export default function ProductListingPage() {
   );
 }
 
-export function ProductListingPageContent({ presalesOnly = false }: { presalesOnly?: boolean }) {
+export function OffersPage() {
+  return (
+    <StoreLayout>
+      <ProductListingPageContent offersOnly />
+    </StoreLayout>
+  );
+}
+
+export function ProductListingPageContent({
+  presalesOnly = false,
+  offersOnly = false,
+}: {
+  presalesOnly?: boolean;
+  offersOnly?: boolean;
+}) {
   const { isAuthenticated } = useAuth();
   const [sortBy, setSortBy] = useState('featured');
   const [searchParams, setSearchParams] = useSearchParams();
@@ -41,8 +56,13 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
         return true;
       });
     }
+    if (offersOnly) {
+      return products.filter((product) =>
+        !product.isPresale && Number(product.discountPercent) > 0
+      );
+    }
     return products.filter((p: any) => !p.isPresale);
-  }, [products, presalesOnly]);
+  }, [products, presalesOnly, offersOnly]);
 
   const groups = useMemo(() => buildSectionGroups(sectionData || []), [sectionData]);
 
@@ -102,8 +122,10 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
         const aOutOfStock = a.stock <= 0;
         const bOutOfStock = b.stock <= 0;
         if (aOutOfStock !== bOutOfStock) return aOutOfStock ? 1 : -1;
-        if (sortBy === 'price-low') return a.price - b.price;
-        if (sortBy === 'price-high') return b.price - a.price;
+        const aDisplayedPrice = getDiscountedPrice(a.price, getProductDiscountPercent(a));
+        const bDisplayedPrice = getDiscountedPrice(b.price, getProductDiscountPercent(b));
+        if (sortBy === 'price-low') return aDisplayedPrice - bDisplayedPrice;
+        if (sortBy === 'price-high') return bDisplayedPrice - aDisplayedPrice;
         if (sortBy === 'name') return a.name.localeCompare(b.name);
         return 0;
       });
@@ -121,9 +143,9 @@ export function ProductListingPageContent({ presalesOnly = false }: { presalesOn
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl text-foreground mb-2">{presalesOnly ? 'Preventas' : 'Todos los Productos'}</h1>
+          <h1 className="text-3xl text-foreground mb-2">{presalesOnly ? 'Preventas' : offersOnly ? 'Cyber Week' : 'Todos los Productos'}</h1>
           <p className="text-muted-foreground">
-            {presalesOnly ? 'Acceso exclusivo a productos próximos' : 'Explora nuestra colección completa de coleccionables'}
+            {presalesOnly ? 'Acceso exclusivo a productos próximos' : offersOnly ? 'Productos con descuentos activos y disponibles' : 'Explora nuestra colección completa de coleccionables'}
           </p>
         </div>
 

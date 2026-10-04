@@ -7,6 +7,8 @@ interface CartItem {
   id: string;
   name: string;
   price: number;
+  originalPrice?: number;
+  discountPercent?: number;
   quantity: number;
   image?: string;
   variant?: string;
@@ -22,6 +24,8 @@ export interface CartPanelProps {
 
 export function CartPanel({ items, onUpdateQuantity, onRemove }: CartPanelProps) {
   const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const subtotal = items.reduce((sum, item) => sum + (item.originalPrice ?? item.price) * item.quantity, 0);
+  const discount = subtotal - total;
   const taxIncluded = total * 19 / 119;
 
   return (
@@ -43,7 +47,12 @@ export function CartPanel({ items, onUpdateQuantity, onRemove }: CartPanelProps)
               {item.variant && (
                 <p className="text-xs text-muted-foreground mt-1">{item.variant}</p>
               )}
-              <p className="text-sm text-primary font-bold font-[family-name:var(--font-mono)] mt-2">
+              {item.originalPrice != null && item.originalPrice > item.price && (
+                <p className="text-xs text-muted-foreground line-through font-[family-name:var(--font-mono)] mt-2">
+                  ${item.originalPrice.toLocaleString('es-CL')}
+                </p>
+              )}
+              <p className={`text-sm font-bold font-[family-name:var(--font-mono)] ${item.discountPercent ? 'text-red-500' : 'text-primary'} ${item.originalPrice != null && item.originalPrice > item.price ? '' : 'mt-2'}`}>
                 ${item.price.toLocaleString('es-CL')}
               </p>
               {!item.isPresale && item.stock !== undefined && (
@@ -88,6 +97,18 @@ export function CartPanel({ items, onUpdateQuantity, onRemove }: CartPanelProps)
       </div>
 
       <div className="space-y-2 pt-4 border-t border-border">
+        {discount > 0 && (
+          <>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Subtotal</span>
+              <span className="text-foreground font-[family-name:var(--font-mono)]">${subtotal.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Descuento</span>
+              <span className="text-emerald-600 font-[family-name:var(--font-mono)]">-${discount.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</span>
+            </div>
+          </>
+        )}
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">IVA incluido (19%)</span>
           <span className="text-foreground font-[family-name:var(--font-mono)]">${taxIncluded.toLocaleString('es-CL', { maximumFractionDigits: 0 })}</span>

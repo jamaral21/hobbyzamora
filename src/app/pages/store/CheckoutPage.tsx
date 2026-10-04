@@ -8,7 +8,8 @@ import { Input, Select } from '../../components/design-system/Input';
 import { Button } from '../../components/design-system/Button';
 import { CreditCard, Lock, Loader2, MapPin, ShieldCheck, ChevronRight, AlertCircle, Wallet, Landmark, Package, Truck, Users, Check } from 'lucide-react';
 import { useCartStore } from '../../lib/store';
-import { ordersAPI, paymentsAPI, addressesAPI, type Address } from '../../lib/api';
+import { ordersAPI, paymentsAPI, addressesAPI, productsAPI, type Address } from '../../lib/api';
+import { getDiscountedPrice, getProductBasePrice, getProductDiscountPercent } from '../../lib/productPricing';
 import { useAuth } from '../../contexts/AuthContext';
 import { RequireAuth } from '../../components/auth/RequireAuth';
 
@@ -207,7 +208,47 @@ function CheckoutForm() {
   const selectedPostalCodeConfig = POSTAL_CODE_BY_COUNTRY[shippingData.country] || DEFAULT_POSTAL_CODE;
   const selectedRegionConfig = REGION_BY_COUNTRY[shippingData.country] || DEFAULT_REGION;
   const navigate = useNavigate();
-  const { items: cartItems, clearCart, getSubtotal } = useCartStore();
+  const { items: cartItems, clearCart } = useCartStore();
+  const [pricesRefreshing, setPricesRefreshing] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    if (cartItems.length === 0) {
+      setPricesRefreshing(false);
+      return;
+    }
+
+    void Promise.all(cartItems.map(async (item) => {
+      try {
+        let product;
+        try {
+          product = await productsAPI.getByIdAdmin(item.productId);
+        } catch {
+          product = await productsAPI.getById(item.productId);
+        }
+        const originalPrice = getProductBasePrice(product, item.variantId);
+        const discountPercent = getProductDiscountPercent(product);
+        useCartStore.setState((state) => ({
+          items: state.items.map((current) => current.id === item.id ? {
+            ...current,
+            price: getDiscountedPrice(originalPrice, discountPercent),
+            originalPrice,
+            discountPercent,
+            stock: product.stock,
+            isPresale: product.isPresale,
+          } : current),
+        }));
+      } catch {
+        // Checkout still relies on the server to validate current product prices.
+      }
+    })).finally(() => {
+      if (active) setPricesRefreshing(false);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -266,6 +307,7 @@ function CheckoutForm() {
     name: item.name,
     quantity: item.quantity,
     price: item.price,
+    originalPrice: item.originalPrice,
     variant: item.variant
   }));
 
@@ -996,7 +1038,12 @@ function CheckoutForm() {
                             )}
                             <p className="text-xs text-muted-foreground">Cant: {item.quantity}</p>
                           </div>
-                          <span className="text-sm text-foreground font-[family-name:var(--font-mono)]">
+                          <span className="text-right text-sm text-foreground font-[family-name:var(--font-mono)]">
+                            {item.originalPrice != null && item.originalPrice > item.price && (
+                              <span className="block text-xs text-muted-foreground line-through">
+                                ${(item.originalPrice * item.quantity).toLocaleString('es-CL', { maximumFractionDigits: 0 })}
+                              </span>
+                            )}
                             ${(item.price * item.quantity).toLocaleString('es-CL', { maximumFractionDigits: 0 })}
                           </span>
                         </div>
@@ -1008,11 +1055,11 @@ function CheckoutForm() {
                     <Button variant="outline" onClick={() => setStep('payment')} fullWidth disabled={isProcessing}>
                       Volver
                     </Button>
-                    <Button fullWidth size="lg" onClick={handlePlaceOrder} disabled={isProcessing}>
-                      {isProcessing ? (
+                    <Button fullWidth size="lg" onClick={handlePlaceOrder} disabled={isProcessing || pricesRefreshing}>
+                      {isProcessing || pricesRefreshing ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                          Procesando...
+                          {pricesRefreshing ? 'Actualizando precios...' : 'Procesando...'}
                         </>
                       ) : (
                         <>

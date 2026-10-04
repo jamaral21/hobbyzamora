@@ -2,16 +2,32 @@ import { StoreNavbar } from './StoreNavbar';
 import { ChatWidget } from '../chat/ChatWidget';
 import { useStoreSections } from '../../hooks/useData';
 import { buildSectionGroups } from '../../lib/sections';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Instagram } from 'lucide-react';
+import { productsAPI } from '../../lib/api';
 
 export function StoreLayout({ children }: { children: React.ReactNode }) {
+  const [hasActiveOffers, setHasActiveOffers] = useState(false);
   const { data: sections } = useStoreSections();
   const groups = useMemo(() => buildSectionGroups(sections || []), [sections]);
 
+  useEffect(() => {
+    let active = true;
+    productsAPI.hasActiveOffers()
+      .then(({ hasActiveOffers: foundOffers }) => {
+        if (active) setHasActiveOffers(foundOffers);
+      })
+      .catch(() => {
+        if (active) setHasActiveOffers(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-background">
-      <StoreNavbar />
+      <StoreNavbar hasActiveOffers={hasActiveOffers} />
       <main className="relative z-0">{children}</main>
       <footer className="bg-card border-t border-border mt-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -40,6 +56,7 @@ export function StoreLayout({ children }: { children: React.ReactNode }) {
               <h4 className="text-sm text-foreground mb-4 font-semibold">Tienda</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li><a href="/store/products" className="hover:text-primary transition-colors">Todos los Productos</a></li>
+                {hasActiveOffers && <li><a href="/store/offers" className="hover:text-primary transition-colors">Cyber Week</a></li>}
                 <li><a href="/store/presales" className="hover:text-primary transition-colors">Preventas</a></li>
                 <li><a href="/store/account" className="hover:text-primary transition-colors">Mi Cuenta</a></li>
               </ul>
