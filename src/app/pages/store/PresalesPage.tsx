@@ -31,11 +31,7 @@ import { buildSectionGroups, matchesCategoryFilter, orderSectionLabels, slugifyS
 type PresaleTab = 'reservas' | 'disponibles';
 
 function formatCLP(n: number) {
-  return new Intl.NumberFormat('es-CL', {
-    style: 'currency',
-    currency: 'CLP',
-    maximumFractionDigits: 0,
-  }).format(n);
+  return `$${new Intl.NumberFormat('es-CL', { maximumFractionDigits: 0 }).format(n)} CLP`;
 }
 
 function timeLeft(expiresAt: string | null): string {
