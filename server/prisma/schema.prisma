@@ -370,6 +370,7 @@ model PresaleReservation {
   userId    String
   productId String
   quantity  Int      @default(1)
+  reservedPrice Decimal?
 
   // PENDING → arriving stock is notified → NOTIFIED → user pays → PAID
   // If admin cancels the reservation → CANCELLED

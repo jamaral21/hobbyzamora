@@ -336,6 +336,7 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
         });
       }
 
+      let reservedPresalePrice: number | null = null;
       if (product.isPresale) {
         if (!req.user?.id) {
           return res.status(401).json({ error: 'Debes iniciar sesión para comprar una preventa' });
@@ -347,7 +348,7 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
 
         const existingReservation = await prisma.presaleReservation.findUnique({
           where: { userId_productId: { userId: req.user.id, productId: product.id } },
-          select: { status: true, quantity: true },
+          select: { status: true, quantity: true, reservedPrice: true },
         });
 
         const hasNotifiedReservation = existingReservation?.status === 'NOTIFIED';
@@ -389,9 +390,13 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
             error: `Max quantity for presale is ${product.presaleMaxQty}`
           });
         }
+
+        reservedPresalePrice = existingReservation.reservedPrice
+          ? parseFloat(existingReservation.reservedPrice.toString())
+          : null;
       }
 
-      let originalItemPrice = parseFloat(product.price.toString());
+      let originalItemPrice = reservedPresalePrice ?? parseFloat(product.price.toString());
       let variantName = null;
 
       // Handle variant

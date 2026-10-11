@@ -21,6 +21,7 @@ export default function CartPage() {
   const [stockIssues, setStockIssues] = useState<StockIssue[]>([]);
   const [stockChecked, setStockChecked] = useState(false);
   const [presaleLimits, setPresaleLimits] = useState<Record<string, number>>({});
+  const [presalePrices, setPresalePrices] = useState<Record<string, number>>({});
 
   useEffect(() => {
     presaleAPI.getMyReservations()
@@ -31,6 +32,14 @@ export default function CartPage() {
             .map((reservation) => [reservation.productId, reservation.quantity]),
         );
         setPresaleLimits(limits);
+        setPresalePrices(Object.fromEntries(
+          reservations
+            .filter((reservation) => reservation.status === 'NOTIFIED')
+            .map((reservation) => [
+              reservation.productId,
+              reservation.reservedPrice ?? reservation.product.price,
+            ]),
+        ));
         const overLimitIssues = cartItems
           .filter((item) => item.isPresale && limits[item.productId] !== undefined && item.quantity > limits[item.productId])
           .map((item) => ({
@@ -46,7 +55,10 @@ export default function CartPage() {
           ]);
         }
       })
-      .catch(() => setPresaleLimits({}));
+      .catch(() => {
+        setPresaleLimits({});
+        setPresalePrices({});
+      });
   }, []);
 
   useEffect(() => {
@@ -64,7 +76,9 @@ export default function CartPage() {
           } catch {
             product = await productsAPI.getById(item.productId);
           }
-          const originalPrice = getProductBasePrice(product, item.variantId);
+          const originalPrice = item.isPresale && presalePrices[item.productId] !== undefined
+            ? presalePrices[item.productId]
+            : getProductBasePrice(product, item.variantId);
           const discountPercent = getProductDiscountPercent(product);
           useCartStore.setState(state => ({
             items: state.items.map(i => i.id === item.id ? {
@@ -94,7 +108,7 @@ export default function CartPage() {
       setStockIssues(issues);
       setStockChecked(true);
     });
-  }, []);
+  }, [presalePrices]);
 
   const handleUpdateQuantity = (id: string, quantity: number) => {
     const item = cartItems.find((cartItem) => cartItem.id === id);

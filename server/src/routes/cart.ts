@@ -47,6 +47,17 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
       });
     }
 
+    const reservationPrices = await prisma.presaleReservation.findMany({
+      where: {
+        userId: req.user!.id,
+        productId: { in: cart.items.map((item) => item.productId) },
+      },
+      select: { productId: true, reservedPrice: true },
+    });
+    const reservedPriceByProduct = new Map(
+      reservationPrices.map((reservation) => [reservation.productId, reservation.reservedPrice]),
+    );
+
     const items = cart.items.map(item => ({
       id: item.id,
       productId: item.productId,
@@ -56,7 +67,7 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
         id: item.product.id,
         name: item.product.name,
         sku: item.product.sku,
-        price: parseFloat(item.product.price.toString()),
+        price: parseFloat((reservedPriceByProduct.get(item.productId) ?? item.product.price).toString()),
         images: item.product.images,
         stock: item.product.inventoryBatches.reduce((sum, b) => sum + b.remaining, 0),
       },

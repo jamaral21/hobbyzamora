@@ -442,6 +442,7 @@ export async function sendPresaleArrivalEmail(
   name: string,
   productName: string,
   reservationId: string,
+  productPrice: number,
 ): Promise<void> {
   const link = `${BASE_URL}/store/presales`;
   const html = layout(`¡Tu preventa llegó! – ${productName}`, `
@@ -449,6 +450,9 @@ export async function sendPresaleArrivalEmail(
     <p>Tu producto reservado ha llegado a nuestra tienda:</p>
     <div class="info-box" style="text-align:center;padding:20px">
       <span style="font-size:18px;font-weight:700;color:#ffd60a">${productName}</span>
+      <div style="font-size:15px;color:#e8e6f0;margin-top:14px">
+        Precio reservado: <strong style="color:#ffd60a">${formatPrice(productPrice)}</strong>
+      </div>
     </div>
     <p>Tienes <strong style="color:#ffd60a">24 horas</strong> para ir a pagar tu preventa antes de que se libere el cupo.</p>
     <div style="text-align:center">

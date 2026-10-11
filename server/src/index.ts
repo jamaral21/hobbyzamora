@@ -8,7 +8,7 @@ import dotenv from 'dotenv';
 // Load environment variables BEFORE importing routes
 dotenv.config();
 
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { sendPresaleArrivalEmail } from './lib/emailService.js';
 import { getPresalePaymentExpiry } from './lib/presaleUtils.js';
 
@@ -128,8 +128,9 @@ async function expirePresaleReservations() {
 
     type PromotedReservation = {
       id: string;
+      reservedPrice: Prisma.Decimal | null;
       user: { name: string; email: string };
-      product: { name: string };
+      product: { name: string; price: Prisma.Decimal };
     };
 
     let promotedForEmail: PromotedReservation[] = [];
@@ -161,7 +162,7 @@ async function expirePresaleReservations() {
             orderBy: { createdAt: 'asc' },
             include: {
               user: { select: { name: true, email: true } },
-              product: { select: { name: true } },
+              product: { select: { name: true, price: true } },
             },
           });
 
@@ -201,7 +202,13 @@ async function expirePresaleReservations() {
     if (promotedForEmail.length > 0) {
       await Promise.all(
         promotedForEmail.map((r) =>
-          sendPresaleArrivalEmail(r.user.email, r.user.name, r.product.name, r.id).catch((err) => {
+          sendPresaleArrivalEmail(
+            r.user.email,
+            r.user.name,
+            r.product.name,
+            r.id,
+            parseFloat((r.reservedPrice ?? r.product.price).toString()),
+          ).catch((err) => {
             console.error(`[presale] Error al enviar email de reasignación a ${r.user.email}:`, err);
           })
         )

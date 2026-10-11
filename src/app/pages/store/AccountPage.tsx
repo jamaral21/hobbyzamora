@@ -634,7 +634,7 @@ function AccountContent() {
                         </p>
                       </Link>
                       <p className="text-sm font-bold text-primary font-[family-name:var(--font-mono)] mt-0.5">
-                        ${Number(r.product.price).toLocaleString('es-CL')}
+                        ${Number(r.reservedPrice ?? r.product.price).toLocaleString('es-CL')}
                       </p>
                       <div className={`flex items-center gap-1 mt-1 text-xs font-medium ${s.color}`}>
                         <StatusIcon className="w-3 h-3" />

@@ -814,6 +814,7 @@ export function PresalesPage() {
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Cliente</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dirección envío</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Producto</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Precio preventa</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Estado</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Notificado</th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-muted-foreground uppercase tracking-wide">Expira</th>
@@ -861,6 +862,10 @@ export function PresalesPage() {
                             <p className="text-xs text-muted-foreground font-mono">{r.product.sku}</p>
                           </div>
                         </div>
+                      </td>
+                      {/* Presale price */}
+                      <td className="px-4 py-3 text-right font-semibold">
+                        {formatCLP(r.reservedPrice ?? r.product.price)}
                       </td>
                       {/* Status */}
                       <td className="px-4 py-3">
@@ -1089,4 +1094,3 @@ export function PresalesPage() {
     </AdminLayout>
   );
 }
-

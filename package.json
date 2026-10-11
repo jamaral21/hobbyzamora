@@ -27,7 +27,9 @@
     "presale:fix-stuck-paid": "tsx server/scripts/fix-presale-stuck-paid.ts",
     "presale:fix-stuck-paid:dry-run": "tsx server/scripts/fix-presale-stuck-paid.ts --dry-run",
     "presale:seed-dragoon-beneficiaries": "tsx server/scripts/seed-dragoon-presale-beneficiaries.ts",
-    "presale:seed-dragoon-beneficiaries:dry-run": "tsx server/scripts/seed-dragoon-presale-beneficiaries.ts --dry-run"
+    "presale:seed-dragoon-beneficiaries:dry-run": "tsx server/scripts/seed-dragoon-presale-beneficiaries.ts --dry-run",
+    "presale:seed-dragoon-reservation-prices": "tsx server/scripts/seed-dragoon-reservation-prices.ts",
+    "presale:seed-dragoon-reservation-prices:dry-run": "tsx server/scripts/seed-dragoon-reservation-prices.ts --dry-run"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

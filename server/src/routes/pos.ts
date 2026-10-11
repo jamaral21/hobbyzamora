@@ -409,6 +409,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
         });
       }
 
+      let reservedPresalePrice: number | null = null;
       if (product.isPresale) {
         if (!customerId) {
           return res.status(400).json({ error: 'Las preventas en POS requieren un cliente asociado' });
@@ -424,7 +425,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
 
         const existingReservation = await prisma.presaleReservation.findUnique({
           where: { userId_productId: { userId: customerId, productId: product.id } },
-          select: { status: true, quantity: true },
+          select: { status: true, quantity: true, reservedPrice: true },
         });
 
         const hasNotifiedReservation = existingReservation?.status === 'NOTIFIED';
@@ -464,10 +465,14 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
         if (product.presaleMaxQty && requestedPresaleQuantity > product.presaleMaxQty) {
           return res.status(400).json({ error: `Max quantity for presale is ${product.presaleMaxQty}` });
         }
+
+        reservedPresalePrice = existingReservation.reservedPrice
+          ? parseFloat(existingReservation.reservedPrice.toString())
+          : null;
       }
 
       const pricing = calculateProductPricing(
-        parseFloat(product.price.toString()),
+        reservedPresalePrice ?? parseFloat(product.price.toString()),
         product.discountPercent,
         product.isPresale,
       );

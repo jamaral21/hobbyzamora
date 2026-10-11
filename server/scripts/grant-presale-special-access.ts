@@ -29,7 +29,7 @@ async function main() {
   console.log(`Buscando producto con SKU: ${sku}`);
   const product = await prisma.product.findUnique({
     where: { sku },
-    select: { id: true, name: true, sku: true, isPresale: true, presaleEndDate: true },
+    select: { id: true, name: true, sku: true, price: true, isPresale: true, presaleEndDate: true },
   });
 
   if (!product) {
@@ -89,6 +89,7 @@ async function main() {
             userId: user.id,
             productId: product.id,
             quantity: requestedQty,
+            reservedPrice: product.price,
             status: 'NOTIFIED',
             notifiedAt: now,
             expiresAt,
@@ -101,7 +102,7 @@ async function main() {
 
     if (!isDryRun && reservationId) {
       try {
-        await sendPresaleArrivalEmail(user.email, user.name, product.name, reservationId);
+        await sendPresaleArrivalEmail(user.email, user.name, product.name, reservationId, Number(product.price));
         console.log(`  Email de notificación enviado correctamente a ${user.email}`);
       } catch (err: any) {
         console.error(`  Error enviando email a ${user.email}:`, err?.message || err);

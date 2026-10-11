@@ -33,6 +33,7 @@ type ReservationWithUserAndProduct = {
   userId: string;
   productId: string;
   quantity: number;
+  reservedPrice: Prisma.Decimal | null;
   status: string;
   notifiedAt: Date | null;
   expiresAt: Date | null;
@@ -40,7 +41,7 @@ type ReservationWithUserAndProduct = {
   createdAt: Date;
   updatedAt: Date;
   user: { id: string; name: string; email: string };
-  product: { id: string; name: string };
+  product: { id: string; name: string; price: Prisma.Decimal };
 };
 
 async function promotePendingReservationsFIFO(
@@ -57,7 +58,7 @@ async function promotePendingReservationsFIFO(
     orderBy: { createdAt: 'asc' },
     include: {
       user: { select: { id: true, name: true, email: true } },
-      product: { select: { id: true, name: true } },
+      product: { select: { id: true, name: true, price: true } },
     },
   }) as ReservationWithUserAndProduct[];
 
@@ -171,7 +172,7 @@ router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) =
             include: { product: { select: { id: true, name: true, price: true, images: true } } },
           })
         : await tx.presaleReservation.create({
-            data: { userId, productId, quantity, status: 'PENDING' },
+            data: { userId, productId, quantity, status: 'PENDING', reservedPrice: product.price },
             include: { product: { select: { id: true, name: true, price: true, images: true } } },
           });
     });
@@ -181,13 +182,14 @@ router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) =
       user.email,
       user.name,
       reservation.product.name,
-      parseFloat((reservation.product.price as any).toString()),
+      parseFloat((reservation.reservedPrice ?? reservation.product.price).toString()),
       reservation.quantity,
     ).catch((err) => console.error('[presale] Error al enviar email de reserva:', err));
 
     return res.status(201).json({
       reservation: {
         ...reservation,
+        reservedPrice: reservation.reservedPrice ? parseFloat(reservation.reservedPrice.toString()) : null,
         product: {
           ...reservation.product,
           images: parseImages(reservation.product.images),
@@ -272,6 +274,7 @@ router.get('/my', authenticate, async (req: AuthRequest, res) => {
 
     const formatted = reservationsWithOrder.map((r) => ({
       ...r,
+      reservedPrice: r.reservedPrice ? parseFloat(r.reservedPrice.toString()) : null,
       product: {
         ...r.product,
         images: parseImages(r.product.images),
@@ -340,6 +343,7 @@ router.get('/admin/list', authenticate, requireRole('ADMIN', 'STAFF'), async (re
 
     const formatted = reservations.map((r) => ({
       ...r,
+      reservedPrice: r.reservedPrice ? parseFloat(r.reservedPrice.toString()) : null,
       product: {
         ...r.product,
         images: parseImages(r.product.images),
@@ -462,6 +466,7 @@ router.post(
             r.user.name,
             product.name,
             r.id,
+            parseFloat((r.reservedPrice ?? r.product.price).toString()),
           ).catch((err) => {
             console.error(`[presale] Error al enviar email a ${r.user.email}:`, err);
           })
@@ -644,7 +649,13 @@ router.post(
       );
 
       const promotionEmails = promotedReservations.map((r) =>
-        sendPresaleArrivalEmail(r.user.email, r.user.name, r.product.name, r.id).catch((err) => {
+        sendPresaleArrivalEmail(
+          r.user.email,
+          r.user.name,
+          r.product.name,
+          r.id,
+          parseFloat((r.reservedPrice ?? r.product.price).toString()),
+        ).catch((err) => {
           console.error(`[presale] Error al enviar email de reasignación a ${r.user.email}:`, err);
         })
       );

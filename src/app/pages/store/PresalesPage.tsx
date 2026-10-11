@@ -576,7 +576,9 @@ function PresalesContent() {
                         </span>
                       </div>
 
-                      <p className="text-lg font-bold text-primary">{formatCLP(reservation.product.price)}</p>
+                      <p className="text-lg font-bold text-primary">
+                        {formatCLP(reservation.reservedPrice ?? reservation.product.price)}
+                      </p>
 
                       <p className="text-xs text-muted-foreground mt-1">
                         Cantidad reservada: <span className="text-foreground font-semibold">{reservation.quantity}</span>
@@ -601,7 +603,10 @@ function PresalesContent() {
                         <Button
                           size="sm"
                           onClick={() => {
-                            addItem(reservation.product as any, reservation.quantity);
+                            addItem({
+                              ...reservation.product,
+                              price: reservation.reservedPrice ?? reservation.product.price,
+                            } as any, reservation.quantity);
                           }}
                         >
                           {alreadyInCart ? (

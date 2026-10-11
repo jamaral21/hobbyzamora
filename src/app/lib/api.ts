@@ -1081,6 +1081,7 @@ export interface PresaleReservation {
   userId: string;
   productId: string;
   quantity: number;
+  reservedPrice: number | null;
   status: PresaleStatus;
   notifiedAt: string | null;
   expiresAt: string | null;
@@ -1107,6 +1108,7 @@ export interface AdminPresaleReservation {
   userId: string;
   productId: string;
   quantity: number;
+  reservedPrice: number | null;
   status: PresaleStatus;
   notifiedAt: string | null;
   expiresAt: string | null;
