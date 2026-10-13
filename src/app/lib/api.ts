@@ -484,6 +484,10 @@ export const productsAPI = {
 
   hasActiveOffers: () => fetchAPI<{ hasActiveOffers: boolean }>('/products/meta/active-offers'),
 
+  clearAllDiscounts: () => fetchAPI<{ updatedCount: number }>('/products/admin/clear-discounts', {
+    method: 'POST',
+  }, 'admin'),
+
   getSections: () => fetchAPI<ProductSectionGroup[]>('/products/meta/sections'),
 
   createSubsection: (parentCategory: string, name: string) =>

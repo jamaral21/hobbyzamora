@@ -772,6 +772,19 @@ router.get('/admin-detail/:id', authenticate, requireRole('ADMIN', 'STAFF'), asy
   }
 });
 
+router.post('/admin/clear-discounts', authenticate, requireRole('ADMIN'), async (_req, res) => {
+  try {
+    const result = await prisma.product.updateMany({
+      where: { discountPercent: { gt: 0 } },
+      data: { discountPercent: 0 },
+    });
+    res.json({ updatedCount: result.count });
+  } catch (error) {
+    console.error('Clear product discounts error:', error);
+    res.status(500).json({ error: 'Failed to clear product discounts' });
+  }
+});
+
 // Create product (admin only)
 router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRequest, res) => {
   try {

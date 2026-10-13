@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { Plus, Search, Filter, MoreVertical, Edit, Trash2, Eye, Loader2, Upload, Download, CheckCircle, AlertCircle, ImagePlus, Link2 } from 'lucide-react';
+import { Plus, Search, Filter, MoreVertical, Edit, Trash2, Eye, Loader2, Upload, Download, CheckCircle, AlertCircle, ImagePlus, Link2, BadgePercent } from 'lucide-react';
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { Button } from '../../components/design-system/Button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/design-system/Table';
@@ -17,7 +17,7 @@ import { orderSectionLabels } from '../../lib/sections';
 import { getDiscountedPrice, getProductDiscountPercent } from '../../lib/productPricing';
 
 export default function ProductsPage() {
-  const { isAuthenticated } = useAdminAuth();
+  const { isAuthenticated, user } = useAdminAuth();
   const location = useLocation();
   const isPresalesView = location.pathname.includes('/presales');
   const navigate = useNavigate();
@@ -44,6 +44,8 @@ export default function ProductsPage() {
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 1 });
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [sectionCategories, setSectionCategories] = useState<string[]>([]);
+  const [isClearingDiscounts, setIsClearingDiscounts] = useState(false);
+  const [discountClearMessage, setDiscountClearMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
   const hasLoadedProductsRef = useRef(false);
@@ -140,6 +142,27 @@ export default function ProductsPage() {
     if (confirm('¿Estás seguro de que quieres desactivar este producto?')) {
       await updateProduct.mutate(id, { status: 'ARCHIVED' });
       await loadProducts();
+    }
+  };
+
+  const handleClearDiscounts = async () => {
+    if (!window.confirm('¿Quitar todos los descuentos de todos los productos y desactivar Cyber Week?')) return;
+
+    setIsClearingDiscounts(true);
+    setDiscountClearMessage(null);
+    try {
+      const { updatedCount } = await productsAPI.clearAllDiscounts();
+      setDiscountClearMessage({
+        type: 'success',
+        text: updatedCount > 0
+          ? `Cyber Week desactivada. Se quitaron los descuentos de ${updatedCount} producto(s).`
+          : 'No había descuentos activos para quitar.',
+      });
+      await loadProducts();
+    } catch (error: any) {
+      setDiscountClearMessage({ type: 'error', text: error?.message || 'No se pudieron quitar los descuentos.' });
+    } finally {
+      setIsClearingDiscounts(false);
     }
   };
 
@@ -376,12 +399,36 @@ export default function ProductsPage() {
               {isImportingDriveImages ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}
               {isImportingDriveImages ? 'Importando desde Drive...' : 'Importar desde Drive'}
             </Button>
+            {!isPresalesView && user?.role === 'ADMIN' && (
+              <Button
+                variant="outline"
+                className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                onClick={handleClearDiscounts}
+                disabled={isClearingDiscounts}
+              >
+                {isClearingDiscounts ? <Loader2 className="w-4 h-4 animate-spin" /> : <BadgePercent className="w-4 h-4" />}
+                {isClearingDiscounts ? 'Quitando descuentos...' : 'Desactivar Cyber Week'}
+              </Button>
+            )}
             <Button onClick={() => { setEditingProduct(null); setIsEditorOpen(true); }}>
               <Plus className="w-4 h-4" />
               Agregar Producto
             </Button>
           </div>
         </div>
+
+        {discountClearMessage && (
+          <div className={`mb-4 flex items-center gap-2 rounded-lg border px-4 py-3 text-sm ${
+            discountClearMessage.type === 'success'
+              ? 'border-[#00e676]/20 bg-[#00e676]/10 text-foreground'
+              : 'border-destructive/20 bg-destructive/10 text-destructive'
+          }`}>
+            {discountClearMessage.type === 'success'
+              ? <CheckCircle className="h-4 w-4 text-[#00e676]" />
+              : <AlertCircle className="h-4 w-4" />}
+            {discountClearMessage.text}
+          </div>
+        )}
 
         {/* Import Result Banner */}
         {importResult && (
