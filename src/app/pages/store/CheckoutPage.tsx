@@ -8,7 +8,7 @@ import { Input, Select } from '../../components/design-system/Input';
 import { Button } from '../../components/design-system/Button';
 import { CreditCard, Lock, Loader2, MapPin, ShieldCheck, ChevronRight, AlertCircle, Wallet, Landmark, Package, Truck, Users, Check } from 'lucide-react';
 import { useCartStore } from '../../lib/store';
-import { ordersAPI, paymentsAPI, addressesAPI, productsAPI, type Address } from '../../lib/api';
+import { ordersAPI, paymentsAPI, addressesAPI, productsAPI, presaleAPI, type Address } from '../../lib/api';
 import { getDiscountedPrice, getProductBasePrice, getProductDiscountPercent } from '../../lib/productPricing';
 import { useAuth } from '../../contexts/AuthContext';
 import { RequireAuth } from '../../components/auth/RequireAuth';
@@ -210,6 +210,7 @@ function CheckoutForm() {
   const navigate = useNavigate();
   const { items: cartItems, clearCart } = useCartStore();
   const [pricesRefreshing, setPricesRefreshing] = useState(true);
+  const [priceVerificationFailed, setPriceVerificationFailed] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -218,32 +219,54 @@ function CheckoutForm() {
       return;
     }
 
-    void Promise.all(cartItems.map(async (item) => {
-      try {
-        let product;
-        try {
-          product = await productsAPI.getByIdAdmin(item.productId);
-        } catch {
-          product = await productsAPI.getById(item.productId);
-        }
-        const originalPrice = getProductBasePrice(product, item.variantId);
-        const discountPercent = getProductDiscountPercent(product);
-        useCartStore.setState((state) => ({
-          items: state.items.map((current) => current.id === item.id ? {
-            ...current,
-            price: getDiscountedPrice(originalPrice, discountPercent),
-            originalPrice,
-            discountPercent,
-            stock: product.stock,
-            isPresale: product.isPresale,
-          } : current),
+    void presaleAPI.getMyReservations()
+      .then(({ reservations }) => {
+        const reservationPrices = new Map(
+          reservations
+            .filter((reservation) => reservation.status === 'NOTIFIED')
+            .map((reservation) => [
+              reservation.productId,
+              reservation.reservedPrice ?? reservation.product.price,
+            ]),
+        );
+
+        return Promise.all(cartItems.map(async (item) => {
+          try {
+            let product;
+            try {
+              product = await productsAPI.getByIdAdmin(item.productId);
+            } catch {
+              product = await productsAPI.getById(item.productId);
+            }
+            const originalPrice = product.isPresale
+              ? reservationPrices.get(item.productId) ?? getProductBasePrice(product, item.variantId)
+              : getProductBasePrice(product, item.variantId);
+            const discountPercent = getProductDiscountPercent(product);
+            useCartStore.setState((state) => ({
+              items: state.items.map((current) => current.id === item.id ? {
+                ...current,
+                price: getDiscountedPrice(originalPrice, discountPercent),
+                originalPrice,
+                discountPercent,
+                stock: product.stock,
+                isPresale: product.isPresale,
+              } : current),
+            }));
+          } catch {
+            // Checkout still relies on the server to validate current product prices.
+          }
         }));
-      } catch {
-        // Checkout still relies on the server to validate current product prices.
-      }
-    })).finally(() => {
-      if (active) setPricesRefreshing(false);
-    });
+      })
+      .catch((refreshError: unknown) => {
+        console.error('Error al verificar precios de preventa:', refreshError);
+        if (active) {
+          setPriceVerificationFailed(true);
+          setError('No pudimos verificar el precio de tus preventas. Vuelve al carrito e intenta nuevamente.');
+        }
+      })
+      .finally(() => {
+        if (active) setPricesRefreshing(false);
+      });
 
     return () => {
       active = false;
@@ -1055,7 +1078,7 @@ function CheckoutForm() {
                     <Button variant="outline" onClick={() => setStep('payment')} fullWidth disabled={isProcessing}>
                       Volver
                     </Button>
-                    <Button fullWidth size="lg" onClick={handlePlaceOrder} disabled={isProcessing || pricesRefreshing}>
+                    <Button fullWidth size="lg" onClick={handlePlaceOrder} disabled={isProcessing || pricesRefreshing || priceVerificationFailed}>
                       {isProcessing || pricesRefreshing ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin mr-2" />
