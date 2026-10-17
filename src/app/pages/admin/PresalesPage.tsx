@@ -896,7 +896,7 @@ export function PresalesPage() {
                       <td className="px-4 py-3 text-right font-semibold">
                         <div className="inline-flex items-center justify-end gap-2">
                           {formatCLP(r.reservedPrice ?? r.product.price)}
-                          {(r.status === 'PENDING' || r.status === 'NOTIFIED') && (
+                          {(r.status === 'PENDING' || r.status === 'NOTIFIED' || r.status === 'PAID') && (
                             <button
                               onClick={() => handleEditPrice(r)}
                               disabled={editingPriceId === r.id}

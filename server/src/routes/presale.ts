@@ -908,8 +908,8 @@ router.patch(
 
 /**
  * PATCH /api/presale/admin/reservation-price/:reservationId
- * Admin: change the locked price of an open (PENDING/NOTIFIED) reservation.
- * Checkout and POS read this value, so it applies when the customer pays.
+ * Admin: change the locked price of a reservation that has not been cancelled or expired.
+ * Paid reservations also update the matching order item and order totals when found.
  */
 router.patch(
   '/admin/reservation-price/:reservationId',
@@ -927,31 +927,144 @@ router.patch(
 
       const reservation = await prisma.presaleReservation.findUnique({
         where: { id: reservationId },
-        select: { id: true, status: true },
+        select: {
+          id: true,
+          status: true,
+          userId: true,
+          productId: true,
+          notifiedAt: true,
+          paidAt: true,
+        },
       });
 
       if (!reservation) {
         return res.status(404).json({ error: 'Reserva no encontrada' });
       }
 
-      if (reservation.status !== 'PENDING' && reservation.status !== 'NOTIFIED') {
-        return res.status(400).json({ error: 'Solo se puede editar el precio de reservas pendientes o notificadas' });
+      if (!['PENDING', 'NOTIFIED', 'PAID'].includes(reservation.status)) {
+        return res.status(400).json({ error: 'Solo se puede editar el precio de reservas pendientes, notificadas o pagadas' });
       }
 
-      const updated = await prisma.presaleReservation.update({
-        where: { id: reservationId },
-        data: { reservedPrice: roundedPrice },
-        select: { id: true, reservedPrice: true },
+      const result = await prisma.$transaction(async (tx) => {
+        const current = await tx.presaleReservation.findUnique({
+          where: { id: reservationId },
+          select: {
+            status: true,
+            userId: true,
+            productId: true,
+            notifiedAt: true,
+            paidAt: true,
+          },
+        });
+
+        if (!current || !['PENDING', 'NOTIFIED', 'PAID'].includes(current.status)) {
+          throw new Error('La reserva ya no está disponible para editar');
+        }
+
+        let paidOrder: {
+          id: string;
+          orderNumber: string;
+          subtotal: Prisma.Decimal;
+          discount: Prisma.Decimal;
+          total: Prisma.Decimal;
+          tax: Prisma.Decimal;
+          source: string;
+          items: { id: string; price: Prisma.Decimal; quantity: number }[];
+        } | null = null;
+
+        if (current.status === 'PAID' && current.notifiedAt && current.paidAt) {
+          const matchingOrders = await tx.order.findMany({
+            where: {
+              userId: current.userId,
+              status: { in: ['PROCESSING', 'SHIPPED', 'DELIVERED'] },
+              createdAt: { gte: current.notifiedAt, lte: current.paidAt },
+              items: { some: { productId: current.productId } },
+            },
+            include: {
+              items: {
+                where: { productId: current.productId },
+                select: { id: true, price: true, quantity: true },
+              },
+            },
+            orderBy: { createdAt: 'desc' },
+          });
+
+          if (matchingOrders.length > 1) {
+            throw new Error('Hay más de una orden pagada compatible con esta reserva; no se modificó ningún precio');
+          }
+
+          paidOrder = matchingOrders[0] ?? null;
+        }
+
+        const updated = await tx.presaleReservation.update({
+          where: { id: reservationId },
+          data: { reservedPrice: roundedPrice },
+          select: { id: true, reservedPrice: true },
+        });
+
+        let orderUpdated = false;
+        if (paidOrder) {
+          if (paidOrder.items.length === 0) {
+            throw new Error('No se encontró el producto en la orden asociada');
+          }
+
+          let priceDifference = 0;
+          for (const orderItem of paidOrder.items) {
+            priceDifference += (roundedPrice - Number(orderItem.price)) * orderItem.quantity;
+            await tx.orderItem.update({
+              where: { id: orderItem.id },
+              data: { price: roundedPrice },
+            });
+          }
+
+          const newSubtotal = Number(paidOrder.subtotal) + priceDifference;
+          const newTax = paidOrder.source === 'ONLINE'
+            ? Math.round((newSubtotal - Number(paidOrder.discount)) * 19 / 119 * 100) / 100
+            : Number(paidOrder.tax);
+
+          await tx.order.update({
+            where: { id: paidOrder.id },
+            data: {
+              subtotal: newSubtotal,
+              tax: newTax,
+              total: Number(paidOrder.total) + priceDifference,
+            },
+          });
+          orderUpdated = true;
+        }
+
+        return {
+          reservation: updated,
+          orderUpdated,
+          orderNumber: paidOrder?.orderNumber ?? null,
+        };
       });
 
       return res.json({
-        message: 'Precio de preventa actualizado',
+        message: result.orderUpdated
+          ? `Precio actualizado y orden ${result.orderNumber} ajustada. El registro del pago realizado no se modificó.`
+          : reservation.status === 'PAID'
+            ? 'Precio de la reserva actualizado. No se encontró una orden asociada; el registro del pago no se modificó.'
+            : 'Precio de preventa actualizado',
         reservation: {
-          id: updated.id,
-          reservedPrice: updated.reservedPrice ? parseFloat(updated.reservedPrice.toString()) : null,
+          id: result.reservation.id,
+          reservedPrice: result.reservation.reservedPrice
+            ? parseFloat(result.reservation.reservedPrice.toString())
+            : null,
         },
+        orderUpdated: result.orderUpdated,
+        orderNumber: result.orderNumber,
       });
     } catch (error) {
+      if (
+        error instanceof Error &&
+        [
+          'La reserva ya no está disponible para editar',
+          'Hay más de una orden pagada compatible con esta reserva; no se modificó ningún precio',
+        ].includes(error.message)
+      ) {
+        return res.status(409).json({ error: error.message });
+      }
       console.error('Presale update price error:', error);
       return res.status(500).json({ error: 'Error al actualizar el precio de la reserva' });
     }
