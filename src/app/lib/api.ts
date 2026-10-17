@@ -1203,6 +1203,14 @@ export const presaleAPI = {
       method: 'PATCH',
     }, 'admin'),
 
+  /** Admin: change the locked price of a PENDING/NOTIFIED reservation */
+  updateReservationPrice: (reservationId: string, price: number) =>
+    fetchAPI<{ message: string; reservation: { id: string; reservedPrice: number | null } }>(
+      `/presale/admin/reservation-price/${reservationId}`,
+      { method: 'PATCH', body: JSON.stringify({ price }) },
+      'admin'
+    ),
+
   /** Admin: cancel a reservation, store the reason, and optionally ban the user */
   adminCancelReservation: (reservationId: string, reason: string, banUser = false) =>
     fetchAPI<{ message: string; reservation: AdminPresaleReservation }>(`/presale/admin/cancel/${reservationId}`, {

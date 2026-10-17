@@ -212,6 +212,7 @@ export function PresalesPage() {
   const [releasingProductId, setReleasingProductId] = useState<string | null>(null);
   const [releaseProduct, setReleaseProduct] = useState<Product | null>(null);
   const [markingPaid, setMarkingPaid] = useState<string | null>(null);
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [blockingUserId, setBlockingUserId] = useState<string | null>(null);
   const [restoringUserId, setRestoringUserId] = useState<string | null>(null);
@@ -526,6 +527,34 @@ export function PresalesPage() {
       showToast(err.message || 'Error al marcar como pagado', 'err');
     } finally {
       setMarkingPaid(null);
+    }
+  };
+
+  const handleEditPrice = async (reservation: AdminPresaleReservation) => {
+    const current = reservation.reservedPrice ?? reservation.product.price;
+    const input = window.prompt(
+      `Nuevo precio de preventa para ${reservation.user.name} (CLP):`,
+      String(Math.round(Number(current))),
+    );
+    if (input === null) return;
+
+    const price = Number(input.replace(/[^\d]/g, ''));
+    if (!Number.isFinite(price) || price <= 0) {
+      showToast('Ingresa un precio válido mayor a 0', 'err');
+      return;
+    }
+
+    setEditingPriceId(reservation.id);
+    try {
+      const data = await presaleAPI.updateReservationPrice(reservation.id, price);
+      setReservations((prev) =>
+        prev.map((r) => (r.id === reservation.id ? { ...r, reservedPrice: data.reservation.reservedPrice } : r))
+      );
+      showToast(data.message);
+    } catch (err: any) {
+      showToast(err.message || 'Error al actualizar el precio', 'err');
+    } finally {
+      setEditingPriceId(null);
     }
   };
 
@@ -865,7 +894,24 @@ export function PresalesPage() {
                       </td>
                       {/* Presale price */}
                       <td className="px-4 py-3 text-right font-semibold">
-                        {formatCLP(r.reservedPrice ?? r.product.price)}
+                        <div className="inline-flex items-center justify-end gap-2">
+                          {formatCLP(r.reservedPrice ?? r.product.price)}
+                          {(r.status === 'PENDING' || r.status === 'NOTIFIED') && (
+                            <button
+                              onClick={() => handleEditPrice(r)}
+                              disabled={editingPriceId === r.id}
+                              title="Editar precio de preventa"
+                              aria-label="Editar precio de preventa"
+                              className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-60 transition-colors"
+                            >
+                              {editingPriceId === r.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Edit className="w-3 h-3" />
+                              )}
+                            </button>
+                          )}
+                        </div>
                       </td>
                       {/* Status */}
                       <td className="px-4 py-3">

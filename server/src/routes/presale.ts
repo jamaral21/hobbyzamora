@@ -907,6 +907,58 @@ router.patch(
 );
 
 /**
+ * PATCH /api/presale/admin/reservation-price/:reservationId
+ * Admin: change the locked price of an open (PENDING/NOTIFIED) reservation.
+ * Checkout and POS read this value, so it applies when the customer pays.
+ */
+router.patch(
+  '/admin/reservation-price/:reservationId',
+  authenticate,
+  requireRole('ADMIN', 'STAFF'),
+  async (req: AuthRequest, res) => {
+    try {
+      const reservationId = req.params.reservationId as string;
+      const price = Number(req.body?.price);
+
+      if (!Number.isFinite(price) || price <= 0 || price > 100_000_000) {
+        return res.status(400).json({ error: 'El precio debe ser un número mayor a 0' });
+      }
+      const roundedPrice = Math.round(price);
+
+      const reservation = await prisma.presaleReservation.findUnique({
+        where: { id: reservationId },
+        select: { id: true, status: true },
+      });
+
+      if (!reservation) {
+        return res.status(404).json({ error: 'Reserva no encontrada' });
+      }
+
+      if (reservation.status !== 'PENDING' && reservation.status !== 'NOTIFIED') {
+        return res.status(400).json({ error: 'Solo se puede editar el precio de reservas pendientes o notificadas' });
+      }
+
+      const updated = await prisma.presaleReservation.update({
+        where: { id: reservationId },
+        data: { reservedPrice: roundedPrice },
+        select: { id: true, reservedPrice: true },
+      });
+
+      return res.json({
+        message: 'Precio de preventa actualizado',
+        reservation: {
+          id: updated.id,
+          reservedPrice: updated.reservedPrice ? parseFloat(updated.reservedPrice.toString()) : null,
+        },
+      });
+    } catch (error) {
+      console.error('Presale update price error:', error);
+      return res.status(500).json({ error: 'Error al actualizar el precio de la reserva' });
+    }
+  }
+);
+
+/**
  * DELETE /api/presale/admin/reservation/:reservationId
  * Admin: delete any reservation and restore the product quota.
  */
