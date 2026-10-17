@@ -219,43 +219,52 @@ function CheckoutForm() {
       return;
     }
 
-    void presaleAPI.getMyReservations()
-      .then(({ reservations }) => {
-        const reservationPrices = new Map(
+    void Promise.all(cartItems.map(async (item) => {
+      try {
+        let product;
+        try {
+          product = await productsAPI.getByIdAdmin(item.productId);
+        } catch {
+          product = await productsAPI.getById(item.productId);
+        }
+        return { item, product };
+      } catch {
+        return { item, product: null };
+      }
+    }))
+      .then(async (products) => {
+        const hasPresaleItems = products.some(({ item, product }) => product?.isPresale || item.isPresale);
+        const reservationPrices = new Map<string, number>();
+        if (hasPresaleItems) {
+          const { reservations } = await presaleAPI.getMyReservations();
           reservations
             .filter((reservation) => reservation.status === 'NOTIFIED')
-            .map((reservation) => [
-              reservation.productId,
-              reservation.reservedPrice ?? reservation.product.price,
-            ]),
-        );
+            .forEach((reservation) => {
+              reservationPrices.set(
+                reservation.productId,
+                reservation.reservedPrice ?? reservation.product.price,
+              );
+            });
+        }
 
-        return Promise.all(cartItems.map(async (item) => {
-          try {
-            let product;
-            try {
-              product = await productsAPI.getByIdAdmin(item.productId);
-            } catch {
-              product = await productsAPI.getById(item.productId);
-            }
-            const originalPrice = product.isPresale
-              ? reservationPrices.get(item.productId) ?? getProductBasePrice(product, item.variantId)
-              : getProductBasePrice(product, item.variantId);
-            const discountPercent = getProductDiscountPercent(product);
-            useCartStore.setState((state) => ({
-              items: state.items.map((current) => current.id === item.id ? {
-                ...current,
-                price: getDiscountedPrice(originalPrice, discountPercent),
-                originalPrice,
-                discountPercent,
-                stock: product.stock,
-                isPresale: product.isPresale,
-              } : current),
-            }));
-          } catch {
-            // Checkout still relies on the server to validate current product prices.
-          }
-        }));
+        products.forEach(({ item, product }) => {
+          if (!product) return;
+
+          const originalPrice = product.isPresale
+            ? reservationPrices.get(item.productId) ?? getProductBasePrice(product, item.variantId)
+            : getProductBasePrice(product, item.variantId);
+          const discountPercent = getProductDiscountPercent(product);
+          useCartStore.setState((state) => ({
+            items: state.items.map((current) => current.id === item.id ? {
+              ...current,
+              price: getDiscountedPrice(originalPrice, discountPercent),
+              originalPrice,
+              discountPercent,
+              stock: product.stock,
+              isPresale: product.isPresale,
+            } : current),
+          }));
+        });
       })
       .catch((refreshError: unknown) => {
         console.error('Error al verificar precios de preventa:', refreshError);
