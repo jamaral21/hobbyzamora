@@ -1209,6 +1209,7 @@ export const presaleAPI = {
       message: string;
       reservation: { id: string; reservedPrice: number | null };
       orderUpdated: boolean;
+      paymentUpdated: boolean;
       orderNumber: string | null;
     }>(
       `/presale/admin/reservation-price/${reservationId}`,

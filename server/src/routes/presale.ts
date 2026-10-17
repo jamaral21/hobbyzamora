@@ -969,21 +969,27 @@ router.patch(
           total: Prisma.Decimal;
           tax: Prisma.Decimal;
           source: string;
+          status: string;
           items: { id: string; price: Prisma.Decimal; quantity: number }[];
+          payments: { id: string }[];
         } | null = null;
 
-        if (current.status === 'PAID' && current.notifiedAt && current.paidAt) {
+        if (current.status === 'PAID' && current.notifiedAt) {
           const matchingOrders = await tx.order.findMany({
             where: {
               userId: current.userId,
-              status: { in: ['PROCESSING', 'SHIPPED', 'DELIVERED'] },
-              createdAt: { gte: current.notifiedAt, lte: current.paidAt },
+              status: { in: ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED'] },
+              createdAt: { gte: current.notifiedAt },
               items: { some: { productId: current.productId } },
             },
             include: {
               items: {
                 where: { productId: current.productId },
                 select: { id: true, price: true, quantity: true },
+              },
+              payments: {
+                where: { status: 'PENDING' },
+                select: { id: true },
               },
             },
             orderBy: { createdAt: 'desc' },
@@ -1003,6 +1009,7 @@ router.patch(
         });
 
         let orderUpdated = false;
+        let paymentUpdated = false;
         if (paidOrder) {
           if (paidOrder.items.length === 0) {
             throw new Error('No se encontró el producto en la orden asociada');
@@ -1030,19 +1037,29 @@ router.patch(
               total: Number(paidOrder.total) + priceDifference,
             },
           });
+          if (paidOrder.status === 'PENDING' && paidOrder.payments.length > 0) {
+            await tx.payment.updateMany({
+              where: { id: { in: paidOrder.payments.map((payment) => payment.id) } },
+              data: { amount: Number(paidOrder.total) + priceDifference },
+            });
+            paymentUpdated = true;
+          }
           orderUpdated = true;
         }
 
         return {
           reservation: updated,
           orderUpdated,
+          paymentUpdated,
           orderNumber: paidOrder?.orderNumber ?? null,
         };
       });
 
       return res.json({
         message: result.orderUpdated
-          ? `Precio actualizado y orden ${result.orderNumber} ajustada. El registro del pago realizado no se modificó.`
+          ? result.paymentUpdated
+            ? `Precio actualizado y orden ${result.orderNumber} ajustada; el pago pendiente también se actualizó.`
+            : `Precio actualizado y orden ${result.orderNumber} ajustada. El registro del pago realizado no se modificó.`
           : reservation.status === 'PAID'
             ? 'Precio de la reserva actualizado. No se encontró una orden asociada; el registro del pago no se modificó.'
             : 'Precio de preventa actualizado',
@@ -1053,6 +1070,7 @@ router.patch(
             : null,
         },
         orderUpdated: result.orderUpdated,
+        paymentUpdated: result.paymentUpdated,
         orderNumber: result.orderNumber,
       });
     } catch (error) {
