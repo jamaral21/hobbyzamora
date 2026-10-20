@@ -654,11 +654,16 @@ function AccountContent() {
                         size="sm"
                         className="shrink-0"
                         onClick={() => {
-                          addItem(r.product as any, r.quantity);
+                          addItem(
+                            { ...r.product, price: r.reservedPrice ?? r.product.price } as any,
+                            r.quantity,
+                            r.variantKey || undefined,
+                            r.variant?.label,
+                          );
                         }}
                       >
                         <ShoppingBag className="w-3.5 h-3.5 mr-1" />
-                        {cartItems.some(i => i.productId === r.productId) ? 'Sumar al carrito' : 'Al carrito'}
+                        {cartItems.some(i => i.productId === r.productId && (i.variantId ?? '') === (r.variantKey ?? '')) ? 'Sumar al carrito' : 'Al carrito'}
                       </Button>
                     )}
                   </div>

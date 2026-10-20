@@ -547,7 +547,7 @@ function PresalesContent() {
               const isNotified = reservation.status === 'NOTIFIED';
               const isPending = reservation.status === 'PENDING';
               const isCancelled = reservation.status === 'CANCELLED';
-              const alreadyInCart = cartItems.some((item) => item.productId === reservation.productId);
+              const alreadyInCart = cartItems.some((item) => item.productId === reservation.productId && (item.variantId ?? '') === (reservation.variantKey ?? ''));
 
               return (
                 <Card key={reservation.id} className="overflow-hidden p-0">
@@ -607,7 +607,7 @@ function PresalesContent() {
                             addItem({
                               ...reservation.product,
                               price: reservation.reservedPrice ?? reservation.product.price,
-                            } as any, reservation.quantity);
+                            } as any, reservation.quantity, reservation.variantKey || undefined, reservation.variant?.label);
                           }}
                         >
                           {alreadyInCart ? (
