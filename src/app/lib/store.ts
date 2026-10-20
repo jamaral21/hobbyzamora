@@ -28,6 +28,8 @@ interface CartState {
   updateQuantity: (id: string, quantity: number) => void;
   removeItem: (id: string) => void;
   clearCart: () => void;
+  /** Quita preventas del carrito que ya no tienen una reserva NOTIFIED (p. ej. canceladas o vencidas) */
+  removeUnreservedPresaleItems: (notifiedReservationKeys: Set<string>) => string[];
   
   // Computed
   getSubtotal: () => number;
@@ -90,6 +92,16 @@ export const useCartStore = create<CartState>()(
             ],
           };
         });
+      },
+
+      removeUnreservedPresaleItems: (notifiedReservationKeys) => {
+        const removed = get().items.filter(
+          (item) => item.isPresale && !notifiedReservationKeys.has(`${item.productId}:${item.variantId ?? ''}`),
+        );
+        if (removed.length > 0) {
+          set((state) => ({ items: state.items.filter((item) => !removed.some((r) => r.id === item.id)) }));
+        }
+        return removed.map((item) => item.name);
       },
 
       updateQuantity: (id, quantity) => {

@@ -867,6 +867,15 @@ router.patch(
         });
 
 
+        // Quita del carrito guardado en el servidor la preventa cancelada (y su variante)
+        await tx.cartItem.deleteMany({
+          where: {
+            productId: reservation.productId,
+            ...(reservation.variantKey ? { variantId: reservation.variantKey } : {}),
+            cart: { userId: reservation.userId },
+          },
+        });
+
         if (banUser) {
           await tx.user.update({
             where: { id: reservation.userId },

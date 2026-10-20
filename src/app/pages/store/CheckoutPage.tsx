@@ -259,6 +259,16 @@ function CheckoutForm() {
             });
         }
 
+        if (hasPresaleItems) {
+          const notifiedKeys = new Set(
+            [...reservationPrices.keys()],
+          );
+          const removed = useCartStore.getState().removeUnreservedPresaleItems(notifiedKeys);
+          if (active && removed.length > 0) {
+            setError(`Se quitó de tu carrito porque ya no tienes una reserva activa: ${removed.join(', ')}.`);
+          }
+        }
+
         if (active && paymentTypes.size === 1) {
           const [type] = [...paymentTypes];
           setRequiredPaymentType(type);

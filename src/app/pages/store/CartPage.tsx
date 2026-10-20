@@ -22,6 +22,7 @@ export default function CartPage() {
   const [stockChecked, setStockChecked] = useState(false);
   const [presaleLimits, setPresaleLimits] = useState<Record<string, number>>({});
   const [presalePrices, setPresalePrices] = useState<Record<string, number>>({});
+  const [removedPresales, setRemovedPresales] = useState<string[]>([]);
 
   useEffect(() => {
     presaleAPI.getMyReservations()
@@ -31,6 +32,8 @@ export default function CartPage() {
             .filter((reservation) => reservation.status === 'NOTIFIED')
             .map((reservation) => [`${reservation.productId}:${reservation.variantKey ?? ''}`, reservation.quantity]),
         );
+        const removed = useCartStore.getState().removeUnreservedPresaleItems(new Set(Object.keys(limits)));
+        if (removed.length > 0) setRemovedPresales(removed);
         setPresaleLimits(limits);
         setPresalePrices(Object.fromEntries(
           reservations
@@ -110,7 +113,8 @@ export default function CartPage() {
         }
       })
     ).then(() => {
-      setStockIssues(issues);
+      const remainingIds = new Set(useCartStore.getState().items.map((i) => i.id));
+      setStockIssues(issues.filter((issue) => remainingIds.has(issue.cartItemId)));
       setStockChecked(true);
     });
   }, [presalePrices]);
@@ -153,6 +157,15 @@ export default function CartPage() {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-4">
+              {removedPresales.length > 0 && (
+                <div className="flex items-start gap-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                  <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-amber-400">
+                    Se quitó del carrito porque ya no tienes una reserva activa para pagar: {removedPresales.join(', ')}.
+                  </p>
+                </div>
+              )}
+
               {/* Alertas de stock */}
               {stockChecked && stockIssues.length > 0 && (
                 <div className="space-y-2">
