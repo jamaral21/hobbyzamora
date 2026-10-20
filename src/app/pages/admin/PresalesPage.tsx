@@ -888,6 +888,7 @@ export function PresalesPage() {
                           </div>
                           <div>
                             <p className="font-medium leading-snug">{r.product.name}</p>
+                            {r.variant && <p className="text-xs text-amber-400">{r.variant.label}</p>}
                             <p className="text-xs text-muted-foreground font-mono">{r.product.sku}</p>
                           </div>
                         </div>

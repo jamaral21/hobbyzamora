@@ -633,6 +633,7 @@ function AccountContent() {
                           {r.product.name}
                         </p>
                       </Link>
+                      {r.variant && <p className="text-xs text-amber-500">{r.variant.label}</p>}
                       <p className="text-sm font-bold text-primary font-[family-name:var(--font-mono)] mt-0.5">
                         ${Number(r.reservedPrice ?? r.product.price).toLocaleString('es-CL')}
                       </p>

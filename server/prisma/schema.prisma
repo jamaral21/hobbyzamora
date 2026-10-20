@@ -116,6 +116,9 @@ model ProductVariant {
   sku       String?
   price     Decimal?
   stock     Int      @default(0)
+  // Solo para variantes de preventa: SEALED | OPENED y CASH | CARD
+  condition   String?
+  paymentType String?
 
   orderItems OrderItem[]
   cartItems  CartItem[]
@@ -371,6 +374,8 @@ model PresaleReservation {
   productId String
   quantity  Int      @default(1)
   reservedPrice Decimal?
+  // ProductVariant.id elegido al reservar; vacío si la preventa no tiene variantes
+  variantKey String @default("")
 
   // PENDING → arriving stock is notified → NOTIFIED → user pays → PAID
   // If admin cancels the reservation → CANCELLED
@@ -390,8 +395,8 @@ model PresaleReservation {
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  // 1 reservation record per user per product; quantity stores requested units
-  @@unique([userId, productId])
+  // 1 reservation record per user, product and variant; quantity stores requested units
+  @@unique([userId, productId, variantKey])
   @@map("presale_reservations")
 }
 

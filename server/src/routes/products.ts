@@ -13,6 +13,7 @@ import { generateUniqueSku, getSkuPrefix, isOfficialStoreCategory, normalizeStor
 import { normalizeProductImportRow } from '../lib/productImport.js';
 import { matchesProductImageName, sanitizeProductImageName } from '../lib/productImageMatching.js';
 import { authenticate, optionalAuth, requireRole, AuthRequest } from '../middleware/auth.js';
+import { parsePresaleVariantPrices, syncPresaleVariants } from '../lib/presaleUtils.js';
 
 const router = Router();
 const __filename = fileURLToPath(import.meta.url);
@@ -808,7 +809,15 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
       presaleEndDate,
       variants,
       initialStock,
+      presaleVariantPrices,
     } = req.body;
+
+    const parsedPresaleVariantPrices = isPresale && presaleVariantPrices
+      ? parsePresaleVariantPrices(presaleVariantPrices)
+      : null;
+    if (isPresale && presaleVariantPrices && !parsedPresaleVariantPrices) {
+      return res.status(400).json({ error: 'Los 4 precios de variantes de preventa deben ser mayores a 0' });
+    }
 
     const { category: normalizedCategory, valid: isValidCategory } = await resolveValidCategoryInput(String(category || ''));
 
@@ -842,7 +851,8 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
       return res.status(400).json({ error: 'SKU already exists' });
     }
 
-    const product = await prisma.product.create({
+    const product = await prisma.$transaction(async (tx) => {
+      const created = await tx.product.create({
       data: {
         sku: resolvedSku,
         name,
@@ -872,6 +882,12 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
         } : undefined,
       },
       include: { variants: true },
+      });
+      if (parsedPresaleVariantPrices) {
+        await syncPresaleVariants(tx, created.id, parsedPresaleVariantPrices);
+        return tx.product.findUniqueOrThrow({ where: { id: created.id }, include: { variants: true } });
+      }
+      return created;
     });
 
     res.status(201).json({
@@ -910,7 +926,15 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
       presaleMaxQty,
       presaleAvailQty,
       presaleEndDate,
+      presaleVariantPrices,
     } = req.body;
+
+    const parsedPresaleVariantPrices = presaleVariantPrices
+      ? parsePresaleVariantPrices(presaleVariantPrices)
+      : null;
+    if (presaleVariantPrices && !parsedPresaleVariantPrices) {
+      return res.status(400).json({ error: 'Los 4 precios de variantes de preventa deben ser mayores a 0' });
+    }
 
     const existing = await prisma.product.findUnique({ where: { id } });
     if (!existing) {
@@ -1021,6 +1045,11 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
           sku: updatedProduct.sku,
           cost: Number(nextCost),
         });
+      }
+
+      if (parsedPresaleVariantPrices && nextIsPresale) {
+        await syncPresaleVariants(tx, id, parsedPresaleVariantPrices);
+        return tx.product.findUniqueOrThrow({ where: { id }, include: { variants: true } });
       }
 
       return updatedProduct;

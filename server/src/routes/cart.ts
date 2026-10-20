@@ -52,13 +52,15 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
         userId: req.user!.id,
         productId: { in: cart.items.map((item) => item.productId) },
       },
-      select: { productId: true, reservedPrice: true },
+      select: { productId: true, variantKey: true, reservedPrice: true },
     });
     const reservedPriceByProduct = new Map(
-      reservationPrices.map((reservation) => [reservation.productId, reservation.reservedPrice]),
+      reservationPrices.map((reservation) => [`${reservation.productId}:${reservation.variantKey}`, reservation.reservedPrice]),
     );
 
-    const items = cart.items.map(item => ({
+    const items = cart.items.map(item => {
+      const reservedPrice = reservedPriceByProduct.get(`${item.productId}:${item.variantId ?? ''}`) ?? null;
+      return {
       id: item.id,
       productId: item.productId,
       variantId: item.variantId,
@@ -67,7 +69,7 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
         id: item.product.id,
         name: item.product.name,
         sku: item.product.sku,
-        price: parseFloat((reservedPriceByProduct.get(item.productId) ?? item.product.price).toString()),
+        price: parseFloat((reservedPrice ?? item.product.price).toString()),
         images: item.product.images,
         stock: item.product.inventoryBatches.reduce((sum, b) => sum + b.remaining, 0),
       },
@@ -75,9 +77,14 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
         id: item.variant.id,
         name: item.variant.name,
         options: item.variant.options,
-        price: item.variant.price ? parseFloat(item.variant.price.toString()) : null,
+        condition: item.variant.condition,
+        paymentType: item.variant.paymentType,
+        price: reservedPrice ?? item.variant.price
+          ? parseFloat((reservedPrice ?? item.variant.price)!.toString())
+          : null,
       } : null,
-    }));
+    };
+    });
 
     const subtotal = items.reduce((sum, item) => {
       const price = item.variant?.price || item.product.price;

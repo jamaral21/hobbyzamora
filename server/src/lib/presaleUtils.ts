@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client';
+
 type PresaleCandidate = {
   isPresale?: boolean | null;
   status?: string | null;
@@ -68,4 +70,59 @@ export function getPresaleUnavailableReason(
 
 export function isPresaleActive(product: PresaleCandidate, now = new Date()) {
   return getPresaleUnavailableReason(product, now) === null;
+}
+
+export type PresaleVariantPrices = {
+  sealedCash: number;
+  sealedCard: number;
+  openedCash: number;
+  openedCard: number;
+};
+
+const PRESALE_VARIANT_DEFS = [
+  { key: 'sealedCash', condition: 'SEALED', paymentType: 'CASH' },
+  { key: 'sealedCard', condition: 'SEALED', paymentType: 'CARD' },
+  { key: 'openedCash', condition: 'OPENED', paymentType: 'CASH' },
+  { key: 'openedCard', condition: 'OPENED', paymentType: 'CARD' },
+] as const;
+
+export function getPresaleVariantLabel(condition: string, paymentType: string) {
+  return `${condition === 'OPENED' ? 'Abierto' : 'Sellado'} · ${paymentType === 'CARD' ? 'Tarjeta' : 'Efectivo'}`;
+}
+
+/** Valida los 4 precios; retorna null si el payload es inválido. */
+export function parsePresaleVariantPrices(input: unknown): PresaleVariantPrices | null {
+  if (!input || typeof input !== 'object') return null;
+  const result: Record<string, number> = {};
+  for (const def of PRESALE_VARIANT_DEFS) {
+    const value = Number((input as Record<string, unknown>)[def.key]);
+    if (!Number.isFinite(value) || value <= 0) return null;
+    result[def.key] = value;
+  }
+  return result as PresaleVariantPrices;
+}
+
+/** Crea o actualiza las 4 variantes de preventa de un producto. */
+export async function syncPresaleVariants(
+  tx: Prisma.TransactionClient,
+  productId: string,
+  prices: PresaleVariantPrices,
+) {
+  for (const def of PRESALE_VARIANT_DEFS) {
+    const existing = await tx.productVariant.findFirst({
+      where: { productId, condition: def.condition, paymentType: def.paymentType },
+    });
+    const data = {
+      name: 'Preventa',
+      options: JSON.stringify([getPresaleVariantLabel(def.condition, def.paymentType)]),
+      price: prices[def.key],
+    };
+    if (existing) {
+      await tx.productVariant.update({ where: { id: existing.id }, data });
+    } else {
+      await tx.productVariant.create({
+        data: { ...data, productId, condition: def.condition, paymentType: def.paymentType, stock: 0 },
+      });
+    }
+  }
 }

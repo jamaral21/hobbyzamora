@@ -123,12 +123,11 @@ async function notifyOrderProcessing(orderId: string): Promise<void> {
   // Marcar reservas de preventa como PAID si el usuario tenía reservas NOTIFIED
   // para los productos incluidos en esta orden
   if (order.userId) {
-    const presaleProductIds = order.items.map((i) => i.productId);
     try {
       await prisma.presaleReservation.updateMany({
         where: {
           userId: order.userId,
-          productId: { in: presaleProductIds },
+          OR: order.items.map((i) => ({ productId: i.productId, variantKey: i.variantId ?? '' })),
           status: 'NOTIFIED',
         },
         data: { status: 'PAID', paidAt: new Date() },

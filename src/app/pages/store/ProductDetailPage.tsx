@@ -81,6 +81,9 @@ export default function ProductDetailPage() {
   const [reserveLoading, setReserveLoading] = useState(false);
   const [reserveError, setReserveError] = useState('');
   const [myReservation, setMyReservation] = useState<PresaleReservation | null>(null);
+  const [myProductReservations, setMyProductReservations] = useState<PresaleReservation[]>([]);
+  const [variantPaymentType, setVariantPaymentType] = useState<'CASH' | 'CARD'>('CASH');
+  const [variantQty, setVariantQty] = useState<Record<'SEALED' | 'OPENED', number>>({ SEALED: 1, OPENED: 0 });
   const { addItem } = useCartStore();
   const { isAuthenticated, user } = useAuth();
 
@@ -114,15 +117,29 @@ export default function ProductDetailPage() {
   useEffect(() => {
     if (!id || !isAuthenticated || !user?.id) {
       setMyReservation(null);
+      setMyProductReservations([]);
       return;
     }
     presaleAPI.getMyReservations()
       .then(({ reservations }) => {
-        const existing = reservations.find(r => r.product.id === id) ?? null;
+        const mine = reservations.filter(r => r.product.id === id);
+        const existing = mine[0] ?? null;
         setMyReservation(existing);
+        setMyProductReservations(mine);
         if (existing?.status === 'PENDING') setQuantity(existing.quantity);
+        const active = mine.filter(r => r.variant && ['PENDING', 'NOTIFIED', 'PAID'].includes(r.status));
+        if (active.length > 0) {
+          setVariantPaymentType(active[0].variant!.paymentType);
+          const pending = active.filter(r => r.status === 'PENDING');
+          if (pending.length > 0) {
+            setVariantQty({
+              SEALED: pending.find(r => r.variant!.condition === 'SEALED')?.quantity ?? 0,
+              OPENED: pending.find(r => r.variant!.condition === 'OPENED')?.quantity ?? 0,
+            });
+          }
+        }
       })
-      .catch(() => setMyReservation(null));
+      .catch(() => { setMyReservation(null); setMyProductReservations([]); });
   }, [id, isAuthenticated, user?.id]);
 
   const handleReserve = async () => {
@@ -130,8 +147,20 @@ export default function ProductDetailPage() {
     setReserveLoading(true);
     setReserveError('');
     try {
-      const { reservation } = await presaleAPI.reserve(id, quantity);
+      const items = hasPresaleVariants
+        ? (['SEALED', 'OPENED'] as const)
+            .filter((condition) => variantQty[condition] > 0)
+            .map((condition) => ({
+              variantId: findPresaleVariant(condition)?.id as string,
+              quantity: variantQty[condition],
+            }))
+        : undefined;
+      const { reservation, reservations } = await presaleAPI.reserve(id, quantity, items);
       setMyReservation(reservation);
+      setMyProductReservations((prev) => [
+        ...reservations,
+        ...prev.filter((p) => !reservations.some((r) => r.id === p.id)),
+      ]);
       requestAnimationFrame(() => {
         setShowReserveDialog(false);
       });
@@ -230,6 +259,30 @@ export default function ProductDetailPage() {
   );
   const isPresaleBlocked = Boolean(user?.presaleBanned);
   const presaleExpiryLabel = product?.isPresale ? getPresaleExpiryLabel(product.presaleEndDate ?? null) : null;
+  const presaleVariants: any[] = (product.variants ?? []).filter((v: any) => v.condition && v.paymentType);
+  const hasPresaleVariants = Boolean(product.isPresale) && presaleVariants.length > 0;
+  const genericVariants: any[] = (product.variants ?? []).filter((v: any) => !v.condition);
+  const notifiedVariantReservations = myProductReservations.filter((r) => r.status === 'NOTIFIED' && r.variantKey);
+  const lockedVariantReservations = myProductReservations.filter(
+    (r) => r.variantKey && ['PENDING', 'NOTIFIED', 'PAID'].includes(r.status),
+  );
+  const lockedPaymentType = lockedVariantReservations[0]?.variant?.paymentType ?? null;
+  const committedVariantUnits = lockedVariantReservations
+    .filter((r) => r.status !== 'PENDING')
+    .reduce((sum, r) => sum + r.quantity, 0);
+  const variantUnitsCap = Math.max(0, (product.presaleMaxQty || 99) - committedVariantUnits);
+  const selectedVariantUnits = variantQty.SEALED + variantQty.OPENED;
+  const findPresaleVariant = (condition: string) =>
+    presaleVariants.find((v: any) => v.condition === condition && v.paymentType === (lockedPaymentType ?? variantPaymentType));
+  const setConditionQty = (condition: 'SEALED' | 'OPENED', next: number) => {
+    const other = condition === 'SEALED' ? 'OPENED' : 'SEALED';
+    if (variantUnitsCap <= 1) {
+      setVariantQty({ [condition]: Math.min(1, Math.max(0, next)), [other]: 0 } as Record<'SEALED' | 'OPENED', number>);
+      return;
+    }
+    const clamped = Math.max(0, Math.min(next, variantUnitsCap - variantQty[other]));
+    setVariantQty({ ...variantQty, [condition]: clamped });
+  };
   const maxPresaleQuantity = product.isPresale
     ? Math.max(1, product.presaleMaxQty || Number.MAX_SAFE_INTEGER)
     : product.stock;
@@ -397,17 +450,92 @@ export default function ProductDetailPage() {
             )}
 
             {/* Variants */}
-            {product.variants && product.variants.length > 0 && (
+            {hasPresaleVariants && (
+              <div className="mb-6 space-y-5">
+                <div>
+                  <p className="text-sm text-muted-foreground mb-2">Pago</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {(['CASH', 'CARD'] as const).map((type) => {
+                      const active = (lockedPaymentType ?? variantPaymentType) === type;
+                      return (
+                        <button
+                          key={type}
+                          type="button"
+                          disabled={Boolean(lockedPaymentType) && lockedPaymentType !== type}
+                          onClick={() => setVariantPaymentType(type)}
+                          className={`p-3 rounded-lg border-2 text-left transition-all disabled:opacity-40 disabled:cursor-not-allowed ${active ? 'border-primary bg-primary/5' : 'border-border bg-secondary'}`}
+                        >
+                          <span className="block text-foreground font-medium">{type === 'CASH' ? 'Efectivo' : 'Tarjeta'}</span>
+                          <span className="block text-xs text-muted-foreground">
+                            {type === 'CASH' ? 'Solo pago en efectivo' : 'Crédito o débito'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {lockedPaymentType && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Ya tienes reservas con este tipo de pago; todas tus variantes deben usar el mismo.
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground mb-2">Estado</p>
+                  <div className="space-y-3">
+                    {(['SEALED', 'OPENED'] as const).map((condition) => {
+                      const variant = findPresaleVariant(condition);
+                      return (
+                        <div
+                          key={condition}
+                          className={`flex items-center justify-between gap-3 p-3 rounded-lg border-2 ${variantQty[condition] > 0 ? 'border-primary bg-primary/5' : 'border-border bg-secondary'}`}
+                        >
+                          <div>
+                            <span className="block text-foreground font-medium">{condition === 'SEALED' ? 'Sellado' : 'Abierto'}</span>
+                            <span className="block text-sm text-primary">
+                              ${Number(variant?.price ?? 0).toLocaleString('es-CL')}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setConditionQty(condition, variantQty[condition] - 1)}
+                              className="w-9 h-9 rounded-lg border border-border hover:bg-secondary text-foreground"
+                            >
+                              -
+                            </button>
+                            <span className="w-8 text-center text-foreground">{variantQty[condition]}</span>
+                            <button
+                              type="button"
+                              onClick={() => setConditionQty(condition, variantQty[condition] + 1)}
+                              className="w-9 h-9 rounded-lg border border-border hover:bg-secondary text-foreground"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {variantUnitsCap > 1 && product.presaleMaxQty && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Puedes reservar hasta {product.presaleMaxQty} unidades combinando variantes.
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {genericVariants.length > 0 && (
               <div className="mb-6">
                 <VariantSelector
-                  variants={product.variants}
+                  variants={genericVariants}
                   onSelect={(variantId, option) => setSelectedVariant({ id: variantId, option })}
                 />
               </div>
             )}
 
             {/* Quantity */}
-            {(!product.isPresale || product.presaleMaxQty) && (
+            {!hasPresaleVariants && (!product.isPresale || product.presaleMaxQty) && (
               <div className="mb-6">
                 <label className="text-sm text-muted-foreground mb-2 block">
                   Cantidad
@@ -454,7 +582,21 @@ export default function ProductDetailPage() {
 
             <div className="flex gap-3 mb-8">
               {product.isPresale ? (
-                myReservation?.status === 'NOTIFIED' ? (
+                hasPresaleVariants && notifiedVariantReservations.length > 0 ? (
+                  <Button
+                    fullWidth
+                    size="lg"
+                    onClick={() => {
+                      notifiedVariantReservations.forEach((r) => {
+                        addItem(product, r.quantity, r.variantKey, r.variant?.label);
+                      });
+                      window.location.href = '/store/checkout';
+                    }}
+                  >
+                    <CreditCard className="w-5 h-5 mr-2" />
+                    Pagar reserva ({notifiedVariantReservations.reduce((sum, r) => sum + r.quantity, 0)} unid.)
+                  </Button>
+                ) : myReservation?.status === 'NOTIFIED' && !hasPresaleVariants ? (
                   <Button
                     fullWidth
                     size="lg"
@@ -470,7 +612,12 @@ export default function ProductDetailPage() {
                   <Button fullWidth size="lg" disabled>
                     Preventa Expirada
                   </Button>
-                ) : myReservation?.status === 'PENDING' && myReservation.quantity >= maxPresaleQuantity ? (
+                ) : hasPresaleVariants && variantUnitsCap <= 0 ? (
+                  <Button fullWidth size="lg" disabled variant="outline">
+                    <Bookmark className="w-5 h-5" />
+                    Máximo reservado
+                  </Button>
+                ) : !hasPresaleVariants && myReservation?.status === 'PENDING' && myReservation.quantity >= maxPresaleQuantity ? (
                   <Button fullWidth size="lg" disabled variant="outline">
                     <Bookmark className="w-5 h-5" />
                     Máximo reservado ({myReservation.quantity})
@@ -487,10 +634,11 @@ export default function ProductDetailPage() {
                   <Button
                     fullWidth
                     size="lg"
+                    disabled={hasPresaleVariants && selectedVariantUnits === 0}
                     onClick={isAuthenticated ? () => { setReserveError(''); setShowReserveDialog(true); } : () => setShowAuthModal(true)}
                   >
                     <Bookmark className="w-5 h-5" />
-                    {myReservation?.status === 'PENDING' ? 'Actualizar reserva' : 'Reservar'}
+                    {myProductReservations.some((r) => r.status === 'PENDING') ? 'Actualizar reserva' : 'Reservar'}
                   </Button>
                 )
               ) : (
@@ -549,9 +697,22 @@ export default function ProductDetailPage() {
           <div className="bg-zinc-900 border border-white/10 rounded-2xl p-6 max-w-sm w-full shadow-2xl">
             <h2 className="text-lg font-bold text-white mb-1">Confirmar reserva</h2>
             <p className="text-amber-400 font-semibold text-sm mb-1">{product.name}</p>
-            <p className="text-zinc-400 text-sm mb-1">
-              ${product.price.toLocaleString('es-CL')}
-            </p>
+            {hasPresaleVariants ? (
+              <ul className="text-zinc-400 text-sm mb-1 space-y-1">
+                {(['SEALED', 'OPENED'] as const).filter((c) => variantQty[c] > 0).map((c) => {
+                  const v = findPresaleVariant(c);
+                  return (
+                    <li key={c}>
+                      {variantQty[c]} × {c === 'SEALED' ? 'Sellado' : 'Abierto'} · {(lockedPaymentType ?? variantPaymentType) === 'CASH' ? 'Efectivo' : 'Tarjeta'} — ${Number(v?.price ?? 0).toLocaleString('es-CL')}
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="text-zinc-400 text-sm mb-1">
+                ${product.price.toLocaleString('es-CL')}
+              </p>
+            )}
             <p className="text-zinc-500 text-xs mb-6 leading-relaxed">
               Al confirmar, reservas este producto. Cuando llegue recibirás un correo con un plazo límite para completar el pago.
             </p>

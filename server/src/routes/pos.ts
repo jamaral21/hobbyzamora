@@ -424,7 +424,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
         }
 
         const existingReservation = await prisma.presaleReservation.findUnique({
-          where: { userId_productId: { userId: customerId, productId: product.id } },
+          where: { userId_productId_variantKey: { userId: customerId, productId: product.id, variantKey: item.variantId || '' } },
           select: { status: true, quantity: true, reservedPrice: true },
         });
 
@@ -456,7 +456,10 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
           return res.status(400).json({ error: `${product.name}: ${unavailableReason}` });
         }
 
-        const requestedPresaleQuantity = getRequestedPresaleQuantity(items, product.id);
+        const requestedPresaleQuantity = getRequestedPresaleQuantity(
+          items.filter((i: any) => (i.variantId || '') === (item.variantId || '')),
+          product.id,
+        );
         if (requestedPresaleQuantity > existingReservation.quantity) {
           return res.status(400).json({
             error: `${product.name}: Solo puedes comprar las ${existingReservation.quantity} unidad(es) reservadas`,
@@ -487,6 +490,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
         price: itemPrice,
         cost: parseFloat(product.cost.toString()),
         quantity: item.quantity,
+        variantId: item.variantId || null,
         variantName: item.variantName || null,
       });
     }
@@ -623,7 +627,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
       if (product?.isPresale) {
         if (customerId) {
           await prisma.presaleReservation.upsert({
-            where: { userId_productId: { userId: customerId, productId: item.productId } },
+            where: { userId_productId_variantKey: { userId: customerId, productId: item.productId, variantKey: item.variantId || '' } },
             update: {
               status: 'PAID',
               paidAt: new Date(),
@@ -631,7 +635,7 @@ router.post('/sale', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
               cancellationReason: null,
               cancelledBy: null,
             },
-            create: { userId: customerId, productId: item.productId, status: 'PAID', paidAt: new Date() },
+            create: { userId: customerId, productId: item.productId, variantKey: item.variantId || '', status: 'PAID', paidAt: new Date() },
           });
         }
       } else {
@@ -716,9 +720,12 @@ router.post('/getnet/status', authenticate, requireRole('ADMIN', 'STAFF'), async
         }
 
         if (payment.order.userId) {
-          const productIds = payment.order.items.map((i) => i.productId);
           await tx.presaleReservation.updateMany({
-            where: { userId: payment.order.userId, productId: { in: productIds }, status: 'NOTIFIED' },
+            where: {
+              userId: payment.order.userId,
+              OR: payment.order.items.map((i) => ({ productId: i.productId, variantKey: i.variantId ?? '' })),
+              status: 'NOTIFIED',
+            },
             data: { status: 'PAID', paidAt: new Date() },
           });
         }

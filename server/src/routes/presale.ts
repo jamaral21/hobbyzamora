@@ -12,6 +12,7 @@ import {
   getPresaleUnavailableReason,
   PRESALE_EXPIRATION_SECONDS,
   sumPresaleReservationQuantities,
+  getPresaleVariantLabel,
 } from '../lib/presaleUtils.js';
 
 const router = Router();
@@ -43,6 +44,21 @@ type ReservationWithUserAndProduct = {
   user: { id: string; name: string; email: string };
   product: { id: string; name: string; price: Prisma.Decimal };
 };
+
+async function getVariantInfoById(variantKeys: string[]) {
+  const ids = [...new Set(variantKeys.filter(Boolean))];
+  if (ids.length === 0) return new Map<string, { condition: string; paymentType: string; label: string }>();
+  const variants = await prisma.productVariant.findMany({ where: { id: { in: ids } } });
+  return new Map(
+    variants
+      .filter((v) => v.condition && v.paymentType)
+      .map((v) => [v.id, {
+        condition: v.condition as string,
+        paymentType: v.paymentType as string,
+        label: getPresaleVariantLabel(v.condition as string, v.paymentType as string),
+      }]),
+  );
+}
 
 async function promotePendingReservationsFIFO(
   tx: Prisma.TransactionClient,
@@ -93,11 +109,27 @@ router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) =
   try {
     const productId = req.params.productId as string;
     const userId = req.user!.id;
-    const quantity = Number.parseInt(String(req.body?.quantity ?? 1), 10);
+    const productVariants = await prisma.productVariant.findMany({
+      where: { productId, condition: { not: null } },
+    });
+    const hasVariants = productVariants.length > 0;
 
-    if (!Number.isInteger(quantity) || quantity <= 0) {
-      return res.status(400).json({ error: 'La cantidad debe ser un entero mayor a 0' });
+    const rawItems: Array<{ variantId?: string; quantity?: unknown }> = hasVariants
+      ? (Array.isArray(req.body?.items) ? req.body.items : [{ variantId: req.body?.variantId, quantity: req.body?.quantity }])
+      : [{ quantity: req.body?.quantity }];
+    const requested = new Map<string, number>();
+    for (const raw of rawItems) {
+      const q = Number.parseInt(String(raw?.quantity ?? 1), 10);
+      if (!Number.isInteger(q) || q <= 0) {
+        return res.status(400).json({ error: 'La cantidad debe ser un entero mayor a 0' });
+      }
+      const key = hasVariants ? String(raw?.variantId ?? '') : '';
+      if (hasVariants && !productVariants.some((v) => v.id === key)) {
+        return res.status(400).json({ error: 'Debes elegir una variante válida (estado y tipo de pago)' });
+      }
+      requested.set(key, (requested.get(key) ?? 0) + q);
     }
+    const quantity = [...requested.values()].reduce((a, b) => a + b, 0);
 
     const [product, user] = await Promise.all([
       prisma.product.findUnique({ where: { id: productId } }),
@@ -128,17 +160,41 @@ router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) =
       return res.status(400).json({ error: `La cantidad máxima por cliente es ${product.presaleMaxQty}` });
     }
 
-    // Check if user already has a reservation for this product
-    const existing = await prisma.presaleReservation.findUnique({
-      where: { userId_productId: { userId, productId } },
+    const userReservations = await prisma.presaleReservation.findMany({
+      where: { userId, productId },
     });
+    const existingByKey = new Map(userReservations.map((r) => [r.variantKey, r]));
 
-    if (existing && !['CANCELLED', 'EXPIRED', 'PENDING'].includes(existing.status)) {
-      return res.status(400).json({ error: 'Ya tienes una reserva para este producto' });
+    for (const key of requested.keys()) {
+      const existing = existingByKey.get(key);
+      if (existing && !['CANCELLED', 'EXPIRED', 'PENDING'].includes(existing.status)) {
+        return res.status(400).json({ error: 'Ya tienes una reserva para este producto' });
+      }
     }
 
-    // Create reservation & decrement available qty atomically
-    const reservation = await prisma.$transaction(async (tx) => {
+    if (hasVariants) {
+      const otherActive = userReservations.filter(
+        (r) => !requested.has(r.variantKey) && ['PENDING', 'NOTIFIED', 'PAID'].includes(r.status),
+      );
+      const otherUnits = otherActive.reduce((sum, r) => sum + r.quantity, 0);
+      if (product.presaleMaxQty && otherUnits + quantity > product.presaleMaxQty) {
+        return res.status(400).json({ error: `La cantidad máxima por cliente es ${product.presaleMaxQty}` });
+      }
+
+      // Una orden se paga con un solo método, por lo que todas las variantes deben compartir tipo de pago
+      const paymentTypes = new Set<string>();
+      for (const key of requested.keys()) paymentTypes.add(productVariants.find((v) => v.id === key)!.paymentType ?? '');
+      for (const r of otherActive) {
+        const v = productVariants.find((pv) => pv.id === r.variantKey);
+        if (v?.paymentType) paymentTypes.add(v.paymentType);
+      }
+      if (paymentTypes.size > 1) {
+        return res.status(400).json({ error: 'Todas tus variantes de esta preventa deben tener el mismo tipo de pago (efectivo o tarjeta)' });
+      }
+    }
+
+    // Create reservations & validate shared capacity atomically
+    const reservations = await prisma.$transaction(async (tx) => {
       const activeReservationTotal = await tx.presaleReservation.aggregate({
         where: {
           productId,
@@ -147,56 +203,80 @@ router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) =
         _sum: { quantity: true },
       });
 
+      const replacedPending = [...requested.keys()].reduce((sum, key) => {
+        const existing = existingByKey.get(key);
+        return sum + (existing?.status === 'PENDING' ? existing.quantity : 0);
+      }, 0);
+
       const unavailableReason = getPresaleUnavailableReason(
         product,
         new Date(),
-        (activeReservationTotal._sum.quantity ?? 0) - (existing?.status === 'PENDING' ? existing.quantity : 0) + quantity,
+        (activeReservationTotal._sum.quantity ?? 0) - replacedPending + quantity,
       );
       if (unavailableReason) {
         throw new Error(unavailableReason);
       }
 
-      return existing
-        ? await tx.presaleReservation.update({
-            where: { id: existing.id },
-            data: {
-              status: 'PENDING',
-              quantity,
-              notifiedAt: null,
-              expiresAt: null,
-              paidAt: null,
-              cancelledAt: null,
-              cancellationReason: null,
-              cancelledBy: null,
-            },
-            include: { product: { select: { id: true, name: true, price: true, images: true } } },
-          })
-        : await tx.presaleReservation.create({
-            data: { userId, productId, quantity, status: 'PENDING', reservedPrice: product.price },
-            include: { product: { select: { id: true, name: true, price: true, images: true } } },
-          });
+      const include = { product: { select: { id: true, name: true, price: true, images: true } } };
+      const saved = [];
+      for (const [variantKey, qty] of requested) {
+        const existing = existingByKey.get(variantKey);
+        const variantPrice = hasVariants
+          ? productVariants.find((v) => v.id === variantKey)!.price ?? product.price
+          : product.price;
+        saved.push(
+          existing
+            ? await tx.presaleReservation.update({
+                where: { id: existing.id },
+                data: {
+                  status: 'PENDING',
+                  quantity: qty,
+                  reservedPrice: hasVariants ? variantPrice : undefined,
+                  notifiedAt: null,
+                  expiresAt: null,
+                  paidAt: null,
+                  cancelledAt: null,
+                  cancellationReason: null,
+                  cancelledBy: null,
+                },
+                include,
+              })
+            : await tx.presaleReservation.create({
+                data: { userId, productId, variantKey, quantity: qty, status: 'PENDING', reservedPrice: variantPrice },
+                include,
+              }),
+        );
+      }
+      return saved;
     });
+    const reservation = reservations[0];
 
     // Send confirmation email (non-blocking)
-    sendPresaleReservationEmail(
-      user.email,
-      user.name,
-      reservation.product.name,
-      parseFloat((reservation.reservedPrice ?? reservation.product.price).toString()),
-      reservation.quantity,
-    ).catch((err) => console.error('[presale] Error al enviar email de reserva:', err));
+    for (const r of reservations) {
+      const variant = productVariants.find((v) => v.id === r.variantKey);
+      const label = variant?.condition && variant.paymentType
+        ? ` (${getPresaleVariantLabel(variant.condition, variant.paymentType)})`
+        : '';
+      sendPresaleReservationEmail(
+        user.email,
+        user.name,
+        `${r.product.name}${label}`,
+        parseFloat((r.reservedPrice ?? r.product.price).toString()),
+        r.quantity,
+      ).catch((err) => console.error('[presale] Error al enviar email de reserva:', err));
+    }
 
-    return res.status(201).json({
-      reservation: {
-        ...reservation,
-        reservedPrice: reservation.reservedPrice ? parseFloat(reservation.reservedPrice.toString()) : null,
-        product: {
-          ...reservation.product,
-          images: parseImages(reservation.product.images),
-          price: parseFloat((reservation.product.price as any).toString()),
-        },
+    const serialize = (r: typeof reservation) => ({
+      ...r,
+      reservedPrice: r.reservedPrice ? parseFloat(r.reservedPrice.toString()) : null,
+      product: {
+        ...r.product,
+        images: parseImages(r.product.images),
+        price: parseFloat((r.product.price as any).toString()),
       },
     });
+
+    return res.status(201).json({ reservation: serialize(reservation), reservations: reservations.map(serialize) });
   } catch (error) {
     if (error instanceof Error && error.message === 'No hay cupos disponibles para esta preventa') {
       return res.status(400).json({ error: error.message });
@@ -250,6 +330,7 @@ router.get('/my', authenticate, async (req: AuthRequest, res) => {
             items: {
               some: {
                 productId: r.productId,
+                ...(r.variantKey ? { variantId: r.variantKey } : {}),
               },
             },
           },
@@ -272,8 +353,10 @@ router.get('/my', authenticate, async (req: AuthRequest, res) => {
       })
     );
 
+    const variantInfo = await getVariantInfoById(reservationsWithOrder.map((r) => r.variantKey));
     const formatted = reservationsWithOrder.map((r) => ({
       ...r,
+      variant: variantInfo.get(r.variantKey) ?? null,
       reservedPrice: r.reservedPrice ? parseFloat(r.reservedPrice.toString()) : null,
       product: {
         ...r.product,
@@ -341,8 +424,10 @@ router.get('/admin/list', authenticate, requireRole('ADMIN', 'STAFF'), async (re
       prisma.presaleReservation.count({ where }),
     ]);
 
+    const variantInfo = await getVariantInfoById(reservations.map((r) => r.variantKey));
     const formatted = reservations.map((r) => ({
       ...r,
+      variant: variantInfo.get(r.variantKey) ?? null,
       reservedPrice: r.reservedPrice ? parseFloat(r.reservedPrice.toString()) : null,
       product: {
         ...r.product,
@@ -952,6 +1037,7 @@ router.patch(
             status: true,
             userId: true,
             productId: true,
+            variantKey: true,
             notifiedAt: true,
             paidAt: true,
           },
@@ -980,11 +1066,11 @@ router.patch(
               userId: current.userId,
               status: { in: ['PENDING', 'PROCESSING', 'SHIPPED', 'DELIVERED'] },
               createdAt: { gte: current.notifiedAt },
-              items: { some: { productId: current.productId } },
+              items: { some: { productId: current.productId, ...(current.variantKey ? { variantId: current.variantKey } : {}) } },
             },
             include: {
               items: {
-                where: { productId: current.productId },
+                where: { productId: current.productId, ...(current.variantKey ? { variantId: current.variantKey } : {}) },
                 select: { id: true, price: true, quantity: true },
               },
               payments: {

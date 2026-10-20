@@ -47,6 +47,21 @@ export interface ProductVariant {
   options: string[];
   stock: number;
   price?: number | null;
+  condition?: 'SEALED' | 'OPENED' | null;
+  paymentType?: 'CASH' | 'CARD' | null;
+}
+
+export interface PresaleVariantPrices {
+  sealedCash: number;
+  sealedCard: number;
+  openedCash: number;
+  openedCard: number;
+}
+
+export interface PresaleReservationVariant {
+  condition: 'SEALED' | 'OPENED';
+  paymentType: 'CASH' | 'CARD';
+  label: string;
 }
 
 export interface Order {
@@ -465,13 +480,13 @@ export const productsAPI = {
   getById: (id: string) => fetchAPI<Product>(`/products/${id}`),
   getByIdAdmin: (id: string) => fetchAPI<Product>(`/products/admin-detail/${id}`, undefined, 'admin'),
 
-  create: (data: Partial<Product> & { initialStock?: number }) =>
+  create: (data: Partial<Product> & { initialStock?: number; presaleVariantPrices?: PresaleVariantPrices }) =>
     fetchAPI<Product>('/products', {
       method: 'POST',
       body: JSON.stringify(data),
     }, 'admin'),
 
-  update: (id: string, data: Partial<Product>) =>
+  update: (id: string, data: Partial<Product> & { presaleVariantPrices?: PresaleVariantPrices }) =>
     fetchAPI<Product>(`/products/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
@@ -1086,6 +1101,8 @@ export interface PresaleReservation {
   productId: string;
   quantity: number;
   reservedPrice: number | null;
+  variantKey?: string;
+  variant?: PresaleReservationVariant | null;
   status: PresaleStatus;
   notifiedAt: string | null;
   expiresAt: string | null;
@@ -1113,6 +1130,8 @@ export interface AdminPresaleReservation {
   productId: string;
   quantity: number;
   reservedPrice: number | null;
+  variantKey?: string;
+  variant?: PresaleReservationVariant | null;
   status: PresaleStatus;
   notifiedAt: string | null;
   expiresAt: string | null;
@@ -1144,10 +1163,10 @@ export interface AdminPresaleReservation {
 
 export const presaleAPI = {
   /** Reserve a presale product (authenticated) */
-  reserve: (productId: string, quantity: number) =>
-    fetchAPI<{ reservation: PresaleReservation }>(`/presale/reserve/${productId}`, {
+  reserve: (productId: string, quantity: number, items?: Array<{ variantId: string; quantity: number }>) =>
+    fetchAPI<{ reservation: PresaleReservation; reservations: PresaleReservation[] }>(`/presale/reserve/${productId}`, {
       method: 'POST',
-      body: JSON.stringify({ quantity }),
+      body: JSON.stringify(items ? { items } : { quantity }),
     }, 'customer'),
 
   /** Customer self-cancel is disabled; only admins can cancel a reservation */

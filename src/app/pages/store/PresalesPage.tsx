@@ -569,6 +569,7 @@ function PresalesContent() {
                           className="text-sm font-medium text-foreground hover:text-primary transition-colors"
                         >
                           {reservation.product.name}
+                          {reservation.variant && <span className="block text-xs text-amber-500">{reservation.variant.label}</span>}
                         </Link>
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${config.color}`}>
                           <config.Icon className="w-3 h-3" />

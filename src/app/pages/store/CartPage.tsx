@@ -29,24 +29,24 @@ export default function CartPage() {
         const limits = Object.fromEntries(
           reservations
             .filter((reservation) => reservation.status === 'NOTIFIED')
-            .map((reservation) => [reservation.productId, reservation.quantity]),
+            .map((reservation) => [`${reservation.productId}:${reservation.variantKey ?? ''}`, reservation.quantity]),
         );
         setPresaleLimits(limits);
         setPresalePrices(Object.fromEntries(
           reservations
             .filter((reservation) => reservation.status === 'NOTIFIED')
             .map((reservation) => [
-              reservation.productId,
+              `${reservation.productId}:${reservation.variantKey ?? ''}`,
               reservation.reservedPrice ?? reservation.product.price,
             ]),
         ));
         const overLimitIssues = cartItems
-          .filter((item) => item.isPresale && limits[item.productId] !== undefined && item.quantity > limits[item.productId])
+          .filter((item) => item.isPresale && limits[`${item.productId}:${item.variantId ?? ''}`] !== undefined && item.quantity > limits[`${item.productId}:${item.variantId ?? ''}`])
           .map((item) => ({
             cartItemId: item.id,
             name: item.name,
             reason: 'presale_reserved' as const,
-            available: limits[item.productId],
+            available: limits[`${item.productId}:${item.variantId ?? ''}`],
           }));
         if (overLimitIssues.length > 0) {
           setStockIssues((prev) => [
@@ -76,8 +76,8 @@ export default function CartPage() {
           } catch {
             product = await productsAPI.getById(item.productId);
           }
-          const originalPrice = item.isPresale && presalePrices[item.productId] !== undefined
-            ? presalePrices[item.productId]
+          const originalPrice = item.isPresale && presalePrices[`${item.productId}:${item.variantId ?? ''}`] !== undefined
+            ? presalePrices[`${item.productId}:${item.variantId ?? ''}`]
             : getProductBasePrice(product, item.variantId);
           const discountPercent = getProductDiscountPercent(product);
           useCartStore.setState(state => ({

@@ -8,7 +8,7 @@ import {
   sendNewOrderAdminEmail,
   sendReviewRequestEmail,
 } from '../lib/emailService.js';
-import { getPresaleUnavailableReason, getRequestedPresaleQuantity } from '../lib/presaleUtils.js';
+import { getPresaleUnavailableReason, getPresaleVariantLabel, getRequestedPresaleQuantity } from '../lib/presaleUtils.js';
 import { calculateProductPricing } from '../lib/productPricing.js';
 import { getChileDayRange } from '../lib/chileDate.js';
 
@@ -347,7 +347,7 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
         }
 
         const existingReservation = await prisma.presaleReservation.findUnique({
-          where: { userId_productId: { userId: req.user.id, productId: product.id } },
+          where: { userId_productId_variantKey: { userId: req.user.id, productId: product.id, variantKey: item.variantId || '' } },
           select: { status: true, quantity: true, reservedPrice: true },
         });
 
@@ -379,7 +379,10 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
           return res.status(400).json({ error: `${product.name}: ${unavailableReason}` });
         }
 
-        const requestedPresaleQuantity = getRequestedPresaleQuantity(items, product.id);
+        const requestedPresaleQuantity = getRequestedPresaleQuantity(
+          items.filter((i: any) => (i.variantId || '') === (item.variantId || '')),
+          product.id,
+        );
         if (requestedPresaleQuantity > existingReservation.quantity) {
           return res.status(400).json({
             error: `${product.name}: Solo puedes comprar las ${existingReservation.quantity} unidad(es) reservadas`,
@@ -403,9 +406,22 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
       if (item.variantId) {
         const variant = product.variants.find(v => v.id === item.variantId);
         if (variant) {
-          originalItemPrice = variant.price ? parseFloat(variant.price.toString()) : originalItemPrice;
-          variantName = `${variant.name}: ${variant.options}`;
+          if (variant.condition && variant.paymentType) {
+            variantName = getPresaleVariantLabel(variant.condition, variant.paymentType);
+            const allowed = variant.paymentType === 'CASH' ? ['CASH'] : ['CREDIT', 'DEBIT', 'CARD'];
+            const method = typeof paymentMethod === 'string' ? paymentMethod.toUpperCase() : '';
+            if (!allowed.includes(method)) {
+              return res.status(400).json({
+                error: `${product.name} (${variantName}): ${variant.paymentType === 'CASH' ? 'solo se puede pagar en efectivo' : 'solo se puede pagar con tarjeta de crédito o débito'}`,
+              });
+            }
+          } else {
+            originalItemPrice = variant.price ? parseFloat(variant.price.toString()) : originalItemPrice;
+            variantName = `${variant.name}: ${variant.options}`;
+          }
         }
+      } else if (product.isPresale && product.variants.some(v => v.condition)) {
+        return res.status(400).json({ error: `${product.name}: selecciona la variante reservada` });
       }
 
       const pricing = calculateProductPricing(
@@ -497,7 +513,7 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
 
         if (userId && isManualPayment) {
           await prisma.presaleReservation.upsert({
-            where: { userId_productId: { userId, productId: item.productId } },
+            where: { userId_productId_variantKey: { userId, productId: item.productId, variantKey: item.variantId || '' } },
             update: {
               status: 'PAID',
               paidAt: new Date(),
@@ -505,7 +521,7 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
               cancellationReason: null,
               cancelledBy: null,
             },
-            create: { userId, productId: item.productId, status: 'PAID', paidAt: new Date() },
+            create: { userId, productId: item.productId, variantKey: item.variantId || '', status: 'PAID', paidAt: new Date() },
           });
         }
       } else {

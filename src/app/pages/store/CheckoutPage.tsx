@@ -211,6 +211,10 @@ function CheckoutForm() {
   const { items: cartItems, clearCart } = useCartStore();
   const [pricesRefreshing, setPricesRefreshing] = useState(true);
   const [priceVerificationFailed, setPriceVerificationFailed] = useState(false);
+  const [requiredPaymentType, setRequiredPaymentType] = useState<'CASH' | 'CARD' | null>(null);
+  const isMethodAllowed = (method: PaymentMethodType) =>
+    requiredPaymentType === null
+      || (requiredPaymentType === 'CASH' ? method === 'cash' : method === 'credit' || method === 'debit');
 
   useEffect(() => {
     let active = true;
@@ -235,23 +239,40 @@ function CheckoutForm() {
       .then(async (products) => {
         const hasPresaleItems = products.some(({ item, product }) => product?.isPresale || item.isPresale);
         const reservationPrices = new Map<string, number>();
+        const paymentTypes = new Set<'CASH' | 'CARD'>();
         if (hasPresaleItems) {
           const { reservations } = await presaleAPI.getMyReservations();
           reservations
             .filter((reservation) => reservation.status === 'NOTIFIED')
             .forEach((reservation) => {
+              const reservationKey = `${reservation.productId}:${reservation.variantKey ?? ''}`;
+              if (
+                reservation.variant?.paymentType
+                && cartItems.some((item) => `${item.productId}:${item.variantId ?? ''}` === reservationKey)
+              ) {
+                paymentTypes.add(reservation.variant.paymentType);
+              }
               reservationPrices.set(
-                reservation.productId,
+                reservationKey,
                 reservation.reservedPrice ?? reservation.product.price,
               );
             });
+        }
+
+        if (active && paymentTypes.size === 1) {
+          const [type] = [...paymentTypes];
+          setRequiredPaymentType(type);
+          setPaymentMethod(type === 'CASH' ? 'cash' : 'credit');
+        } else if (active && paymentTypes.size > 1) {
+          setPriceVerificationFailed(true);
+          setError('Tu carrito mezcla preventas de pago en efectivo y con tarjeta. Págalas en órdenes separadas.');
         }
 
         products.forEach(({ item, product }) => {
           if (!product) return;
 
           const originalPrice = product.isPresale
-            ? reservationPrices.get(item.productId) ?? getProductBasePrice(product, item.variantId)
+            ? reservationPrices.get(`${item.productId}:${item.variantId ?? ''}`) ?? getProductBasePrice(product, item.variantId)
             : getProductBasePrice(product, item.variantId);
           const discountPercent = getProductDiscountPercent(product);
           useCartStore.setState((state) => ({
@@ -620,7 +641,7 @@ function CheckoutForm() {
                       key={option.id}
                       type="button"
                       onClick={() => { setDeliveryMethod(option.id); setShippingErrors({}); }}
-                      className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                      className={`w-full text-left p-4 rounded-lg border-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
                         deliveryMethod === option.id
                           ? 'border-primary bg-primary/5'
                           : 'border-border bg-secondary hover:border-muted-foreground/30'
@@ -781,8 +802,9 @@ function CheckoutForm() {
                   {/* Tarjeta de Crédito */}
                   <button
                     type="button"
+                    disabled={!isMethodAllowed('credit')}
                     onClick={() => setPaymentMethod('credit')}
-                    className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                    className={`w-full text-left p-4 rounded-lg border-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
                       paymentMethod === 'credit'
                         ? 'border-primary bg-primary/5'
                         : 'border-border bg-secondary hover:border-muted-foreground/30'
@@ -817,8 +839,9 @@ function CheckoutForm() {
                   {/* Tarjeta de Débito */}
                   <button
                     type="button"
+                    disabled={!isMethodAllowed('debit')}
                     onClick={() => setPaymentMethod('debit')}
-                    className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                    className={`w-full text-left p-4 rounded-lg border-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
                       paymentMethod === 'debit'
                         ? 'border-primary bg-primary/5'
                         : 'border-border bg-secondary hover:border-muted-foreground/30'
@@ -853,8 +876,9 @@ function CheckoutForm() {
                   {/* Transferencia */}
                   <button
                     type="button"
+                    disabled={!isMethodAllowed('transfer')}
                     onClick={() => setPaymentMethod('transfer')}
-                    className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                    className={`w-full text-left p-4 rounded-lg border-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
                       paymentMethod === 'transfer'
                         ? 'border-primary bg-primary/5'
                         : 'border-border bg-secondary hover:border-muted-foreground/30'
@@ -881,8 +905,9 @@ function CheckoutForm() {
                   {/* Efectivo */}
                   <button
                     type="button"
+                    disabled={!isMethodAllowed('cash')}
                     onClick={() => setPaymentMethod('cash')}
-                    className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                    className={`w-full text-left p-4 rounded-lg border-2 transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
                       paymentMethod === 'cash'
                         ? 'border-primary bg-primary/5'
                         : 'border-border bg-secondary hover:border-muted-foreground/30'
