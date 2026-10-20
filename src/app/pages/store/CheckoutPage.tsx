@@ -268,6 +268,13 @@ function CheckoutForm() {
           setError('Tu carrito mezcla preventas de pago en efectivo y con tarjeta. Págalas en órdenes separadas.');
         }
 
+        const staleVariantItem = products.find(({ item, product }) =>
+          product?.isPresale && product.variants?.some((v: any) => v.condition) && !item.variantId);
+        if (active && staleVariantItem) {
+          setPriceVerificationFailed(true);
+          setError(`${staleVariantItem.item.name}: esta preventa tiene variantes. Vuelve al carrito, elimínala y usa "Pagar reserva" desde la página del producto.`);
+        }
+
         products.forEach(({ item, product }) => {
           if (!product) return;
 

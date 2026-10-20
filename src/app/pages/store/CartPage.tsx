@@ -12,7 +12,7 @@ import { getDiscountedPrice, getProductBasePrice, getProductDiscountPercent } fr
 interface StockIssue {
   cartItemId: string;
   name: string;
-  reason: 'not_found' | 'insufficient' | 'presale_reserved';
+  reason: 'not_found' | 'insufficient' | 'presale_reserved' | 'variant_required';
   available?: number;
 }
 
@@ -76,7 +76,12 @@ export default function CartPage() {
           } catch {
             product = await productsAPI.getById(item.productId);
           }
-          const originalPrice = item.isPresale && presalePrices[`${item.productId}:${item.variantId ?? ''}`] !== undefined
+          const hasPresaleVariants = Boolean(product.isPresale) && Boolean(product.variants?.some((v: any) => v.condition));
+          if (hasPresaleVariants && !item.variantId) {
+            issues.push({ cartItemId: item.id, name: item.name, reason: 'variant_required' });
+            return;
+          }
+          const originalPrice = product.isPresale && presalePrices[`${item.productId}:${item.variantId ?? ''}`] !== undefined
             ? presalePrices[`${item.productId}:${item.variantId ?? ''}`]
             : getProductBasePrice(product, item.variantId);
           const discountPercent = getProductDiscountPercent(product);
@@ -112,7 +117,7 @@ export default function CartPage() {
 
   const handleUpdateQuantity = (id: string, quantity: number) => {
     const item = cartItems.find((cartItem) => cartItem.id === id);
-    const presaleLimit = item ? presaleLimits[item.productId] : undefined;
+    const presaleLimit = item ? presaleLimits[`${item.productId}:${item.variantId ?? ''}`] : undefined;
     if (item?.isPresale && presaleLimit !== undefined && quantity > presaleLimit) {
       setStockIssues((prev) => [
         ...prev.filter((issue) => issue.cartItemId !== id),
@@ -159,6 +164,8 @@ export default function CartPage() {
                           <span className="font-medium">{issue.name}</span>
                           {issue.reason === 'not_found'
                             ? ' — ya no está disponible.'
+                            : issue.reason === 'variant_required'
+                            ? ' — esta preventa tiene variantes. Elimínala y usa "Pagar reserva" desde la página del producto.'
                             : issue.reason === 'presale_reserved'
                             ? ` — solo puedes pagar las ${issue.available} unidad(es) reservadas.`
                             : issue.available === 0
