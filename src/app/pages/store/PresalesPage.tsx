@@ -230,22 +230,7 @@ function AvailablePresales({
   }, [loadProducts]);
 
   const handleReserveClick = (product: Product) => {
-    if (!isAuthenticated) {
-      setShowAuthModal(true);
-      return;
-    }
-
-    if (isBanned) {
-      setErrors((prev) => ({
-        ...prev,
-        [product.id]: 'Tu cuenta está bloqueada para futuras preventas. Contacta al administrador.',
-      }));
-      return;
-    }
-
-    setErrors((prev) => ({ ...prev, [product.id]: '' }));
-    setPendingQuantity(reservationQuantities.get(product.id) ?? 1);
-    setPendingProduct(product);
+    navigate(`/store/product/${product.id}`);
   };
 
   const handleConfirm = async () => {
