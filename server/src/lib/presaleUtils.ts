@@ -87,7 +87,7 @@ const PRESALE_VARIANT_DEFS = [
 ] as const;
 
 export function getPresaleVariantLabel(condition: string, paymentType: string) {
-  return `${condition === 'OPENED' ? 'Abierto' : 'Sellado'} · ${paymentType === 'CARD' ? 'Tarjeta' : 'Efectivo'}`;
+  return `${condition === 'OPENED' ? 'Open Box' : 'Sellado'} · ${paymentType === 'CARD' ? 'Tarjeta' : 'Efectivo'}`;
 }
 
 /** Valida los 4 precios; retorna null si el payload es inválido. */

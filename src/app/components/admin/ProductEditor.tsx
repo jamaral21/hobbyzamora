@@ -395,15 +395,15 @@ export function ProductEditor({
                         disabled={hadPresaleVariants}
                         onChange={(e) => setVariantsEnabled(e.target.checked)}
                       />
-                      <span className="text-sm text-foreground">Habilitar variantes (Sellado/Abierto × Efectivo/Tarjeta)</span>
+                      <span className="text-sm text-foreground">Habilitar variantes (Sellado/Open Box × Efectivo/Tarjeta)</span>
                     </label>
                     {variantsEnabled && (
                       <div className="grid grid-cols-2 gap-4">
                         {([
                           ['sealedCash', 'Sellado · Efectivo'],
                           ['sealedCard', 'Sellado · Tarjeta'],
-                          ['openedCash', 'Abierto · Efectivo'],
-                          ['openedCard', 'Abierto · Tarjeta'],
+                          ['openedCash', 'Open Box · Efectivo'],
+                          ['openedCard', 'Open Box · Tarjeta'],
                         ] as const).map(([key, label]) => (
                           <Input
                             key={key}

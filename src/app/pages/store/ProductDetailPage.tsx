@@ -490,7 +490,7 @@ export default function ProductDetailPage() {
                           className={`flex items-center justify-between gap-3 p-3 rounded-lg border-2 ${variantQty[condition] > 0 ? 'border-primary bg-primary/5' : 'border-border bg-secondary'}`}
                         >
                           <div>
-                            <span className="block text-foreground font-medium">{condition === 'SEALED' ? 'Sellado' : 'Abierto'}</span>
+                            <span className="block text-foreground font-medium">{condition === 'SEALED' ? 'Sellado' : 'Open Box'}</span>
                             <span className="block text-sm text-primary">
                               ${Number(variant?.price ?? 0).toLocaleString('es-CL')}
                             </span>
@@ -703,7 +703,7 @@ export default function ProductDetailPage() {
                   const v = findPresaleVariant(c);
                   return (
                     <li key={c}>
-                      {variantQty[c]} × {c === 'SEALED' ? 'Sellado' : 'Abierto'} · {(lockedPaymentType ?? variantPaymentType) === 'CASH' ? 'Efectivo' : 'Tarjeta'} — ${Number(v?.price ?? 0).toLocaleString('es-CL')}
+                      {variantQty[c]} × {c === 'SEALED' ? 'Sellado' : 'Open Box'} · {(lockedPaymentType ?? variantPaymentType) === 'CASH' ? 'Efectivo' : 'Tarjeta'} — ${Number(v?.price ?? 0).toLocaleString('es-CL')}
                     </li>
                   );
                 })}

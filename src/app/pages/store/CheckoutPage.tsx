@@ -710,6 +710,9 @@ function CheckoutForm() {
                       </div>
                       <div>
                         <Input label="Teléfono *" type="tel" placeholder="+56 9 1234 5678" value={shippingData.phone} onChange={(e) => updateField('phone', e.target.value)} />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Código país: {selectedCountryConfig.dialCode} ({selectedCountryConfig.isoCode})
+                        </p>
                         {shippingErrors.phone && <p className="text-xs text-red-400 mt-1">{shippingErrors.phone}</p>}
                       </div>
                       <div>
@@ -732,9 +735,6 @@ function CheckoutForm() {
                           value={shippingData.rut}
                           onChange={(e) => updateField('rut', e.target.value)}
                         />
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Código país: {selectedCountryConfig.dialCode} ({selectedCountryConfig.isoCode})
-                        </p>
                         {shippingErrors.rut && <p className="text-xs text-red-400 mt-1">{shippingErrors.rut}</p>}
                       </div>
 
