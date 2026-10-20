@@ -961,10 +961,17 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
     const isConvertingFromPresale = existing.isPresale && isPresale === false;
     if (isConvertingFromPresale) {
       const now = new Date();
+      const activeReserved = await prisma.presaleReservation.aggregate({
+        where: { productId: id, status: { in: ['PENDING', 'NOTIFIED', 'PAID'] } },
+        _sum: { quantity: true },
+      });
+      const totalSlots = existing.presaleAvailQty ?? 0;
+      const slotsFilled = totalSlots > 0 && (activeReserved._sum.quantity ?? 0) >= totalSlots;
       const alreadyClosed =
         existing.status === 'HIDDEN' ||
         (existing.presaleEndDate ? existing.presaleEndDate <= now : false) ||
-        ((existing.presaleAvailQty ?? 1) <= 0);
+        (existing.presaleAvailQty != null && existing.presaleAvailQty <= 0) ||
+        slotsFilled;
 
       if (!alreadyClosed) {
         return res.status(400).json({ error: 'Solo puedes convertir a producto una preventa que ya terminó su tiempo activo o agotó sus cupos' });
