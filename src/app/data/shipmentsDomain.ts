@@ -80,6 +80,8 @@ export interface Box {
   mo_tarifa: number;
   mat_jpy: number;
   tc_envio: number;
+  isHistorical?: boolean;
+  deductPurchaseUnits?: boolean;
   internacion: InternacionData | null;
   productos: BoxProduct[];
   documentosAduaneros?: CustomsDocument[];
@@ -176,12 +178,12 @@ export const ROLE_PAGES: Record<ShipmentsRole, string[]> = {
   admin: [
     'dashboard', 'compras', 'boletas', 'pagos', 'gav-japon', 'cajas',
     'compras-web', 'internacion', 'costeo', 'bodega-japon', 'bodega-transito',
-    'bodega-chile', 'compras-chile', 'ventas', 'gav-chile',
+    'bodega-chile', 'historico-inventario', 'compras-chile', 'ventas', 'gav-chile',
     'eerr', 'balance', 'flujo', 'config',
   ],
   japon: ['compras', 'boletas', 'gav-japon', 'cajas'],
   chile: [
-    'dashboard', 'bodega-japon', 'bodega-transito', 'bodega-chile', 'ventas',
+    'dashboard', 'bodega-japon', 'bodega-transito', 'bodega-chile', 'historico-inventario', 'ventas',
     'cajas', 'compras-web', 'internacion', 'costeo', 'compras-chile',
   ],
   contador: ['dashboard', 'eerr', 'balance', 'flujo', 'gav-chile', 'gav-japon'],

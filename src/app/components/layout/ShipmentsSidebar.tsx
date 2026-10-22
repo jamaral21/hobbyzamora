@@ -2,7 +2,7 @@ import { Link, useLocation, useNavigate } from 'react-router';
 import {
   ShoppingCart, FileText, CreditCard, Building, Warehouse,
   Package, Truck, Globe, Shield, Calculator,
-  Store, ShoppingBag, DollarSign, Receipt,
+  Store, ShoppingBag, DollarSign, Receipt, History,
   BarChart3, Scale, ArrowUpDown,
   LayoutDashboard, Settings,
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
@@ -64,6 +64,7 @@ const sections: SidebarSection[] = [
     defaultOpen: true,
     items: [
       { id: 'bodega-chile', label: 'Bodega Chile', icon: Store, path: '/shipments/bodega-chile' },
+      { id: 'historico-inventario', label: 'Histórico EAN/JAN', icon: History, path: '/shipments/historico-inventario' },
       { id: 'compras-chile', label: 'Compras Locales', icon: ShoppingBag, path: '/shipments/compras-chile' },
       { id: 'ventas', label: 'Ventas', icon: DollarSign, path: '/shipments/ventas' },
       { id: 'gav-chile', label: 'GAV Chile', icon: Receipt, path: '/shipments/gav-chile' },

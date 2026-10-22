@@ -4,6 +4,7 @@ import { useShipmentsData } from '../../contexts/ShipmentsDataContext';
 import { Card } from '../../components/design-system/Card';
 import { Button } from '../../components/design-system/Button';
 import { Select } from '../../components/design-system/Input';
+import { Switch } from '../../components/design-system/Switch';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/design-system/Table';
 import { PriceDisplay } from '../../components/shipments/PriceDisplay';
 import { EmptyState } from '../../components/design-system/EmptyState';
@@ -16,12 +17,16 @@ interface CosteoRow {
   ean: string;
   cant: number;
   pct: number;
+  sellable: number;
+  collection: number;
+  personal: number;
 }
 
 export default function CosteoPage() {
   const { cajas, confirmCosteo } = useShipmentsData();
   const [selectedCajaId, setSelectedCajaId] = useState('');
   const [costeoRows, setCosteoRows] = useState<CosteoRow[]>([]);
+  const [holdUnassigned, setHoldUnassigned] = useState(false);
 
   const llegadaBoxes = useMemo(
     () => cajas.filter(b => b.estado === 'llegada'),
@@ -47,15 +52,30 @@ export default function CosteoPage() {
           pct: box.productos.length > 0
             ? Math.round(100 / box.productos.length * 100) / 100
             : 0,
+          sellable: 0,
+          collection: 0,
+          personal: 0,
         })),
       );
     } else {
       setCosteoRows([]);
     }
+    setHoldUnassigned(false);
   };
 
   const updatePct = (idx: number, value: number) => {
     setCosteoRows(prev => prev.map((r, i) => i === idx ? { ...r, pct: value } : r));
+  };
+
+  const updateDestination = (
+    index: number,
+    field: 'sellable' | 'collection' | 'personal',
+    value: number,
+  ) => {
+    setCosteoRows((previous) => previous.map((row, rowIndex) => {
+      if (rowIndex !== index) return row;
+      return { ...row, [field]: Math.max(0, Math.min(value, row.cant)) };
+    }));
   };
 
   const pctSum = useMemo(
@@ -91,9 +111,12 @@ export default function CosteoPage() {
       cant: r.cant,
       pct: r.pct,
       costoUnit: calcCostoUnitario(selectedBox, r.pct, r.cant),
+      sellable: r.sellable,
+      collection: r.collection,
+      personal: r.personal,
     }));
 
-    confirmCosteo(selectedCajaId, costeoData);
+    confirmCosteo(selectedCajaId, costeoData, holdUnassigned);
     setSelectedCajaId('');
     setCosteoRows([]);
   };
@@ -177,6 +200,9 @@ export default function CosteoPage() {
                   <TableHead>Nombre</TableHead>
                   <TableHead className="text-center">Cantidad</TableHead>
                   <TableHead className="text-center">% Costo</TableHead>
+                  <TableHead className="text-center">Venta</TableHead>
+                  <TableHead className="text-center">Colección</TableHead>
+                  <TableHead className="text-center">Personal</TableHead>
                   <TableHead className="text-right">Costo Unitario CLP</TableHead>
                 </TableRow>
               </TableHeader>
@@ -199,6 +225,19 @@ export default function CosteoPage() {
                           className="w-20 px-2 py-1 text-sm rounded border border-border bg-input-background text-foreground text-center"
                         />
                       </TableCell>
+                      {(['sellable', 'collection', 'personal'] as const).map((field) => (
+                        <TableCell key={field} className="text-center">
+                          <input
+                            type="number"
+                            min={0}
+                            max={row.cant}
+                            value={row[field]}
+                            aria-label={`${field}-${row._sku}`}
+                            onChange={event => updateDestination(idx, field, Number(event.target.value))}
+                            className="w-16 px-2 py-1 text-sm rounded border border-border bg-input-background text-foreground text-center"
+                          />
+                        </TableCell>
+                      ))}
                       <TableCell className="text-right">
                         <PriceDisplay amount={costoUnit} currency="CLP" />
                       </TableCell>
@@ -208,6 +247,15 @@ export default function CosteoPage() {
               </TableBody>
             </Table>
           </Card>
+
+          <Switch
+            checked={holdUnassigned}
+            onChange={setHoldUnassigned}
+            label="Dejar unidades no ingresadas como pendientes"
+          />
+          <p className="text-xs text-muted-foreground">
+            Desactivado: las unidades sin destino quedan registradas como histórico y no afectan el inventario.
+          </p>
 
           <div className="flex justify-end">
             <Button onClick={handleConfirm} disabled={!isValid}>

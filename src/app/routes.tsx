@@ -59,6 +59,7 @@ import EstadoResultadosPage from './pages/shipments/EstadoResultadosPage';
 import BalancePage from './pages/shipments/BalancePage';
 import FlujoCajaPage from './pages/shipments/FlujoCajaPage';
 import ConfiguracionPage from './pages/shipments/ConfiguracionPage';
+import HistoricoInventarioPage from './pages/shipments/HistoricoInventarioPage';
 import { useAdminAuth } from './contexts/AdminAuthContext';
 
 function withStoreMaintenance(Page: ComponentType) {
@@ -265,6 +266,7 @@ export const router = createBrowserRouter([
       { path: 'internacion', Component: InternacionPage },
       { path: 'costeo', Component: CosteoPage },
       { path: 'bodega-chile', Component: BodegaChilePage },
+      { path: 'historico-inventario', Component: HistoricoInventarioPage },
       { path: 'compras-chile', Component: ComprasLocalesPage },
       { path: 'ventas', Component: VentasPage },
       { path: 'gav-chile', Component: GAVChilePage },

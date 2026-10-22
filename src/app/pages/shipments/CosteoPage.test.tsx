@@ -191,11 +191,20 @@ describe('CosteoPage', () => {
     fireEvent.change(select, { target: { value: 'Caja_Llegada' } });
     const confirmBtn = screen.getByText('Confirmar Costeo');
     fireEvent.click(confirmBtn.closest('button')!);
-    expect(mockConfirmCosteo).toHaveBeenCalledWith('Caja_Llegada', expect.any(Array));
+    expect(mockConfirmCosteo).toHaveBeenCalledWith('Caja_Llegada', expect.any(Array), false);
     // Should have 2 entries (one per product)
     const costeoData = mockConfirmCosteo.mock.calls[0][1];
     expect(costeoData.length).toBe(2);
     expect(costeoData[0]._sku).toBe('JP-0005');
     expect(costeoData[1]._sku).toBe('JP-0006');
+  });
+
+  it('keeps unassigned units historical by default and can leave them pending', () => {
+    render(<CosteoPage />);
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'Caja_Llegada' } });
+    fireEvent.click(screen.getByRole('switch', { name: 'Dejar unidades no ingresadas como pendientes' }));
+    fireEvent.click(screen.getByText('Confirmar Costeo').closest('button')!);
+
+    expect(mockConfirmCosteo).toHaveBeenCalledWith('Caja_Llegada', expect.any(Array), true);
   });
 });

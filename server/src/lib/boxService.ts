@@ -22,6 +22,8 @@ interface CreateBoxPayload {
   matJpy?: number;
   tcEnvio?: number;
   pesoTotal?: number;
+  isHistorical?: boolean;
+  deductPurchaseUnits?: boolean;
   productos: BoxProductInput[];
 }
 
@@ -242,6 +244,8 @@ export async function createBox(payload: CreateBoxPayload): Promise<ShipmentsRes
           matJpy: payload.matJpy !== undefined ? new Decimal(payload.matJpy) : null,
           tcEnvio: payload.tcEnvio !== undefined ? new Decimal(payload.tcEnvio) : null,
           pesoTotal: payload.pesoTotal !== undefined ? new Decimal(payload.pesoTotal) : null,
+          isHistorical: payload.isHistorical === true,
+          deductPurchaseUnits: payload.isHistorical === true && payload.deductPurchaseUnits === true,
         },
       });
 

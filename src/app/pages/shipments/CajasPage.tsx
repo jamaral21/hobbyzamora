@@ -5,6 +5,7 @@ import { useShipmentsData } from '../../contexts/ShipmentsDataContext';
 import { Card } from '../../components/design-system/Card';
 import { Button } from '../../components/design-system/Button';
 import { Input, Select } from '../../components/design-system/Input';
+import { Switch } from '../../components/design-system/Switch';
 import { Modal, ModalFooter } from '../../components/design-system/Modal';
 import { StatusBadge } from '../../components/shipments/StatusBadge';
 import { PriceDisplay } from '../../components/shipments/PriceDisplay';
@@ -54,6 +55,8 @@ export default function CajasPage() {
   const [moTarifa, setMoTarifa] = useState('');
   const [matJpy, setMatJpy] = useState('');
   const [tcEnvio, setTcEnvio] = useState('');
+  const [isHistorical, setIsHistorical] = useState(false);
+  const [deductPurchaseUnits, setDeductPurchaseUnits] = useState(false);
   const [selectedProducts, setSelectedProducts] = useState<ProductRow[]>([]);
   const [qtyDraftBySku, setQtyDraftBySku] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -87,6 +90,8 @@ export default function CajasPage() {
     setMoTarifa('');
     setMatJpy('');
     setTcEnvio('');
+    setIsHistorical(false);
+    setDeductPurchaseUnits(false);
     setSelectedProducts([]);
     setErrors({});
     setEditingId(null);
@@ -107,6 +112,8 @@ export default function CajasPage() {
     setMoTarifa(String(box.mo_tarifa));
     setMatJpy(String(box.mat_jpy));
     setTcEnvio(String(box.tc_envio));
+    setIsHistorical(box.isHistorical === true);
+    setDeductPurchaseUnits(box.deductPurchaseUnits === true);
     setSelectedProducts([]);
     setQtyDraftBySku({});
     setErrors({});
@@ -158,6 +165,8 @@ export default function CajasPage() {
         mo_tarifa: Number(moTarifa),
         mat_jpy: Number(matJpy),
         tc_envio: Number(tcEnvio),
+        isHistorical,
+        deductPurchaseUnits,
       });
     } else {
       const productos: BoxProduct[] = selectedProducts
@@ -181,6 +190,8 @@ export default function CajasPage() {
         mo_tarifa: Number(moTarifa),
         mat_jpy: Number(matJpy),
         tc_envio: Number(tcEnvio),
+        isHistorical,
+        deductPurchaseUnits,
         productos,
       });
     }
@@ -423,6 +434,22 @@ export default function CajasPage() {
               error={errors.tc}
             />
           </div>
+          {!editingId && (
+            <div className="space-y-3 border border-border p-3">
+              <Switch
+                checked={isHistorical}
+                onChange={setIsHistorical}
+                label="Caja histórica: conserva costos y trazabilidad sin crear stock automáticamente"
+              />
+              {isHistorical && (
+                <Switch
+                  checked={deductPurchaseUnits}
+                  onChange={setDeductPurchaseUnits}
+                  label="Descontar estas unidades de la compra original en Japón"
+                />
+              )}
+            </div>
+          )}
 
           {/* Product selector — only for new boxes */}
           {!editingId && (
