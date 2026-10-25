@@ -612,6 +612,12 @@ router.get('/', optionalAuth, async (req: AuthRequest, res) => {
             AND: [
               {
                 OR: [
+                  { presalePublishAt: null },
+                  { presalePublishAt: { lte: now } },
+                ],
+              },
+              {
+                OR: [
                   { presaleEndDate: null },
                   { presaleEndDate: { gt: now } },
                 ],
@@ -711,11 +717,16 @@ router.get('/:id', optionalAuth, async (req: AuthRequest, res) => {
     });
 
     const canSeeHiddenProducts = req.user?.email?.toLowerCase() === HIDDEN_PRODUCTS_ALLOWED_EMAIL;
+    const isAdminOrStaff = req.user?.role === 'ADMIN' || req.user?.role === 'STAFF';
+    const notPublishedYet = Boolean(
+      product?.isPresale && product.presalePublishAt && product.presalePublishAt > new Date(),
+    );
 
     if (
       !product ||
       product.status === 'ARCHIVED' ||
-      (product.status === 'HIDDEN' && !canSeeHiddenProducts)
+      (product.status === 'HIDDEN' && !canSeeHiddenProducts) ||
+      (notPublishedYet && !isAdminOrStaff)
     ) {
       return res.status(404).json({ error: 'Product not found' });
     }
@@ -807,6 +818,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
       presaleMaxQty,
       presaleAvailQty,
       presaleEndDate,
+      presalePublishAt,
       variants,
       initialStock,
       presaleVariantPrices,
@@ -871,6 +883,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
         presaleMaxQty,
         presaleAvailQty,
         presaleEndDate: isPresale ? null : (presaleEndDate ? new Date(presaleEndDate) : null),
+        presalePublishAt: isPresale && presalePublishAt ? new Date(presalePublishAt) : null,
         variants: variants ? {
           create: variants.map((v: any) => ({
             name: v.name,
@@ -926,6 +939,7 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
       presaleMaxQty,
       presaleAvailQty,
       presaleEndDate,
+      presalePublishAt,
       presaleVariantPrices,
     } = req.body;
 
@@ -1040,6 +1054,9 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
             ? null
             : (nextIsPresale ? existing.presaleEndDate : (presaleEndDate ? new Date(presaleEndDate) : null)),
           presaleArrivedAt: isConvertingFromPresale ? null : undefined,
+          presalePublishAt: isConvertingFromPresale || !nextIsPresale
+            ? null
+            : (presalePublishAt === undefined ? undefined : (presalePublishAt ? new Date(presalePublishAt) : null)),
         },
         include: {
           variants: true,

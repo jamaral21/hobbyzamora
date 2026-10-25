@@ -21,6 +21,15 @@ export interface ProductEditorProps {
   submitLabel?: string;
 }
 
+// ISO (UTC) -> valor de datetime-local en la hora local de quien edita
+const toLocalDateTimeInput = (iso?: string | null) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 export function ProductEditor({
   product,
   onSave,
@@ -386,6 +395,22 @@ export function ProductEditor({
                       onChange={(e) => setFormData({ ...formData, presaleAvailQty: e.target.value ? parseInt(e.target.value) : undefined })}
                       placeholder="Ej: 50"
                     />
+                  </div>
+                  <div>
+                    <Input
+                      label="Publicar preventa el (fecha y hora)"
+                      type="datetime-local"
+                      value={toLocalDateTimeInput(formData.presalePublishAt)}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        presalePublishAt: e.target.value ? new Date(e.target.value).toISOString() : null,
+                      })}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {formData.presalePublishAt
+                        ? `Se mostrará en la tienda desde el ${new Date(formData.presalePublishAt).toLocaleString('es-CL', { dateStyle: 'long', timeStyle: 'short' })} (tu hora local). Hasta entonces solo la ve el equipo.`
+                        : 'Déjalo vacío para publicarla de inmediato.'}
+                    </p>
                   </div>
                   <div className="space-y-3 pt-2 border-t border-border">
                     <label className="flex items-center gap-2 cursor-pointer">

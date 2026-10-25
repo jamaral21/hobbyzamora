@@ -164,6 +164,14 @@ router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) =
       where: { userId, productId },
     });
     const existingByKey = new Map(userReservations.map((r) => [r.variantKey, r]));
+    const reservationKeysToEmail = new Set(
+      [...requested.entries()]
+        .filter(([key, requestedQuantity]) => {
+          const existing = existingByKey.get(key);
+          return !existing || existing.status !== 'PENDING' || existing.quantity !== requestedQuantity;
+        })
+        .map(([key]) => key),
+    );
 
     for (const key of requested.keys()) {
       const existing = existingByKey.get(key);
@@ -253,6 +261,7 @@ router.post('/reserve/:productId', authenticate, async (req: AuthRequest, res) =
 
     // Send confirmation email (non-blocking)
     for (const r of reservations) {
+      if (!reservationKeysToEmail.has(r.variantKey)) continue;
       const variant = productVariants.find((v) => v.id === r.variantKey);
       const label = variant?.condition && variant.paymentType
         ? ` (${getPresaleVariantLabel(variant.condition, variant.paymentType)})`

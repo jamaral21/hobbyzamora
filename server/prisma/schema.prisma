@@ -77,6 +77,7 @@ model Product {
   presaleMaxQty     Int?
   presaleAvailQty   Int?
   presaleEndDate    DateTime?
+  presalePublishAt  DateTime?
   presaleArrivedAt  DateTime?
 
   createdAt DateTime @default(now())

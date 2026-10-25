@@ -129,7 +129,7 @@ router.post('/items', authenticate, async (req: AuthRequest, res) => {
       },
     });
 
-    if (!product) {
+    if (!product || (product.isPresale && product.presalePublishAt && product.presalePublishAt > new Date())) {
       return res.status(404).json({ error: 'Product not found' });
     }
 

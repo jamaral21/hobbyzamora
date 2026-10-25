@@ -4,6 +4,7 @@ type PresaleCandidate = {
   isPresale?: boolean | null;
   status?: string | null;
   presaleEndDate?: Date | string | null;
+  presalePublishAt?: Date | string | null;
   presaleAvailQty?: number | null;
 };
 
@@ -49,6 +50,10 @@ export function getPresaleUnavailableReason(
 
   if (product.status && product.status !== 'ACTIVE') {
     return 'Esta preventa no está activa';
+  }
+
+  if (product.presalePublishAt && new Date(product.presalePublishAt) > now) {
+    return 'Esta preventa aún no está disponible';
   }
 
   if (product.presaleEndDate && new Date(product.presaleEndDate) <= now) {

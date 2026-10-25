@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router';
 import { ShoppingCart, Heart, Share2, AlertCircle, Clock, Loader2, Bookmark, CreditCard } from 'lucide-react';
 import { StoreLayout } from '../../components/layout/StoreLayout';
@@ -80,6 +80,7 @@ export default function ProductDetailPage() {
   const [showReserveDialog, setShowReserveDialog] = useState(false);
   const [reserveLoading, setReserveLoading] = useState(false);
   const [reserveError, setReserveError] = useState('');
+  const reserveInFlight = useRef(false);
   const [myReservation, setMyReservation] = useState<PresaleReservation | null>(null);
   const [myProductReservations, setMyProductReservations] = useState<PresaleReservation[]>([]);
   const [variantPaymentType, setVariantPaymentType] = useState<'CASH' | 'CARD'>('CASH');
@@ -143,7 +144,8 @@ export default function ProductDetailPage() {
   }, [id, isAuthenticated, user?.id]);
 
   const handleReserve = async () => {
-    if (!id) return;
+    if (!id || reserveInFlight.current) return;
+    reserveInFlight.current = true;
     setReserveLoading(true);
     setReserveError('');
     try {
@@ -167,6 +169,7 @@ export default function ProductDetailPage() {
     } catch (error: any) {
       setReserveError(error?.message ?? 'No se pudo completar la reserva. Intenta de nuevo.');
     } finally {
+      reserveInFlight.current = false;
       setReserveLoading(false);
     }
   };

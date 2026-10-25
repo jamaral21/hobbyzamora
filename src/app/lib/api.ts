@@ -25,6 +25,7 @@ export interface Product {
   presaleMaxQty?: number;
   presaleAvailQty?: number;
   presaleEndDate?: string;
+  presalePublishAt?: string | null;
   presaleArrivedAt?: string | null;
   variants?: ProductVariant[];
 }
