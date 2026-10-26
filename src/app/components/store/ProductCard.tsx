@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router';
 import { ShoppingCart, AlertCircle, Flame, Clock3 } from 'lucide-react';
 import { Card } from '../design-system/Card';
@@ -6,7 +6,7 @@ import { Button } from '../design-system/Button';
 import { Badge } from '../design-system/Badge';
 import { Product } from '../../lib/api';
 import { useCartStore } from '../../lib/store';
-import { buildProductImageVariantUrl } from '../../lib/productImageVariants';
+import { ProductImage } from './ProductImage';
 import { formatChileDate } from '../../lib/chileDate';
 import { getDiscountedPrice, getProductDiscountPercent } from '../../lib/productPricing';
 
@@ -38,14 +38,9 @@ export function ProductCard({ product, hideStock = false }: ProductCardProps) {
   const { addItem } = useCartStore();
   const [justAdded, setJustAdded] = useState(false);
   const originalImage = String(product.images?.[0] || '');
-  const [imageSrc, setImageSrc] = useState(() => buildProductImageVariantUrl(originalImage, 'card'));
   const presaleExpiryLabel = product.isPresale ? getPresaleExpiryLabel(product.presaleEndDate ?? null) : null;
   const discountPercent = getProductDiscountPercent(product);
   const discountedPrice = getDiscountedPrice(product.price, discountPercent);
-
-  useEffect(() => {
-    setImageSrc(buildProductImageVariantUrl(originalImage, 'card'));
-  }, [originalImage]);
 
   const handleAddToCart = () => {
     if (isDisabled) return;
@@ -58,17 +53,13 @@ export function ProductCard({ product, hideStock = false }: ProductCardProps) {
     <Card padding="none" hover className="group h-full overflow-hidden flex flex-col">
       <Link to={`/store/product/${product.id}`}>
         <div className="aspect-square overflow-hidden bg-secondary relative">
-          <img
-            src={imageSrc || originalImage}
+          <ProductImage
+            src={originalImage}
             alt={product.name}
+            category={product.category}
+            variant="card"
             loading="lazy"
-            decoding="async"
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-            onError={() => {
-              if (imageSrc !== originalImage) {
-                setImageSrc(originalImage);
-              }
-            }}
           />
           {product.stock <= 0 && (
             <div className="absolute inset-0 bg-gray-900/45" aria-label="Producto agotado" />

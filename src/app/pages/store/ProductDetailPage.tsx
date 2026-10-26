@@ -11,45 +11,8 @@ import { useCartStore } from '../../lib/store';
 import { useAuth } from '../../contexts/AuthContext';
 import { AuthModal } from '../../components/auth/AuthModal';
 import { formatChileDate } from '../../lib/chileDate';
-import { buildProductImageVariantUrl, type ProductImageVariant } from '../../lib/productImageVariants';
+import { ProductImage } from '../../components/store/ProductImage';
 import { getDiscountedPrice, getProductBasePrice, getProductDiscountPercent } from '../../lib/productPricing';
-
-function ProductImageWithVariant({
-  src,
-  alt,
-  variant,
-  className,
-  loading,
-}: {
-  src: string;
-  alt: string;
-  variant: ProductImageVariant;
-  className?: string;
-  loading?: 'eager' | 'lazy';
-}) {
-  const original = String(src || '');
-  const variantSrc = buildProductImageVariantUrl(original, variant);
-  const [imgSrc, setImgSrc] = useState(variantSrc || original);
-
-  useEffect(() => {
-    setImgSrc(variantSrc || original);
-  }, [variantSrc, original]);
-
-  return (
-    <img
-      src={imgSrc || original}
-      alt={alt}
-      loading={loading}
-      decoding="async"
-      className={className}
-      onError={() => {
-        if (imgSrc !== original) {
-          setImgSrc(original);
-        }
-      }}
-    />
-  );
-}
 
 function getPresaleExpiryLabel(presaleEndDate?: string | null) {
   if (!presaleEndDate) return null;
@@ -253,6 +216,10 @@ export default function ProductDetailPage() {
     );
   }
 
+  const productImages: string[] = Array.isArray(product.images)
+    ? product.images.filter((image: unknown): image is string => typeof image === 'string' && image.trim().length > 0)
+    : [];
+  const selectedProductImage = productImages[selectedImage] || '';
   const isLowStock = !product.isPresale && product.stock < 10;
   const isPresaleClosed = Boolean(
     product?.isPresale && (
@@ -318,16 +285,18 @@ export default function ProductDetailPage() {
           {/* Images */}
           <div>
             <div className="aspect-square bg-secondary rounded-xl overflow-hidden mb-4">
-              <ProductImageWithVariant
-                src={product.images[selectedImage]}
+              <ProductImage
+                src={selectedProductImage}
                 alt={product.name}
+                category={product.category}
                 variant="detail"
                 loading="eager"
                 className="w-full h-full object-cover"
               />
             </div>
-            <div className="grid grid-cols-4 gap-3">
-              {product.images.map((image: string, idx: number) => (
+            {productImages.length > 0 && (
+              <div className="grid grid-cols-4 gap-3">
+              {productImages.map((image, idx) => (
                 <button
                   key={idx}
                   onClick={() => setSelectedImage(idx)}
@@ -337,16 +306,18 @@ export default function ProductDetailPage() {
                       : 'border-transparent hover:border-border'
                   }`}
                 >
-                  <ProductImageWithVariant
+                  <ProductImage
                     src={image}
                     alt={`Vista ${idx + 1}`}
+                    category={product.category}
                     variant="thumb"
                     loading="lazy"
                     className="w-full h-full object-cover"
                   />
                 </button>
               ))}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Details */}

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 720" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="94" y1="46" x2="635" y2="680" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#182C39"/>
+      <stop offset="1" stop-color="#111820"/>
+    </linearGradient>
+    <linearGradient id="car" x1="182" y1="317" x2="535" y2="465" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F2D45F"/>
+      <stop offset="1" stop-color="#F18048"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#bg)" d="M0 0h720v720H0z"/>
+  <path d="M94 544h532" stroke="#7ED7D1" stroke-opacity=".4" stroke-width="3"/>
+  <path d="M126 580h468M170 611h380" stroke="#7ED7D1" stroke-opacity=".16" stroke-width="2"/>
+  <path d="M176 385c17-48 40-77 78-96l48-65c11-15 29-24 48-24h51c23 0 42 13 55 31l55 75c31 8 52 28 64 66l16 54c5 17-8 34-26 34H171c-19 0-33-17-28-35l12-40c3-10 10-17 21-20Z" fill="url(#car)" stroke="#FFE599" stroke-width="8"/>
+  <path d="m327 244-48 64h182l-48-66c-5-7-13-11-22-11h-43c-9 0-16 4-21 13Z" fill="#233A49" stroke="#FFE599" stroke-width="6"/>
+  <path d="M175 383h409" stroke="#C35349" stroke-width="11"/>
+  <circle cx="237" cy="458" r="48" fill="#111923" stroke="#93C9C4" stroke-width="8"/>
+  <circle cx="237" cy="458" r="18" fill="#E8C968"/>
+  <circle cx="498" cy="458" r="48" fill="#111923" stroke="#93C9C4" stroke-width="8"/>
+  <circle cx="498" cy="458" r="18" fill="#E8C968"/>
+  <path d="M145 299h-43m514 0h-43" stroke="#F3D76A" stroke-opacity=".55" stroke-width="3"/>
+</svg>
