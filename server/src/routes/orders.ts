@@ -61,6 +61,7 @@ router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) =>
     const { 
       status, 
       source, 
+      paymentMethod,
       startDate, 
       endDate,
       productIds,
@@ -81,6 +82,13 @@ router.get('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) =>
 
     if (source) {
       baseWhere.source = source;
+    }
+
+    if (typeof paymentMethod === 'string' && paymentMethod) {
+      const method = paymentMethod.toUpperCase();
+      baseWhere.payments = {
+        some: { method: method === 'CARD' ? { in: ['CARD', 'GETNET'] } : method },
+      };
     }
 
     if (startDate || endDate) {

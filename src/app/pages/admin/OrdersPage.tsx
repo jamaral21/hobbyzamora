@@ -70,19 +70,31 @@ function parseDisplayDateToApi(value: string): string | undefined {
   return `${year}-${monthText}-${dayText}`;
 }
 
+const FILTERS_STORAGE_KEY = 'admin-orders-filters';
+
+function loadSavedFilters(): Record<string, any> {
+  try {
+    return JSON.parse(sessionStorage.getItem(FILTERS_STORAGE_KEY) || '{}') || {};
+  } catch {
+    return {};
+  }
+}
+
 export default function OrdersPage() {
   const { isAuthenticated } = useAdminAuth();
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [sourceFilter, setSourceFilter] = useState('all');
-  const [dateFromInput, setDateFromInput] = useState('');
-  const [dateToInput, setDateToInput] = useState('');
-  const [showMoreFilters, setShowMoreFilters] = useState(false);
-  const [eanFilter, setEanFilter] = useState('');
-  const [skuFilter, setSkuFilter] = useState('');
-  const [page, setPage] = useState(1);
+  const [saved] = useState(loadSavedFilters);
+  const [searchQuery, setSearchQuery] = useState<string>(saved.searchQuery ?? '');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>(saved.searchQuery ?? '');
+  const [statusFilter, setStatusFilter] = useState<string>(saved.statusFilter ?? 'all');
+  const [sourceFilter, setSourceFilter] = useState<string>(saved.sourceFilter ?? 'all');
+  const [paymentFilter, setPaymentFilter] = useState<string>(saved.paymentFilter ?? 'all');
+  const [dateFromInput, setDateFromInput] = useState<string>(saved.dateFromInput ?? '');
+  const [dateToInput, setDateToInput] = useState<string>(saved.dateToInput ?? '');
+  const [showMoreFilters, setShowMoreFilters] = useState<boolean>(saved.showMoreFilters ?? false);
+  const [eanFilter, setEanFilter] = useState<string>(saved.eanFilter ?? '');
+  const [skuFilter, setSkuFilter] = useState<string>(saved.skuFilter ?? '');
+  const [page, setPage] = useState<number>(saved.page ?? 1);
   const PAGE_SIZE = 25;
 
   useEffect(() => {
@@ -93,7 +105,14 @@ export default function OrdersPage() {
     return () => window.clearTimeout(timeout);
   }, [searchQuery]);
 
-  const hasActiveExtraFilters = sourceFilter !== 'all' || dateFromInput !== '' || dateToInput !== '' || eanFilter !== '' || skuFilter !== '';
+  useEffect(() => {
+    sessionStorage.setItem(
+      FILTERS_STORAGE_KEY,
+      JSON.stringify({ searchQuery, statusFilter, sourceFilter, paymentFilter, dateFromInput, dateToInput, showMoreFilters, eanFilter, skuFilter, page })
+    );
+  }, [searchQuery, statusFilter, sourceFilter, paymentFilter, dateFromInput, dateToInput, showMoreFilters, eanFilter, skuFilter, page]);
+
+  const hasActiveExtraFilters = sourceFilter !== 'all' || paymentFilter !== 'all' || dateFromInput !== '' || dateToInput !== '' || eanFilter !== '' || skuFilter !== '';
 
   const dateFrom = parseDisplayDateToApi(dateFromInput);
   const dateTo = parseDisplayDateToApi(dateToInput);
@@ -102,6 +121,7 @@ export default function OrdersPage() {
 
   const clearExtraFilters = () => {
     setSourceFilter('all');
+    setPaymentFilter('all');
     setDateFromInput('');
     setDateToInput('');
     setEanFilter('');
@@ -113,6 +133,7 @@ export default function OrdersPage() {
     {
       status: statusFilter !== 'all' ? statusFilter.toUpperCase() : undefined,
       source: sourceFilter !== 'all' ? sourceFilter.toUpperCase() : undefined,
+      paymentMethod: paymentFilter !== 'all' ? paymentFilter : undefined,
       startDate: dateFrom || undefined,
       endDate: dateTo || undefined,
       search: debouncedSearchQuery.trim() || undefined,
@@ -222,7 +243,7 @@ export default function OrdersPage() {
             Más Filtros
             {hasActiveExtraFilters && (
               <span className="ml-1.5 bg-white/20 text-xs rounded-full px-1.5 py-0.5 leading-none">
-                {[sourceFilter !== 'all', dateFromInput !== '', dateToInput !== '', eanFilter !== '', skuFilter !== ''].filter(Boolean).length}
+                {[sourceFilter !== 'all', paymentFilter !== 'all', dateFromInput !== '', dateToInput !== '', eanFilter !== '', skuFilter !== ''].filter(Boolean).length}
               </span>
             )}
           </Button>
@@ -241,6 +262,19 @@ export default function OrdersPage() {
                 <option value="all">Todas</option>
                 <option value="ONLINE">Online</option>
                 <option value="POS">POS</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">Tipo de pago</label>
+              <select
+                value={paymentFilter}
+                onChange={(e) => { setPaymentFilter(e.target.value); resetPage(); }}
+                className="px-3 py-1.5 rounded-lg border border-border bg-input-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              >
+                <option value="all">Todos</option>
+                <option value="CARD">Tarjeta</option>
+                <option value="CASH">Efectivo</option>
+                <option value="TRANSFER">Transferencia</option>
               </select>
             </div>
             <div className="flex flex-col gap-1">

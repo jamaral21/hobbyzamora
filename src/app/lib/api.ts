@@ -625,6 +625,7 @@ export const ordersAPI = {
   getAll: (params?: {
     status?: string;
     source?: string;
+    paymentMethod?: string;
     startDate?: string;
     endDate?: string;
     search?: string;
@@ -637,6 +638,7 @@ export const ordersAPI = {
     const searchParams = new URLSearchParams();
     if (params?.status) searchParams.set('status', params.status);
     if (params?.source) searchParams.set('source', params.source);
+    if (params?.paymentMethod) searchParams.set('paymentMethod', params.paymentMethod);
     if (params?.startDate) searchParams.set('startDate', params.startDate);
     if (params?.endDate) searchParams.set('endDate', params.endDate);
     if (params?.search) searchParams.set('search', params.search);
