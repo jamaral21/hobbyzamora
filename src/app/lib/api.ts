@@ -1239,6 +1239,21 @@ export const presaleAPI = {
       'admin'
     ),
 
+  /** Admin: switch the condition of an unpaid reservation while preserving its payment type and price */
+  updateReservationCondition: (reservationId: string, condition: 'SEALED' | 'OPENED') =>
+    fetchAPI<{
+      message: string;
+      reservation: {
+        id: string;
+        variantKey: string;
+        variant: PresaleReservationVariant;
+      };
+    }>(
+      `/presale/admin/reservation-condition/${reservationId}`,
+      { method: 'PATCH', body: JSON.stringify({ condition }) },
+      'admin'
+    ),
+
   /** Admin: cancel a reservation, store the reason, and optionally ban the user */
   adminCancelReservation: (reservationId: string, reason: string, banUser = false) =>
     fetchAPI<{ message: string; reservation: AdminPresaleReservation }>(`/presale/admin/cancel/${reservationId}`, {

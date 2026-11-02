@@ -1194,6 +1194,173 @@ router.patch(
 );
 
 /**
+ * PATCH /api/presale/admin/reservation-condition/:reservationId
+ * Admin: switch a reservation between SEALED and OPENED while preserving payment type and price.
+ */
+router.patch(
+  '/admin/reservation-condition/:reservationId',
+  authenticate,
+  requireRole('ADMIN', 'STAFF'),
+  async (req, res) => {
+    try {
+      const reservationId = req.params.reservationId as string;
+      const condition = req.body?.condition;
+
+      if (condition !== 'SEALED' && condition !== 'OPENED') {
+        return res.status(400).json({ error: 'La condición debe ser SEALED u OPENED' });
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+        const reservation = await tx.presaleReservation.findUnique({
+          where: { id: reservationId },
+          select: { id: true, userId: true, productId: true, variantKey: true, status: true },
+        });
+
+        if (!reservation) {
+          throw new Error('Reserva no encontrada');
+        }
+        if (reservation.status !== 'PENDING' && reservation.status !== 'NOTIFIED') {
+          throw new Error('Solo se puede cambiar el tipo de una reserva pendiente o notificada');
+        }
+        if (!reservation.variantKey) {
+          throw new Error('Esta reserva no tiene variantes configuradas');
+        }
+
+        const currentVariant = await tx.productVariant.findFirst({
+          where: { id: reservation.variantKey, productId: reservation.productId },
+          select: { condition: true, paymentType: true },
+        });
+        if (!currentVariant?.condition || !currentVariant.paymentType) {
+          throw new Error('No se pudo determinar la variante actual de la reserva');
+        }
+
+        const targetVariant = await tx.productVariant.findFirst({
+          where: {
+            productId: reservation.productId,
+            condition,
+            paymentType: currentVariant.paymentType,
+          },
+          select: { id: true, condition: true, paymentType: true },
+        });
+        if (!targetVariant) {
+          throw new Error('No existe una variante disponible con esa condición y el mismo tipo de pago');
+        }
+        if (targetVariant.id === reservation.variantKey) {
+          return {
+            reservationId: reservation.id,
+            variantKey: targetVariant.id,
+            variant: {
+              condition: targetVariant.condition!,
+              paymentType: targetVariant.paymentType!,
+              label: getPresaleVariantLabel(targetVariant.condition!, targetVariant.paymentType!),
+            },
+            changed: false,
+          };
+        }
+
+        const conflictingReservation = await tx.presaleReservation.findFirst({
+          where: {
+            userId: reservation.userId,
+            productId: reservation.productId,
+            variantKey: targetVariant.id,
+            NOT: { id: reservation.id },
+          },
+          select: { id: true },
+        });
+        if (conflictingReservation) {
+          throw new Error('El cliente ya tiene una reserva con esa condición y tipo de pago');
+        }
+
+        const cart = await tx.cart.findUnique({
+          where: { userId: reservation.userId },
+          select: { id: true },
+        });
+        if (cart) {
+          const currentCartItem = await tx.cartItem.findFirst({
+            where: {
+              cartId: cart.id,
+              productId: reservation.productId,
+              variantId: reservation.variantKey,
+            },
+            select: { id: true, quantity: true },
+          });
+          if (currentCartItem) {
+            const targetCartItem = await tx.cartItem.findFirst({
+              where: {
+                cartId: cart.id,
+                productId: reservation.productId,
+                variantId: targetVariant.id,
+              },
+              select: { id: true, quantity: true },
+            });
+            if (targetCartItem) {
+              await tx.cartItem.update({
+                where: { id: targetCartItem.id },
+                data: { quantity: targetCartItem.quantity + currentCartItem.quantity },
+              });
+              await tx.cartItem.delete({ where: { id: currentCartItem.id } });
+            } else {
+              await tx.cartItem.update({
+                where: { id: currentCartItem.id },
+                data: { variantId: targetVariant.id },
+              });
+            }
+          }
+        }
+
+        await tx.presaleReservation.update({
+          where: { id: reservation.id },
+          data: { variantKey: targetVariant.id },
+        });
+
+        return {
+          reservationId: reservation.id,
+          variantKey: targetVariant.id,
+          variant: {
+            condition: targetVariant.condition!,
+            paymentType: targetVariant.paymentType!,
+            label: getPresaleVariantLabel(targetVariant.condition!, targetVariant.paymentType!),
+          },
+          changed: true,
+        };
+      });
+
+      return res.json({
+        message: result.changed
+          ? 'Tipo de preventa actualizado. El precio y tipo de pago se conservaron.'
+          : 'La reserva ya tenía esa condición.',
+        reservation: {
+          id: result.reservationId,
+          variantKey: result.variantKey,
+          variant: result.variant,
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        [
+          'Reserva no encontrada',
+          'Solo se puede cambiar el tipo de una reserva pendiente o notificada',
+          'Esta reserva no tiene variantes configuradas',
+          'No se pudo determinar la variante actual de la reserva',
+          'No existe una variante disponible con esa condición y el mismo tipo de pago',
+        ].includes(error.message)
+      ) {
+        return res.status(error.message === 'Reserva no encontrada' ? 404 : 400).json({ error: error.message });
+      }
+      if (error instanceof Error && error.message === 'El cliente ya tiene una reserva con esa condición y tipo de pago') {
+        return res.status(409).json({ error: error.message });
+      }
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        return res.status(409).json({ error: 'El cliente ya tiene una reserva con esa condición y tipo de pago' });
+      }
+      console.error('Presale update condition error:', error);
+      return res.status(500).json({ error: 'Error al cambiar el tipo de preventa' });
+    }
+  }
+);
+
+/**
  * DELETE /api/presale/admin/reservation/:reservationId
  * Admin: delete any reservation and restore the product quota.
  */

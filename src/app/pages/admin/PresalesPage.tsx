@@ -213,6 +213,7 @@ export function PresalesPage() {
   const [releaseProduct, setReleaseProduct] = useState<Product | null>(null);
   const [markingPaid, setMarkingPaid] = useState<string | null>(null);
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
+  const [changingConditionId, setChangingConditionId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [blockingUserId, setBlockingUserId] = useState<string | null>(null);
   const [restoringUserId, setRestoringUserId] = useState<string | null>(null);
@@ -558,6 +559,37 @@ export function PresalesPage() {
     }
   };
 
+  const handleChangeCondition = async (reservation: AdminPresaleReservation) => {
+    if (!reservation.variant) return;
+
+    const condition = reservation.variant.condition === 'SEALED' ? 'OPENED' : 'SEALED';
+    const conditionLabel = condition === 'SEALED' ? 'Sellado' : 'Open Box';
+    if (!window.confirm(
+      `¿Cambiar la reserva de ${reservation.user.name} a ${conditionLabel}? Se conservarán el tipo de pago y el precio actual.`,
+    )) {
+      return;
+    }
+
+    setChangingConditionId(reservation.id);
+    try {
+      const data = await presaleAPI.updateReservationCondition(reservation.id, condition);
+      setReservations((prev) =>
+        prev.map((r) => r.id === reservation.id
+          ? {
+              ...r,
+              variantKey: data.reservation.variantKey,
+              variant: data.reservation.variant,
+            }
+          : r),
+      );
+      showToast(data.message);
+    } catch (err: any) {
+      showToast(err.message || 'Error al cambiar el tipo de preventa', 'err');
+    } finally {
+      setChangingConditionId(null);
+    }
+  };
+
   const handleReleaseForSale = async () => {
     if (!releaseProduct) return;
 
@@ -890,6 +922,19 @@ export function PresalesPage() {
                             <p className="font-medium leading-snug">{r.product.name}</p>
                             {r.variant && <p className="text-xs text-amber-400">{r.variant.label}</p>}
                             <p className="text-xs text-muted-foreground font-mono">{r.product.sku}</p>
+                            {r.variant && (r.status === 'PENDING' || r.status === 'NOTIFIED') && (
+                              <button
+                                type="button"
+                                onClick={() => handleChangeCondition(r)}
+                                disabled={changingConditionId === r.id}
+                                className="inline-flex items-center gap-1 mt-1 text-[11px] font-semibold text-primary hover:underline disabled:opacity-60"
+                              >
+                                {changingConditionId === r.id
+                                  ? <Loader2 className="w-3 h-3 animate-spin" />
+                                  : <RefreshCw className="w-3 h-3" />}
+                                Cambiar a {r.variant.condition === 'SEALED' ? 'Open Box' : 'Sellado'}
+                              </button>
+                            )}
                           </div>
                         </div>
                       </td>
