@@ -423,6 +423,7 @@ router.get('/admin/list', authenticate, requireRole('ADMIN', 'STAFF'), async (re
               images: true,
               presaleAvailQty: true,
               presaleMaxQty: true,
+              presalePaymentHours: true,
             },
           },
         },
@@ -517,7 +518,7 @@ router.post(
       }
 
       const now = new Date();
-      const expiresAt = getPresalePaymentExpiry(now);
+      const expiresAt = getPresalePaymentExpiry(now, product.presalePaymentHours);
       const expiryLabel = PRESALE_EXPIRATION_SECONDS % 3600 === 0
         ? `${PRESALE_EXPIRATION_SECONDS / 3600}h`
         : `${PRESALE_EXPIRATION_SECONDS} segundos`;
@@ -678,7 +679,6 @@ router.post(
     try {
       const now = new Date();
       const reassignNow = new Date();
-      const reassignExpiresAt = getPresalePaymentExpiry(reassignNow);
 
       const expired = await prisma.presaleReservation.findMany({
         where: {
@@ -692,31 +692,44 @@ router.post(
         return res.json({ message: 'No hay reservas expiradas', released: 0 });
       }
 
-      // Group by product to do stock increments efficiently
+      let claimedExpired: typeof expired = [];
       const byProduct: Record<string, number> = {};
-      for (const r of expired) {
-        byProduct[r.productId] = (byProduct[r.productId] || 0) + r.quantity;
-      }
-
-      const expiredIds = expired.map((r) => r.id);
       const promotedByProduct: Record<string, number> = {};
       let promotedReservations: ReservationWithUserAndProduct[] = [];
 
       await prisma.$transaction(async (tx) => {
-        await tx.presaleReservation.updateMany({
-          where: { id: { in: expiredIds } },
-          data: { status: 'EXPIRED' },
-        });
+        claimedExpired = [];
+        for (const reservation of expired) {
+          const claimed = await tx.presaleReservation.updateMany({
+            where: {
+              id: reservation.id,
+              status: 'NOTIFIED',
+              expiresAt: { lt: now },
+            },
+            data: { status: 'EXPIRED' },
+          });
+          if (claimed.count > 0) claimedExpired.push(reservation);
+        }
+
+        for (const reservation of claimedExpired) {
+          byProduct[reservation.productId] = (byProduct[reservation.productId] || 0) + reservation.quantity;
+        }
 
         for (const [pid, count] of Object.entries(byProduct)) {
           const product = await tx.product.findUnique({
             where: { id: pid },
-            select: { id: true, isPresale: true, status: true },
+            select: { id: true, isPresale: true, status: true, presalePaymentHours: true },
           });
 
           let promotedCount = 0;
           if (product?.isPresale && product.status === 'ACTIVE') {
-            const promoted = await promotePendingReservationsFIFO(tx, pid, count, reassignNow, reassignExpiresAt);
+            const promoted = await promotePendingReservationsFIFO(
+              tx,
+              pid,
+              count,
+              reassignNow,
+              getPresalePaymentExpiry(reassignNow, product.presalePaymentHours),
+            );
             promotedCount = promoted.reduce((total, reservation) => total + reservation.quantity, 0);
             promotedReservations = [...promotedReservations, ...promoted];
           }
@@ -736,7 +749,7 @@ router.post(
       });
 
       // Optionally notify users that their reservation expired
-      const emailPromises = expired.map((r) =>
+      const emailPromises = claimedExpired.map((r) =>
         sendPresaleExpiredEmail(r.user.email, r.user.name, r.product.name).catch((err) => {
           console.error(`[presale] Error al enviar email expirado a ${r.user.email}:`, err);
         })
@@ -757,8 +770,10 @@ router.post(
       await Promise.all([...emailPromises, ...promotionEmails]);
 
       return res.json({
-        message: `Se liberaron ${expired.length} reserva(s) expirada(s). Stock restaurado.`,
-        released: expired.length,
+        message: claimedExpired.length > 0
+          ? `Se liberaron ${claimedExpired.length} reserva(s) expirada(s). Stock restaurado.`
+          : 'Las reservas ya no están expiradas.',
+        released: claimedExpired.length,
         byProduct,
         promoted: promotedReservations.length,
         promotedByProduct,
@@ -1356,6 +1371,50 @@ router.patch(
       }
       console.error('Presale update condition error:', error);
       return res.status(500).json({ error: 'Error al cambiar el tipo de preventa' });
+    }
+  }
+);
+
+/**
+ * PATCH /api/presale/admin/reservation-expiration/:reservationId
+ * Admin: reset a notified reservation's payment window from now.
+ */
+router.patch(
+  '/admin/reservation-expiration/:reservationId',
+  authenticate,
+  requireRole('ADMIN', 'STAFF'),
+  async (req, res) => {
+    try {
+      const reservationId = req.params.reservationId as string;
+      const hours = Number(req.body?.hours);
+      if (!Number.isInteger(hours) || hours < 1 || hours > 8760) {
+        return res.status(400).json({ error: 'Las horas deben ser un entero entre 1 y 8760' });
+      }
+
+      const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000);
+      const result = await prisma.presaleReservation.updateMany({
+        where: { id: reservationId, status: 'NOTIFIED' },
+        data: { expiresAt },
+      });
+
+      if (result.count === 0) {
+        const reservation = await prisma.presaleReservation.findUnique({
+          where: { id: reservationId },
+          select: { id: true },
+        });
+        if (!reservation) {
+          return res.status(404).json({ error: 'Reserva no encontrada' });
+        }
+        return res.status(409).json({ error: 'Solo se puede editar el plazo de reservas notificadas' });
+      }
+
+      return res.json({
+        message: `Se asignaron ${hours} hora(s) desde ahora para pagar.`,
+        reservation: { id: reservationId, expiresAt },
+      });
+    } catch (error) {
+      console.error('Presale update expiration error:', error);
+      return res.status(500).json({ error: 'Error al actualizar el plazo de pago' });
     }
   }
 );

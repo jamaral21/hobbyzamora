@@ -115,7 +115,6 @@ async function expirePresaleReservations() {
   try {
     const now = new Date();
     const reassignNow = new Date();
-    const reassignExpiresAt = getPresalePaymentExpiry(reassignNow);
     const expired = await prisma.presaleReservation.findMany({
       where: {
         status: 'NOTIFIED',
@@ -135,16 +134,26 @@ async function expirePresaleReservations() {
 
     let promotedForEmail: PromotedReservation[] = [];
     const promotedByProduct: Record<string, number> = {};
+    let claimedExpired: typeof expired = [];
 
     await prisma.$transaction(async (tx) => {
-      // Mark all as EXPIRED
-      await tx.presaleReservation.updateMany({
-        where: { id: { in: expired.map((r) => r.id) } },
-        data: { status: 'EXPIRED' },
-      });
+      claimedExpired = [];
+      for (const reservation of expired) {
+        const claimed = await tx.presaleReservation.updateMany({
+          where: {
+            id: reservation.id,
+            status: 'NOTIFIED',
+            expiresAt: { lte: now },
+          },
+          data: { status: 'EXPIRED' },
+        });
+        if (claimed.count > 0) claimedExpired.push(reservation);
+      }
+
+      if (claimedExpired.length === 0) return;
 
       // Restore sellable stock per product (group by productId)
-      const countByProduct = expired.reduce<Record<string, number>>((acc, r) => {
+      const countByProduct = claimedExpired.reduce<Record<string, number>>((acc, r) => {
         acc[r.productId] = (acc[r.productId] ?? 0) + r.quantity;
         return acc;
       }, {});
@@ -152,7 +161,7 @@ async function expirePresaleReservations() {
       for (const [productId, count] of Object.entries(countByProduct)) {
         const product = await tx.product.findUnique({
           where: { id: productId },
-          select: { id: true, isPresale: true, status: true },
+          select: { id: true, isPresale: true, status: true, presalePaymentHours: true },
         });
 
         let promotedCount = 0;
@@ -174,12 +183,13 @@ async function expirePresaleReservations() {
           });
 
           if (reservationsToNotify.length > 0) {
+            const expiresAt = getPresalePaymentExpiry(reassignNow, product.presalePaymentHours);
             await tx.presaleReservation.updateMany({
               where: {
                 id: { in: reservationsToNotify.map((r) => r.id) },
                 status: 'PENDING',
               },
-              data: { status: 'NOTIFIED', notifiedAt: reassignNow, expiresAt: reassignExpiresAt },
+              data: { status: 'NOTIFIED', notifiedAt: reassignNow, expiresAt },
             });
 
             promotedCount = reservationsToNotify.reduce((total, reservation) => total + reservation.quantity, 0);
@@ -216,7 +226,7 @@ async function expirePresaleReservations() {
     }
 
     const promotedTotal = Object.values(promotedByProduct).reduce((acc, v) => acc + v, 0);
-    console.log(`[presale] Expiradas ${expired.length} reserva(s). Reasignadas FIFO: ${promotedTotal}.`);
+    console.log(`[presale] Expiradas ${claimedExpired.length} reserva(s). Reasignadas FIFO: ${promotedTotal}.`);
   } catch (err) {
     console.error('[presale] Error en job de expiración:', err);
   }

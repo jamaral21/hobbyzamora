@@ -23,7 +23,9 @@ import {
 import { presaleAPI, productsAPI, AdminPresaleReservation, Product } from '../../lib/api';
 import { ImageWithFallback } from '../../components/figma/ImageWithFallback';
 import { AdminLayout } from '../../components/layout/AdminLayout';
-import { Modal } from '../../components/design-system/Modal';
+import { Button } from '../../components/design-system/Button';
+import { Input } from '../../components/design-system/Input';
+import { Modal, ModalFooter } from '../../components/design-system/Modal';
 import { ProductEditor } from '../../components/admin/ProductEditor';
 import { productsAPI as productsAPIFull } from '../../lib/api';
 
@@ -214,6 +216,9 @@ export function PresalesPage() {
   const [markingPaid, setMarkingPaid] = useState<string | null>(null);
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
   const [changingConditionId, setChangingConditionId] = useState<string | null>(null);
+  const [expirationReservation, setExpirationReservation] = useState<AdminPresaleReservation | null>(null);
+  const [expirationHours, setExpirationHours] = useState('24');
+  const [updatingExpirationId, setUpdatingExpirationId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [blockingUserId, setBlockingUserId] = useState<string | null>(null);
   const [restoringUserId, setRestoringUserId] = useState<string | null>(null);
@@ -587,6 +592,33 @@ export function PresalesPage() {
       showToast(err.message || 'Error al cambiar el tipo de preventa', 'err');
     } finally {
       setChangingConditionId(null);
+    }
+  };
+
+  const handleUpdateExpiration = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!expirationReservation) return;
+
+    const hours = Number(expirationHours);
+    if (!Number.isInteger(hours) || hours < 1 || hours > 8760) {
+      showToast('Ingresa un número entero de horas entre 1 y 8760', 'err');
+      return;
+    }
+
+    setUpdatingExpirationId(expirationReservation.id);
+    try {
+      const data = await presaleAPI.updateReservationExpiration(expirationReservation.id, hours);
+      setReservations((prev) =>
+        prev.map((r) => r.id === expirationReservation.id
+          ? { ...r, expiresAt: data.reservation.expiresAt }
+          : r),
+      );
+      showToast(data.message);
+      setExpirationReservation(null);
+    } catch (err: any) {
+      showToast(err.message || 'Error al actualizar el plazo de pago', 'err');
+    } finally {
+      setUpdatingExpirationId(null);
     }
   };
 
@@ -989,18 +1021,32 @@ export function PresalesPage() {
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
                           {r.status === 'NOTIFIED' && (
-                            <button
-                              onClick={() => handleMarkPaid(r.id)}
-                              disabled={markingPaid === r.id}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-semibold hover:bg-green-500 disabled:opacity-60 transition-colors"
-                            >
-                              {markingPaid === r.id ? (
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                              ) : (
-                                <CheckCircle className="w-3 h-3" />
-                              )}
-                              Marcar pagado
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setExpirationHours(String(r.product.presalePaymentHours ?? 24));
+                                  setExpirationReservation(r);
+                                }}
+                                disabled={updatingExpirationId === r.id}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border text-xs font-semibold hover:bg-secondary disabled:opacity-60 transition-colors"
+                              >
+                                <Clock className="w-3 h-3" />
+                                Editar plazo
+                              </button>
+                              <button
+                                onClick={() => handleMarkPaid(r.id)}
+                                disabled={markingPaid === r.id}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-green-600 text-white text-xs font-semibold hover:bg-green-500 disabled:opacity-60 transition-colors"
+                              >
+                                {markingPaid === r.id ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <CheckCircle className="w-3 h-3" />
+                                )}
+                                Marcar pagado
+                              </button>
+                            </>
                           )}
 
                           {r.status === 'EXPIRED' && !r.user.presaleBanned && (
@@ -1139,6 +1185,51 @@ export function PresalesPage() {
               Liberar
             </button>
           </div>
+        </Modal>
+      )}
+
+      {expirationReservation && (
+        <Modal
+          isOpen={!!expirationReservation}
+          onClose={() => {
+            if (!updatingExpirationId) setExpirationReservation(null);
+          }}
+          title="Editar plazo para pagar"
+          size="sm"
+        >
+          <form onSubmit={handleUpdateExpiration}>
+            <p className="text-sm text-muted-foreground mb-4">
+              Reserva de <span className="font-semibold text-foreground">{expirationReservation.user.name}</span>
+              {' · '}{expirationReservation.product.name}
+            </p>
+            <Input
+              label="Horas desde ahora"
+              type="number"
+              min="1"
+              max="8760"
+              step="1"
+              required
+              value={expirationHours}
+              onChange={(event) => setExpirationHours(event.target.value)}
+              hint="Por defecto se asignan 24 horas. Máximo: 8760 horas."
+            />
+            <ModalFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setExpirationReservation(null)}
+                disabled={updatingExpirationId === expirationReservation.id}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={updatingExpirationId === expirationReservation.id}>
+                {updatingExpirationId === expirationReservation.id
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <Clock className="w-4 h-4" />}
+                Guardar plazo
+              </Button>
+            </ModalFooter>
+          </form>
         </Modal>
       )}
 

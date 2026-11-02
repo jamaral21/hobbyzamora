@@ -26,6 +26,7 @@ export interface Product {
   presaleAvailQty?: number;
   presaleEndDate?: string;
   presalePublishAt?: string | null;
+  presalePaymentHours?: number;
   presaleArrivedAt?: string | null;
   variants?: ProductVariant[];
 }
@@ -1161,6 +1162,7 @@ export interface AdminPresaleReservation {
     images: string[];
     presaleAvailQty: number | null;
     presaleMaxQty: number | null;
+    presalePaymentHours: number;
   };
 }
 
@@ -1251,6 +1253,17 @@ export const presaleAPI = {
     }>(
       `/presale/admin/reservation-condition/${reservationId}`,
       { method: 'PATCH', body: JSON.stringify({ condition }) },
+      'admin'
+    ),
+
+  /** Admin: reset a notified reservation's payment window from now */
+  updateReservationExpiration: (reservationId: string, hours: number) =>
+    fetchAPI<{
+      message: string;
+      reservation: { id: string; expiresAt: string };
+    }>(
+      `/presale/admin/reservation-expiration/${reservationId}`,
+      { method: 'PATCH', body: JSON.stringify({ hours }) },
       'admin'
     ),
 

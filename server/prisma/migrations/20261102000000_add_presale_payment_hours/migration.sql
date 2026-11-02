@@ -1,0 +1,1 @@
+ALTER TABLE "products" ADD COLUMN "presalePaymentHours" INTEGER NOT NULL DEFAULT 24;

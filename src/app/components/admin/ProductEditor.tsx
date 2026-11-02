@@ -55,6 +55,7 @@ export function ProductEditor({
       description: '',
       status: 'ACTIVE',
       featured: false,
+      presalePaymentHours: 24,
     })
   );
 
@@ -377,6 +378,19 @@ export function ProductEditor({
                     type="date"
                     value={formData.presaleEndDate ? formData.presaleEndDate.split('T')[0] : ''}
                     onChange={(e) => setFormData({ ...formData, presaleEndDate: e.target.value || undefined })}
+                  />
+                  <Input
+                    label="Plazo para pagar después de la notificación (horas)"
+                    type="number"
+                    min="1"
+                    max="8760"
+                    step="1"
+                    value={formData.presalePaymentHours ?? 24}
+                    onChange={(e) => setFormData({
+                      ...formData,
+                      presalePaymentHours: e.target.value ? Number(e.target.value) : undefined,
+                    })}
+                    hint="Por defecto son 24 horas. Se aplica a futuras notificaciones de esta preventa; no cambia vencimientos ya asignados."
                   />
                   <div className="grid grid-cols-2 gap-4">
                     <Input

@@ -78,6 +78,7 @@ model Product {
   presaleAvailQty   Int?
   presaleEndDate    DateTime?
   presalePublishAt  DateTime?
+  presalePaymentHours Int @default(24)
   presaleArrivedAt  DateTime?
 
   createdAt DateTime @default(now())

@@ -35,8 +35,11 @@ export const PRESALE_EXPIRATION_SECONDS = Math.max(
     || DEFAULT_PRESALE_EXPIRATION_SECONDS,
 );
 
-export function getPresalePaymentExpiry(from = new Date()) {
-  return new Date(from.getTime() + PRESALE_EXPIRATION_SECONDS * 1000);
+export function getPresalePaymentExpiry(
+  from = new Date(),
+  durationHours = PRESALE_EXPIRATION_SECONDS / 3600,
+) {
+  return new Date(from.getTime() + durationHours * 60 * 60 * 1000);
 }
 
 export function getPresaleUnavailableReason(

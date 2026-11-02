@@ -819,6 +819,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
       presaleAvailQty,
       presaleEndDate,
       presalePublishAt,
+      presalePaymentHours,
       variants,
       initialStock,
       presaleVariantPrices,
@@ -829,6 +830,12 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
       : null;
     if (isPresale && presaleVariantPrices && !parsedPresaleVariantPrices) {
       return res.status(400).json({ error: 'Los 4 precios de variantes de preventa deben ser mayores a 0' });
+    }
+    const parsedPresalePaymentHours = presalePaymentHours === undefined
+      ? 24
+      : Number(presalePaymentHours);
+    if (isPresale && (!Number.isInteger(parsedPresalePaymentHours) || parsedPresalePaymentHours < 1 || parsedPresalePaymentHours > 8760)) {
+      return res.status(400).json({ error: 'El plazo de pago debe ser un entero entre 1 y 8760 horas' });
     }
 
     const { category: normalizedCategory, valid: isValidCategory } = await resolveValidCategoryInput(String(category || ''));
@@ -884,6 +891,7 @@ router.post('/', authenticate, requireRole('ADMIN', 'STAFF'), async (req: AuthRe
         presaleAvailQty,
         presaleEndDate: isPresale ? null : (presaleEndDate ? new Date(presaleEndDate) : null),
         presalePublishAt: isPresale && presalePublishAt ? new Date(presalePublishAt) : null,
+        presalePaymentHours: parsedPresalePaymentHours,
         variants: variants ? {
           create: variants.map((v: any) => ({
             name: v.name,
@@ -940,6 +948,7 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
       presaleAvailQty,
       presaleEndDate,
       presalePublishAt,
+      presalePaymentHours,
       presaleVariantPrices,
     } = req.body;
 
@@ -1021,6 +1030,12 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
     }
 
     const nextIsPresale = isPresale ?? existing.isPresale;
+    const nextPresalePaymentHours = presalePaymentHours === undefined
+      ? existing.presalePaymentHours
+      : Number(presalePaymentHours);
+    if (nextIsPresale && (!Number.isInteger(nextPresalePaymentHours) || nextPresalePaymentHours < 1 || nextPresalePaymentHours > 8760)) {
+      return res.status(400).json({ error: 'El plazo de pago debe ser un entero entre 1 y 8760 horas' });
+    }
     const nextDiscountPercent = discountPercent === undefined
       ? Number(existing.discountPercent)
       : Number(discountPercent);
@@ -1057,6 +1072,7 @@ router.patch('/:id', authenticate, requireRole('ADMIN', 'STAFF'), async (req: Au
           presalePublishAt: isConvertingFromPresale || !nextIsPresale
             ? null
             : (presalePublishAt === undefined ? undefined : (presalePublishAt ? new Date(presalePublishAt) : null)),
+          presalePaymentHours: nextPresalePaymentHours,
         },
         include: {
           variants: true,
