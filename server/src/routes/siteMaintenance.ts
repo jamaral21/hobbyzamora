@@ -5,6 +5,8 @@ import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
 const router = Router();
 
 const MAINTENANCE_KEY = 'store_maintenance';
+const JAPAN_TRAVEL_SECTION_KEY = 'japan_travel_2026_section';
+const JAPAN_TRAVEL_CATEGORY = 'Productos Viaje Japón 2026';
 
 async function ensureSettingsTable() {
   await prisma.$executeRawUnsafe(
@@ -32,6 +34,27 @@ async function getMaintenanceValue(): Promise<boolean> {
   return rows[0].value === 'true';
 }
 
+async function getJapanTravelSectionStatus() {
+  await ensureSettingsTable();
+  const [rows, productsCount] = await Promise.all([
+    prisma.$queryRawUnsafe<Array<{ value: string }>>(
+      'SELECT value FROM site_settings WHERE key = ? LIMIT 1',
+      JAPAN_TRAVEL_SECTION_KEY,
+    ),
+    prisma.product.count({
+      where: {
+        category: JAPAN_TRAVEL_CATEGORY,
+        status: 'ACTIVE',
+        isPresale: false,
+      },
+    }),
+  ]);
+  return {
+    enabled: rows[0]?.value === 'true',
+    hasProducts: productsCount > 0,
+  };
+}
+
 router.get('/', async (_req, res) => {
   try {
     const maintenance = await getMaintenanceValue();
@@ -39,6 +62,15 @@ router.get('/', async (_req, res) => {
   } catch (error) {
     console.error('GET /api/site-maintenance error:', error);
     return res.status(500).json({ error: 'No se pudo obtener el estado de mantenimiento' });
+  }
+});
+
+router.get('/japan-travel-2026', async (_req, res) => {
+  try {
+    return res.json(await getJapanTravelSectionStatus());
+  } catch (error) {
+    console.error('GET /api/site-maintenance/japan-travel-2026 error:', error);
+    return res.status(500).json({ error: 'No se pudo obtener el estado de la sección de viaje a Japón' });
   }
 });
 
@@ -59,6 +91,28 @@ router.put('/', authenticate, requireRole('ADMIN', 'STAFF', 'admin', 'staff'), a
   } catch (error) {
     console.error('PUT /api/site-maintenance error:', error);
     return res.status(500).json({ error: 'No se pudo actualizar el estado de mantenimiento' });
+  }
+});
+
+router.put('/japan-travel-2026', authenticate, requireRole('ADMIN', 'STAFF', 'admin', 'staff'), async (req: AuthRequest, res) => {
+  try {
+    if (typeof req.body?.enabled !== 'boolean') {
+      return res.status(400).json({ error: 'enabled debe ser booleano' });
+    }
+
+    await ensureSettingsTable();
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO site_settings (key, value, updatedAt)
+       VALUES (?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = CURRENT_TIMESTAMP`,
+      JAPAN_TRAVEL_SECTION_KEY,
+      req.body.enabled ? 'true' : 'false',
+    );
+
+    return res.json(await getJapanTravelSectionStatus());
+  } catch (error) {
+    console.error('PUT /api/site-maintenance/japan-travel-2026 error:', error);
+    return res.status(500).json({ error: 'No se pudo actualizar la sección de viaje a Japón' });
   }
 });
 

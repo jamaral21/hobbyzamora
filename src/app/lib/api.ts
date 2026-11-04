@@ -453,6 +453,20 @@ export const maintenanceAPI = {
     ),
 };
 
+export const japanTravelSectionAPI = {
+    getStatus: () =>
+      fetchAPI<{ enabled: boolean; hasProducts: boolean }>('/site-maintenance/japan-travel-2026', undefined, 'public'),
+    setEnabled: (enabled: boolean) =>
+      fetchAPI<{ enabled: boolean; hasProducts: boolean }>(
+        '/site-maintenance/japan-travel-2026',
+        {
+          method: 'PUT',
+          body: JSON.stringify({ enabled }),
+        },
+        'admin',
+      ),
+};
+
 export const addressesAPI = authAPI.addresses;
 
 // Products API

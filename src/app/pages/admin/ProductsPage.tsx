@@ -9,7 +9,7 @@ import { Dropdown, DropdownItem } from '../../components/design-system/Dropdown'
 import { Modal } from '../../components/design-system/Modal';
 import { ProductEditor } from '../../components/admin/ProductEditor';
 import { useMutation } from '../../hooks/useData';
-import { productsAPI } from '../../lib/api';
+import { japanTravelSectionAPI, productsAPI } from '../../lib/api';
 import { formatChileDate } from '../../lib/chileDate';
 import type { Product } from '../../lib/api';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
@@ -46,6 +46,9 @@ export default function ProductsPage() {
   const [sectionCategories, setSectionCategories] = useState<string[]>([]);
   const [isClearingDiscounts, setIsClearingDiscounts] = useState(false);
   const [discountClearMessage, setDiscountClearMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [japanTravelEnabled, setJapanTravelEnabled] = useState<boolean | null>(null);
+  const [japanTravelBusy, setJapanTravelBusy] = useState(false);
+  const [japanTravelError, setJapanTravelError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const zipInputRef = useRef<HTMLInputElement>(null);
   const hasLoadedProductsRef = useRef(false);
@@ -134,6 +137,23 @@ export default function ProductsPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (isPresalesView || user?.role !== 'ADMIN') return;
+    let cancelled = false;
+    japanTravelSectionAPI.getStatus()
+      .then(({ enabled }) => {
+        if (!cancelled) setJapanTravelEnabled(enabled);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setJapanTravelError(error instanceof Error ? error.message : 'No se pudo cargar el estado de la sección');
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isPresalesView, user?.role]);
+
   const categoryOptions = useMemo(() => ['ALL', ...sectionCategories], [sectionCategories]);
 
   const filteredProducts = useMemo(() => products || [], [products]);
@@ -163,6 +183,21 @@ export default function ProductsPage() {
       setDiscountClearMessage({ type: 'error', text: error?.message || 'No se pudieron quitar los descuentos.' });
     } finally {
       setIsClearingDiscounts(false);
+    }
+  };
+
+  const handleToggleJapanTravelSection = async (enabled: boolean) => {
+    if (!enabled && !window.confirm('¿Desactivar la sección Productos Viaje Japón 2026 en la tienda?')) return;
+
+    setJapanTravelBusy(true);
+    setJapanTravelError('');
+    try {
+      const result = await japanTravelSectionAPI.setEnabled(enabled);
+      setJapanTravelEnabled(result.enabled);
+    } catch (error: unknown) {
+      setJapanTravelError(error instanceof Error ? error.message : 'No se pudo actualizar la sección');
+    } finally {
+      setJapanTravelBusy(false);
     }
   };
 
@@ -410,6 +445,21 @@ export default function ProductsPage() {
                 {isClearingDiscounts ? 'Quitando descuentos...' : 'Desactivar Cyber Week'}
               </Button>
             )}
+            {!isPresalesView && user?.role === 'ADMIN' && (
+              <Button
+                variant="outline"
+                className="border-primary/40 text-primary hover:bg-primary/10"
+                onClick={() => void handleToggleJapanTravelSection(!japanTravelEnabled)}
+                disabled={japanTravelEnabled === null || japanTravelBusy}
+              >
+                {japanTravelBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <span aria-hidden="true">🇯🇵</span>}
+                {japanTravelBusy
+                  ? 'Actualizando sección...'
+                  : japanTravelEnabled
+                    ? 'Desactivar Viaje Japón 2026'
+                    : 'Activar Viaje Japón 2026'}
+              </Button>
+            )}
             <Button onClick={() => { setEditingProduct(null); setIsEditorOpen(true); }}>
               <Plus className="w-4 h-4" />
               Agregar Producto
@@ -427,6 +477,11 @@ export default function ProductsPage() {
               ? <CheckCircle className="h-4 w-4 text-[#00e676]" />
               : <AlertCircle className="h-4 w-4" />}
             {discountClearMessage.text}
+          </div>
+        )}
+        {japanTravelError && (
+          <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {japanTravelError}
           </div>
         )}
 

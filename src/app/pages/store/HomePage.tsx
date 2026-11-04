@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import {
   ArrowRight,
@@ -19,6 +19,8 @@ import { HeroSlider, type HeroSlide } from '../../components/design-system/HeroS
 import { useInstagramFeed, useProducts, useReviews, useStoreSections } from '../../hooks/useData';
 import { useAuth } from '../../contexts/AuthContext';
 import { mockProducts } from '../../data/mockData';
+import { japanTravelSectionAPI } from '../../lib/api';
+import { JAPAN_TRAVEL_2026_CATEGORY } from '../../lib/sku';
 import { buildSectionGroups, resolveParentCategory } from '../../lib/sections';
 
 const heroSlides: HeroSlide[] = [
@@ -68,8 +70,24 @@ export default function HomePage() {
   const { data: sections } = useStoreSections();
   const { data: instagramFeed } = useInstagramFeed({ enabled: INSTAGRAM_FEED_ENABLED });
   const { data: approvedReviews } = useReviews({ status: 'APPROVED', limit: 6 });
+  const [japanTravelSectionEnabled, setJapanTravelSectionEnabled] = useState(false);
   const categoryGroups = useMemo(() => buildSectionGroups(sections || []), [sections]);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let active = true;
+    japanTravelSectionAPI.getStatus()
+      .then(({ enabled, hasProducts }) => {
+        if (active) setJapanTravelSectionEnabled(enabled && hasProducts);
+      })
+      .catch((error: unknown) => {
+        console.error('Could not load Japan travel section status:', error);
+        if (active) setJapanTravelSectionEnabled(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const allProducts = products && products.length > 0 ? products : mockProducts;
   const inStockProducts = useMemo(() => {
@@ -113,11 +131,24 @@ export default function HomePage() {
     return inStockProducts.filter((p: any) => p.isPresale);
   }, [inStockProducts]);
 
+  const japanTravelProducts = useMemo(() => {
+    return (products || [])
+      .filter((product) =>
+        product.category === JAPAN_TRAVEL_2026_CATEGORY &&
+        !product.isPresale &&
+        product.status === 'ACTIVE',
+      )
+      .slice(0, 8);
+  }, [products]);
+
   const categoryProducts = useMemo(() => {
     if (!categoryGroups.length || !sortedByNewest.length) return [];
 
+    const regularCategoryGroups = categoryGroups.filter(
+      (group) => group.parentCategory !== JAPAN_TRAVEL_2026_CATEGORY,
+    );
     const grouped = new Map<string, any[]>();
-    for (const group of categoryGroups) {
+    for (const group of regularCategoryGroups) {
       grouped.set(group.parentCategory, []);
     }
 
@@ -128,7 +159,7 @@ export default function HomePage() {
       grouped.get(parent)?.push(product);
     }
 
-    return categoryGroups
+    return regularCategoryGroups
       .map((group) => {
         const products = grouped.get(group.parentCategory) || [];
         return { ...group, products: products.slice(0, 10) };
@@ -223,6 +254,30 @@ export default function HomePage() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
               {discountedProducts.map((product: any) => (
+                <ProductCard key={product.id} product={product} />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {japanTravelSectionEnabled && japanTravelProducts.length > 0 && (
+        <section id="viaje-japon-2026" className="scroll-mt-32 py-14 border-y border-border bg-card/30">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between gap-4 mb-8">
+              <div>
+                <h2 className="text-primary mb-2">PRODUCTOS VIAJE JAPÓN 2026</h2>
+                <p className="text-muted-foreground">Selección especial de nuestro viaje a Japón</p>
+              </div>
+              <Link to={`/store/products?category=${encodeURIComponent('productos-viaje-japon-2026')}`}>
+                <Button variant="outline" size="sm">
+                  Ver Todos
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              {japanTravelProducts.map((product) => (
                 <ProductCard key={product.id} product={product} />
               ))}
             </div>

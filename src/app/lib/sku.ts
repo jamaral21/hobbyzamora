@@ -1,3 +1,5 @@
+export const JAPAN_TRAVEL_2026_CATEGORY = 'Productos Viaje Japón 2026';
+
 export const PRODUCT_CATEGORY_OPTIONS = [
   'Pokémon TCG',
   'TCG Varios',
@@ -6,6 +8,7 @@ export const PRODUCT_CATEGORY_OPTIONS = [
   'Autos Tomy Tomica',
   'Figuras',
   'Nintendo',
+  JAPAN_TRAVEL_2026_CATEGORY,
   'Coleccionables Varios',
 ] as const;
 
@@ -33,6 +36,7 @@ const CATEGORY_PREFIXES: Record<string, string> = {
   'figuras': 'FGT',
   'figuarts': 'FGT',
   'nintendo': 'NTD',
+  'productos viaje japon 2026': 'VJP',
   'coleccionables varios': 'COL',
   'booster boxes': 'BST',
   'elite trainer boxes': 'ETB',

@@ -7,7 +7,13 @@ import { useCartStore } from '../../lib/store';
 import { useStoreSections } from '../../hooks/useData';
 import { buildSectionGroups, slugifySection } from '../../lib/sections';
 
-export function StoreNavbar({ hasActiveOffers = false }: { hasActiveOffers?: boolean }) {
+export function StoreNavbar({
+  hasActiveOffers = false,
+  hasJapanTravelSection = false,
+}: {
+  hasActiveOffers?: boolean;
+  hasJapanTravelSection?: boolean;
+}) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [search, setSearch] = useState('');
@@ -17,6 +23,10 @@ export function StoreNavbar({ hasActiveOffers = false }: { hasActiveOffers?: boo
   const { data: sections } = useStoreSections();
 
   const groups = useMemo(() => buildSectionGroups(sections || []), [sections]);
+  const menuGroups = useMemo(
+    () => groups.filter((group) => group.parentCategory !== 'Productos Viaje Japón 2026'),
+    [groups],
+  );
   const currentCategory = new URLSearchParams(location.search).get('category') || '';
 
   React.useEffect(() => {
@@ -126,6 +136,12 @@ export function StoreNavbar({ hasActiveOffers = false }: { hasActiveOffers?: boo
                   Cyber Week
                 </Link>
               )}
+              {hasJapanTravelSection && (
+                <Link to="/store#viaje-japon-2026" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 py-2 text-primary font-medium hover:text-primary/80 transition-colors">
+                  <span aria-hidden="true">🇯🇵</span>
+                  Productos Viaje Japón 2026
+                </Link>
+              )}
               <Link to="/store/presales" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 py-2 text-amber-500 hover:text-amber-400 font-medium transition-colors">
                 <Star className="w-4 h-4 fill-amber-500" />
                 Preventas
@@ -137,7 +153,7 @@ export function StoreNavbar({ hasActiveOffers = false }: { hasActiveOffers?: boo
 
               {/* Categories */}
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider py-1">Categorías</p>
-              {groups.map((group) => (
+              {menuGroups.map((group) => (
                 <div key={group.parentCategory}>
                   <Link
                     to={`/store/products?category=${group.slug}`}
@@ -171,7 +187,7 @@ export function StoreNavbar({ hasActiveOffers = false }: { hasActiveOffers?: boo
       <div className="hidden md:block relative overflow-visible border-t border-border bg-background/60 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="relative flex flex-wrap items-center justify-center gap-2 py-3 overflow-visible">
-            {groups.map((group) => {
+            {menuGroups.map((group) => {
               const isParentActive = slugifySection(group.parentCategory) === slugifySection(currentCategory);
               const activeChild = group.children.find((child) => child.slug === slugifySection(currentCategory));
               const isActive = isParentActive || Boolean(activeChild);
@@ -197,6 +213,19 @@ export function StoreNavbar({ hasActiveOffers = false }: { hasActiveOffers?: boo
               >
                 <BadgePercent className="w-3.5 h-3.5" />
                 Cyber Week
+              </Link>
+            )}
+            {hasJapanTravelSection && (
+              <Link
+                to="/store#viaje-japon-2026"
+                className={`shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-md text-[0.9rem] transition-colors whitespace-nowrap font-medium ${
+                  location.hash === '#viaje-japon-2026'
+                    ? 'text-primary bg-primary/10'
+                    : 'text-primary hover:bg-primary/5'
+                }`}
+              >
+                <span aria-hidden="true">🇯🇵</span>
+                Productos Viaje Japón 2026
               </Link>
             )}
             <Link

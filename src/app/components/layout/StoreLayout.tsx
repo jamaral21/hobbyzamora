@@ -4,10 +4,11 @@ import { useStoreSections } from '../../hooks/useData';
 import { buildSectionGroups } from '../../lib/sections';
 import { useEffect, useMemo, useState } from 'react';
 import { Instagram } from 'lucide-react';
-import { productsAPI } from '../../lib/api';
+import { japanTravelSectionAPI, productsAPI } from '../../lib/api';
 
 export function StoreLayout({ children }: { children: React.ReactNode }) {
   const [hasActiveOffers, setHasActiveOffers] = useState(false);
+  const [hasJapanTravelSection, setHasJapanTravelSection] = useState(false);
   const { data: sections } = useStoreSections();
   const groups = useMemo(() => buildSectionGroups(sections || []), [sections]);
 
@@ -25,9 +26,24 @@ export function StoreLayout({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    japanTravelSectionAPI.getStatus()
+      .then(({ enabled, hasProducts }) => {
+        if (active) setHasJapanTravelSection(enabled && hasProducts);
+      })
+      .catch((error: unknown) => {
+        console.error('Could not load Japan travel section status:', error);
+        if (active) setHasJapanTravelSection(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-background">
-      <StoreNavbar hasActiveOffers={hasActiveOffers} />
+      <StoreNavbar hasActiveOffers={hasActiveOffers} hasJapanTravelSection={hasJapanTravelSection} />
       <main className="relative z-0">{children}</main>
       <footer className="bg-card border-t border-border mt-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -43,7 +59,7 @@ export function StoreLayout({ children }: { children: React.ReactNode }) {
             <div>
               <h4 className="text-sm text-foreground mb-4 font-semibold">Categorías</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                {groups.slice(0, 7).map((group) => (
+                {groups.filter((group) => group.parentCategory !== 'Productos Viaje Japón 2026').slice(0, 7).map((group) => (
                   <li key={group.parentCategory}>
                     <a href={`/store/products?category=${group.slug}`} className="hover:text-primary transition-colors">
                       {group.parentCategory}
@@ -57,6 +73,7 @@ export function StoreLayout({ children }: { children: React.ReactNode }) {
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li><a href="/store/products" className="hover:text-primary transition-colors">Todos los Productos</a></li>
                 {hasActiveOffers && <li><a href="/store/offers" className="hover:text-primary transition-colors">Cyber Week</a></li>}
+                {hasJapanTravelSection && <li><a href="/store#viaje-japon-2026" className="hover:text-primary transition-colors">Productos Viaje Japón 2026</a></li>}
                 <li><a href="/store/presales" className="hover:text-primary transition-colors">Preventas</a></li>
                 <li><a href="/store/account" className="hover:text-primary transition-colors">Mi Cuenta</a></li>
               </ul>
