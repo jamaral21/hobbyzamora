@@ -6,6 +6,7 @@ import { Badge } from '../design-system/Badge';
 import { useCartStore } from '../../lib/store';
 import { useStoreSections } from '../../hooks/useData';
 import { buildSectionGroups, slugifySection } from '../../lib/sections';
+import { JAPAN_TRAVEL_2026_CATEGORY } from '../../lib/sku';
 
 export function StoreNavbar({
   hasActiveOffers = false,
@@ -24,9 +25,10 @@ export function StoreNavbar({
 
   const groups = useMemo(() => buildSectionGroups(sections || []), [sections]);
   const menuGroups = useMemo(
-    () => groups.filter((group) => group.parentCategory !== 'Productos Viaje Japón 2026'),
+    () => groups.filter((group) => group.parentCategory !== JAPAN_TRAVEL_2026_CATEGORY),
     [groups],
   );
+  const japanTravelCategoryPath = `/store/products?category=${slugifySection(JAPAN_TRAVEL_2026_CATEGORY)}`;
   const currentCategory = new URLSearchParams(location.search).get('category') || '';
 
   React.useEffect(() => {
@@ -137,7 +139,7 @@ export function StoreNavbar({
                 </Link>
               )}
               {hasJapanTravelSection && (
-                <Link to="/store#viaje-japon-2026" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 py-2 text-primary font-medium hover:text-primary/80 transition-colors">
+                <Link to={japanTravelCategoryPath} onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 py-2 text-primary font-medium hover:text-primary/80 transition-colors">
                   <span aria-hidden="true">🇯🇵</span>
                   Productos Viaje Japón 2026
                 </Link>
@@ -217,9 +219,9 @@ export function StoreNavbar({
             )}
             {hasJapanTravelSection && (
               <Link
-                to="/store#viaje-japon-2026"
+                to={japanTravelCategoryPath}
                 className={`shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-md text-[0.9rem] transition-colors whitespace-nowrap font-medium ${
-                  location.hash === '#viaje-japon-2026'
+                  location.pathname === '/store/products' && slugifySection(currentCategory) === slugifySection(JAPAN_TRAVEL_2026_CATEGORY)
                     ? 'text-primary bg-primary/10'
                     : 'text-primary hover:bg-primary/5'
                 }`}

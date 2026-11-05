@@ -19,7 +19,7 @@ export default defineConfig({
 
   // Proxy API requests to backend server in development
   server: {
-    port: 3000,
+    port: 5173,
     proxy: {
       '/api': {
         target: 'http://localhost:3001',

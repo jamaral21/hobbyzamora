@@ -86,6 +86,7 @@ export function ProductListingPageContent({
 
     return [{ label: 'Todas las Categorías', slug: 'all' }, ...normalized];
   }, [baseProducts, groups]);
+  const selectedCategory = categories.find((category) => category.slug === categoryParam)?.label;
 
   const handleCategoryChange = (value: string) => {
     if (value === 'all') {
@@ -143,9 +144,17 @@ export function ProductListingPageContent({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl text-foreground mb-2">{presalesOnly ? 'Preventas' : offersOnly ? 'Cyber Week' : 'Todos los Productos'}</h1>
+          <h1 className="text-3xl text-foreground mb-2">
+            {presalesOnly ? 'Preventas' : offersOnly ? 'Cyber Week' : selectedCategory || 'Todos los Productos'}
+          </h1>
           <p className="text-muted-foreground">
-            {presalesOnly ? 'Acceso exclusivo a productos próximos' : offersOnly ? 'Productos con descuentos activos y disponibles' : 'Explora nuestra colección completa de coleccionables'}
+            {presalesOnly
+              ? 'Acceso exclusivo a productos próximos'
+              : offersOnly
+                ? 'Productos con descuentos activos y disponibles'
+                : selectedCategory
+                  ? `Explora nuestra selección de ${selectedCategory}`
+                  : 'Explora nuestra colección completa de coleccionables'}
           </p>
         </div>
 

@@ -1,16 +1,18 @@
 import { StoreNavbar } from './StoreNavbar';
 import { ChatWidget } from '../chat/ChatWidget';
 import { useStoreSections } from '../../hooks/useData';
-import { buildSectionGroups } from '../../lib/sections';
+import { buildSectionGroups, slugifySection } from '../../lib/sections';
 import { useEffect, useMemo, useState } from 'react';
 import { Instagram } from 'lucide-react';
 import { japanTravelSectionAPI, productsAPI } from '../../lib/api';
+import { JAPAN_TRAVEL_2026_CATEGORY } from '../../lib/sku';
 
 export function StoreLayout({ children }: { children: React.ReactNode }) {
   const [hasActiveOffers, setHasActiveOffers] = useState(false);
   const [hasJapanTravelSection, setHasJapanTravelSection] = useState(false);
   const { data: sections } = useStoreSections();
   const groups = useMemo(() => buildSectionGroups(sections || []), [sections]);
+  const japanTravelCategoryPath = `/store/products?category=${slugifySection(JAPAN_TRAVEL_2026_CATEGORY)}`;
 
   useEffect(() => {
     let active = true;
@@ -59,7 +61,7 @@ export function StoreLayout({ children }: { children: React.ReactNode }) {
             <div>
               <h4 className="text-sm text-foreground mb-4 font-semibold">Categorías</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
-                {groups.filter((group) => group.parentCategory !== 'Productos Viaje Japón 2026').slice(0, 7).map((group) => (
+                {groups.filter((group) => group.parentCategory !== JAPAN_TRAVEL_2026_CATEGORY).slice(0, 7).map((group) => (
                   <li key={group.parentCategory}>
                     <a href={`/store/products?category=${group.slug}`} className="hover:text-primary transition-colors">
                       {group.parentCategory}
@@ -73,7 +75,7 @@ export function StoreLayout({ children }: { children: React.ReactNode }) {
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li><a href="/store/products" className="hover:text-primary transition-colors">Todos los Productos</a></li>
                 {hasActiveOffers && <li><a href="/store/offers" className="hover:text-primary transition-colors">Cyber Week</a></li>}
-                {hasJapanTravelSection && <li><a href="/store#viaje-japon-2026" className="hover:text-primary transition-colors">Productos Viaje Japón 2026</a></li>}
+                {hasJapanTravelSection && <li><a href={japanTravelCategoryPath} className="hover:text-primary transition-colors">🇯🇵 Productos Viaje Japón 2026</a></li>}
                 <li><a href="/store/presales" className="hover:text-primary transition-colors">Preventas</a></li>
                 <li><a href="/store/account" className="hover:text-primary transition-colors">Mi Cuenta</a></li>
               </ul>
