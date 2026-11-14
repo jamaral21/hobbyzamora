@@ -419,6 +419,11 @@ function CheckoutForm() {
 
   const handlePlaceOrder = async () => {
     if (cartItems.length === 0) return;
+    if (cartItems.some((item) => !Number.isInteger(item.quantity) || item.quantity <= 0)) {
+      setError('Hay productos con una cantidad inválida. Vuelve al carrito y elimínalos antes de intentar nuevamente.');
+      return;
+    }
+
     setIsProcessing(true);
     setError(null);
 

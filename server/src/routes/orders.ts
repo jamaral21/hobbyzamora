@@ -299,8 +299,20 @@ router.post('/', optionalAuth, async (req: AuthRequest, res) => {
       notes,
     } = req.body;
 
-    if (!items || items.length === 0) {
+    if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'No items in order' });
+    }
+
+    const hasInvalidItem = items.some((item: unknown) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return true;
+      const orderItem = item as { productId?: unknown; quantity?: unknown };
+      return typeof orderItem.productId !== 'string'
+        || !orderItem.productId.trim()
+        || !Number.isInteger(orderItem.quantity)
+        || Number(orderItem.quantity) <= 0;
+    });
+    if (hasInvalidItem) {
+      return res.status(400).json({ error: 'Cada producto debe incluir un ID y una cantidad entera mayor que cero' });
     }
 
     const presaleUser = req.user?.id
