@@ -236,6 +236,9 @@ model Payment {
   getnetPaymentId   String?
   getnetOrderId     String?
   getnetCheckoutUrl String?
+  getnetStatus          String?
+  getnetResponseCode    String?
+  getnetResponseMessage String?
 
   cardLast4 String?
   cardBrand String?
@@ -245,6 +248,25 @@ model Payment {
   updatedAt DateTime  @updatedAt
 
   @@map("payments")
+}
+
+model GetnetPaymentLog {
+  id              String   @id @default(uuid())
+  orderId         String?
+  orderNumber     String?
+  paymentId       String?
+  requestId       String?
+  event           String
+  gatewayStatus   String?
+  responseCode    String?
+  responseMessage String?
+  errorMessage    String?
+  createdAt       DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([event, createdAt])
+  @@index([responseCode, createdAt])
+  @@map("getnet_payment_logs")
 }
 
 model Review {

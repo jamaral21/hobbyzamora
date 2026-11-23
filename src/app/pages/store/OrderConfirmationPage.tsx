@@ -117,6 +117,9 @@ export default function OrderConfirmationPage() {
 
   const isApproved = order?.status === 'PROCESSING' || order?.status === 'DELIVERED' || order?.status === 'SHIPPED';
   const isDeclined = order?.status === 'CANCELLED' || paymentStatus === 'DECLINED';
+  const declinedGetnetPayment = order?.payments?.find(
+    (payment: any) => payment.method === 'GETNET' && payment.status === 'DECLINED',
+  );
   const isPending = !isApproved && !isDeclined;
   const pendingPayment = order?.payments?.find((p: any) => p.status === 'PENDING');
   const isManualPending =
@@ -147,6 +150,19 @@ export default function OrderConfirmationPage() {
               {isManualPending && 'El pedido esta en revision y una vez procesado se le notificara.'}
               {isPending && !isManualPending && 'Estamos verificando tu pago. Esta página se actualizará automáticamente.'}
             </p>
+            {isDeclined && declinedGetnetPayment && (declinedGetnetPayment.getnetResponseCode || declinedGetnetPayment.getnetResponseMessage) && (
+              <div className="text-left mb-8 rounded-lg border border-red-500/20 bg-red-500/5 p-4">
+                <h2 className="text-sm font-medium text-foreground mb-2">Detalle informado por Getnet</h2>
+                {declinedGetnetPayment.getnetResponseCode && (
+                  <p className="text-sm text-muted-foreground">
+                    Código: <span className="font-mono text-foreground">{declinedGetnetPayment.getnetResponseCode}</span>
+                  </p>
+                )}
+                {declinedGetnetPayment.getnetResponseMessage && (
+                  <p className="text-sm text-muted-foreground mt-1">{declinedGetnetPayment.getnetResponseMessage}</p>
+                )}
+              </div>
+            )}
 
             <div className="bg-secondary rounded-lg p-6 mb-8">
               <p className="text-sm text-muted-foreground mb-1">Número de Pedido</p>

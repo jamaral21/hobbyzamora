@@ -14,6 +14,7 @@ import {
   Menu,
   X,
   Star,
+  CreditCard,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useState, useEffect } from 'react';
@@ -29,6 +30,7 @@ const navItems: NavItem[] = [
   { label: 'Panel', icon: LayoutDashboard, path: '/admin' },
   { label: 'Productos', icon: Package, path: '/admin/products' },
   { label: 'Pedidos', icon: ShoppingBag, path: '/admin/orders' },
+  { label: 'Pagos Getnet', icon: CreditCard, path: '/admin/payments/getnet' },
   { label: 'Preventas', icon: Clock, path: '/admin/presales' },
   { label: 'Clientes', icon: Users, path: '/admin/customers' },
   { label: 'Usuarios Admin', icon: Users, path: '/admin/users' },

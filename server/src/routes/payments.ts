@@ -3,6 +3,10 @@ import crypto from 'crypto';
 import { prisma } from '../index.js';
 import { authenticate, optionalAuth, requireRole, AuthRequest } from '../middleware/auth.js';
 import { sendOrderStatusEmail } from '../lib/emailService.js';
+import {
+  extractGetnetDiagnostics,
+  resolveGetnetStatuses,
+} from '../lib/getnetPaymentDiagnostics.js';
 
 const router = Router();
 
@@ -11,24 +15,50 @@ const GETNET_ENDPOINT = process.env.GETNET_ENDPOINT || 'https://checkout.test.ge
 const GETNET_LOGIN = process.env.GETNET_LOGIN || '';
 const GETNET_TRANKEY = process.env.GETNET_TRANKEY || '';
 
-type PaymentOrderResolution = {
-  paymentStatus: 'APPROVED' | 'DECLINED' | 'PENDING';
-  orderStatus: 'PROCESSING' | 'CANCELLED' | 'PENDING';
+type GetnetLogContext = {
+  orderId?: string | null;
+  orderNumber?: string | null;
+  paymentId?: string | null;
+  requestId?: string | null;
+  event: string;
+  gatewayStatus?: string | null;
+  responseCode?: string | null;
+  responseMessage?: string | null;
+  errorMessage?: string | null;
 };
 
-function resolveGetnetStatuses(rawStatus?: string): PaymentOrderResolution {
-  const status = (rawStatus || '').toUpperCase();
-
-  if (status === 'APPROVED') {
-    return { paymentStatus: 'APPROVED', orderStatus: 'PROCESSING' };
+async function recordGetnetLog(context: GetnetLogContext): Promise<void> {
+  try {
+    await prisma.getnetPaymentLog.create({
+      data: {
+        orderId: context.orderId ?? null,
+        orderNumber: context.orderNumber ?? null,
+        paymentId: context.paymentId ?? null,
+        requestId: context.requestId ?? null,
+        event: context.event,
+        gatewayStatus: context.gatewayStatus ?? null,
+        responseCode: context.responseCode ?? null,
+        responseMessage: context.responseMessage ?? null,
+        errorMessage: context.errorMessage?.slice(0, 500) ?? null,
+      },
+    });
+  } catch (error) {
+    console.error('[getnet] No se pudo guardar el registro de diagnóstico:', error);
   }
 
-  if (status === 'PENDING' || status === 'PENDING_VALIDATION') {
-    return { paymentStatus: 'PENDING', orderStatus: 'PENDING' };
+  const log = {
+    event: context.event,
+    orderNumber: context.orderNumber ?? null,
+    requestId: context.requestId ?? null,
+    gatewayStatus: context.gatewayStatus ?? null,
+    responseCode: context.responseCode ?? null,
+    errorMessage: context.errorMessage ?? null,
+  };
+  if (context.errorMessage || context.event.includes('REJECTED') || context.event.includes('ERROR')) {
+    console.error('[getnet] Diagnóstico de pago:', log);
+  } else {
+    console.info('[getnet] Diagnóstico de pago:', log);
   }
-
-  // Any non-approved/non-pending terminal status should be treated as declined.
-  return { paymentStatus: 'DECLINED', orderStatus: 'CANCELLED' };
 }
 
 async function updateOrderStatusWithStock(orderId: string, nextStatus: 'PROCESSING' | 'CANCELLED' | 'PENDING') {
@@ -96,6 +126,45 @@ function isCardMethod(method: string): boolean {
   return method === 'CARD' || method === 'GETNET';
 }
 
+router.get('/getnet/logs', authenticate, requireRole('ADMIN', 'STAFF'), async (req, res) => {
+  try {
+    const page = Math.max(1, Number.parseInt(String(req.query.page ?? '1'), 10) || 1);
+    const limit = Math.min(100, Math.max(1, Number.parseInt(String(req.query.limit ?? '25'), 10) || 25));
+    const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const event = typeof req.query.event === 'string' ? req.query.event.trim() : '';
+    const where = {
+      ...(event ? { event } : {}),
+      ...(search ? {
+        OR: [
+          { orderNumber: { contains: search } },
+          { requestId: { contains: search } },
+          { responseCode: { contains: search } },
+          { responseMessage: { contains: search } },
+          { errorMessage: { contains: search } },
+        ],
+      } : {}),
+    };
+
+    const [logs, total] = await Promise.all([
+      prisma.getnetPaymentLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.getnetPaymentLog.count({ where }),
+    ]);
+
+    res.json({
+      logs,
+      pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+    });
+  } catch (error) {
+    console.error('Get Getnet payment logs error:', error);
+    res.status(500).json({ error: 'Failed to get Getnet payment logs' });
+  }
+});
+
 async function notifyOrderProcessing(orderId: string): Promise<void> {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
@@ -140,6 +209,7 @@ async function notifyOrderProcessing(orderId: string): Promise<void> {
 
 // Unified checkout endpoint - routes to dev auto-approve or Getnet Chile
 router.post('/checkout', optionalAuth, async (req: AuthRequest, res) => {
+  let logContext: GetnetLogContext | null = null;
   try {
     const { orderId, paymentMethod } = req.body;
     const normalizedPaymentMethod =
@@ -153,6 +223,7 @@ router.post('/checkout', optionalAuth, async (req: AuthRequest, res) => {
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
+    logContext = { orderId: order.id, orderNumber: order.orderNumber, event: 'SESSION_CREATE_ERROR' };
 
     if (normalizedPaymentMethod === 'CASH' || normalizedPaymentMethod === 'TRANSFER') {
       const existingPayment = await prisma.payment.findFirst({
@@ -260,13 +331,29 @@ router.post('/checkout', optionalAuth, async (req: AuthRequest, res) => {
       body: JSON.stringify(sessionData),
     });
 
-    const sessionResponse = await response.json();
+    const sessionResponse: unknown = await response.json();
+    const diagnostics = extractGetnetDiagnostics(sessionResponse);
+    const session = sessionResponse !== null && typeof sessionResponse === 'object'
+      ? sessionResponse as Record<string, unknown>
+      : {};
+    logContext = {
+      ...logContext,
+      event: 'SESSION_CREATE_ERROR',
+      requestId: session.requestId == null ? null : String(session.requestId),
+      ...diagnostics,
+    };
 
-    if (sessionResponse.status?.status === 'ERROR' || !sessionResponse.processUrl) {
-      console.error('Getnet session error:', JSON.stringify(sessionResponse));
-      return res.status(500).json({
-        error: 'Failed to create payment session',
-        detail: sessionResponse.status?.message || 'Unknown error',
+    const hasRequestId =
+      (typeof session.requestId === 'number' && Number.isFinite(session.requestId)) ||
+      (typeof session.requestId === 'string' && session.requestId.trim().length > 0);
+    if (!response.ok || diagnostics.gatewayStatus?.toUpperCase() === 'ERROR' || typeof session.processUrl !== 'string' || !hasRequestId) {
+      await recordGetnetLog(logContext);
+      const reason = [
+        diagnostics.responseCode ? `Código ${diagnostics.responseCode}` : null,
+        diagnostics.responseMessage,
+      ].filter(Boolean).join(': ');
+      return res.status(502).json({
+        error: reason ? `Getnet no pudo iniciar el pago. ${reason}` : 'Getnet no pudo iniciar el pago. Intenta nuevamente.',
       });
     }
 
@@ -276,26 +363,36 @@ router.post('/checkout', optionalAuth, async (req: AuthRequest, res) => {
         method: 'GETNET',
         status: 'PENDING',
         amount: total,
-        getnetPaymentId: String(sessionResponse.requestId),
-        getnetCheckoutUrl: sessionResponse.processUrl,
+        getnetPaymentId: String(session.requestId),
+        getnetCheckoutUrl: session.processUrl,
       },
     });
+    logContext = { ...logContext, event: 'SESSION_CREATED', paymentId: payment.id };
+    await recordGetnetLog(logContext);
 
     res.json({
       paymentId: payment.id,
-      checkoutUrl: sessionResponse.processUrl,
-      requestId: sessionResponse.requestId,
+      checkoutUrl: session.processUrl,
+      requestId: session.requestId as number | string,
       status: 'PENDING',
       mode: 'getnet',
     });
   } catch (error) {
     console.error('Checkout payment error:', error);
+    if (logContext) {
+      await recordGetnetLog({
+        ...logContext,
+        event: 'SESSION_CREATE_ERROR',
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
     res.status(500).json({ error: 'Failed to process checkout' });
   }
 });
 
 // Query Getnet session status (used after user returns from payment page)
 router.post('/getnet/query', optionalAuth, async (req: AuthRequest, res) => {
+  let logContext: GetnetLogContext | null = null;
   try {
     const { requestId, paymentId } = req.body;
 
@@ -307,12 +404,19 @@ router.post('/getnet/query', optionalAuth, async (req: AuthRequest, res) => {
     });
 
     if (!payment) {
+      await recordGetnetLog({
+        requestId: requestId == null ? null : String(requestId),
+        paymentId: typeof paymentId === 'string' ? paymentId : null,
+        event: 'QUERY_ERROR',
+        errorMessage: 'Payment not found for Getnet session query',
+      });
       return res.status(404).json({ error: 'Payment not found' });
     }
 
     // Find associated order
     const order = await prisma.order.findUnique({
       where: { id: payment.orderId },
+      select: { orderNumber: true, status: true },
     });
 
     if (!isCardMethod((payment.method || '').toUpperCase()) || !payment.getnetPaymentId) {
@@ -323,6 +427,13 @@ router.post('/getnet/query', optionalAuth, async (req: AuthRequest, res) => {
         orderStatus: order?.status,
       });
     }
+    logContext = {
+      orderId: payment.orderId,
+      orderNumber: order?.orderNumber,
+      paymentId: payment.id,
+      requestId: payment.getnetPaymentId,
+      event: 'QUERY_ERROR',
+    };
 
     // If already resolved, return current status.
     // Auto-heal old rows where payment was declined but order remained pending.
@@ -357,27 +468,49 @@ router.post('/getnet/query', optionalAuth, async (req: AuthRequest, res) => {
       }
     );
 
-    const sessionStatus = await queryResponse.json();
-    console.log('Getnet session status:', JSON.stringify(sessionStatus));
+    const sessionStatus: unknown = await queryResponse.json();
+    const diagnostics = extractGetnetDiagnostics(sessionStatus);
+    logContext = { ...logContext, ...diagnostics };
+    if (!queryResponse.ok) {
+      throw new Error(`Getnet session query returned HTTP ${queryResponse.status}`);
+    }
 
-    const placetoPayStatus = sessionStatus.status?.status;
-    const { paymentStatus, orderStatus } = resolveGetnetStatuses(placetoPayStatus);
+    const { paymentStatus, orderStatus } = resolveGetnetStatuses(diagnostics.gatewayStatus);
 
     // Extract card info from Getnet response if available
-    const txn = sessionStatus.payment?.[0] ?? null;
+    const session = sessionStatus !== null && typeof sessionStatus === 'object'
+      ? sessionStatus as Record<string, unknown>
+      : {};
+    const txn = Array.isArray(session.payment) && session.payment[0] !== null && typeof session.payment[0] === 'object'
+      ? session.payment[0] as Record<string, unknown>
+      : null;
     const cardBrand = txn?.franchise || null;
-    const cardLast4 = txn?.issuerName || null;
+    const cardLast4 = typeof txn?.issuerName === 'string' ? txn.issuerName : null;
 
     // Update payment record
     await prisma.payment.update({
       where: { id: payment.id },
       data: {
         status: paymentStatus,
-        cardBrand,
+        cardBrand: typeof cardBrand === 'string' ? cardBrand : null,
         cardLast4,
         paidAt: paymentStatus === 'APPROVED' ? new Date() : null,
+        getnetStatus: diagnostics.gatewayStatus,
+        getnetResponseCode: diagnostics.responseCode,
+        getnetResponseMessage: diagnostics.responseMessage,
       },
     });
+
+    if (
+      paymentStatus !== 'PENDING' ||
+      !diagnostics.gatewayStatus ||
+      !['PENDING', 'PENDING_VALIDATION'].includes(diagnostics.gatewayStatus.toUpperCase())
+    ) {
+      await recordGetnetLog({
+        ...logContext,
+        event: paymentStatus === 'DECLINED' ? 'PAYMENT_REJECTED' : paymentStatus === 'APPROVED' ? 'PAYMENT_APPROVED' : 'UNRECOGNIZED_STATUS',
+      });
+    }
 
     // Update order status and return stock when payment gets cancelled/declined
     await updateOrderStatusWithStock(payment.orderId, orderStatus);
@@ -387,23 +520,37 @@ router.post('/getnet/query', optionalAuth, async (req: AuthRequest, res) => {
       status: paymentStatus,
       orderId: payment.orderId,
       orderStatus,
-      getnetStatus: placetoPayStatus,
+      getnetStatus: diagnostics.gatewayStatus,
+      responseCode: diagnostics.responseCode,
+      responseMessage: diagnostics.responseMessage,
     });
   } catch (error) {
     console.error('Getnet query error:', error);
+    if (logContext) {
+      await recordGetnetLog({
+        ...logContext,
+        event: 'QUERY_ERROR',
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
     res.status(500).json({ error: 'Failed to query payment status' });
   }
 });
 
 // Getnet notification callback (webhook - PlacetoPay sends POST)
 router.post('/getnet/callback', async (req, res) => {
+  let logContext: GetnetLogContext | null = null;
   try {
     const { requestId, status } = req.body;
-    console.log('Getnet callback received:', JSON.stringify(req.body));
 
     if (!requestId) {
+      await recordGetnetLog({
+        event: 'CALLBACK_ERROR',
+        errorMessage: 'Getnet callback did not include a requestId',
+      });
       return res.status(400).json({ error: 'Missing requestId' });
     }
+    logContext = { requestId: String(requestId), event: 'CALLBACK_ERROR' };
 
     // Find payment by Getnet request ID
     const payment = await prisma.payment.findFirst({
@@ -412,8 +559,23 @@ router.post('/getnet/callback', async (req, res) => {
 
     if (!payment) {
       console.error('Payment not found for Getnet callback:', requestId);
+      await recordGetnetLog({
+        ...logContext,
+        errorMessage: 'Payment not found for Getnet callback',
+      });
       return res.status(404).json({ error: 'Payment not found' });
     }
+    const order = await prisma.order.findUnique({
+      where: { id: payment.orderId },
+      select: { orderNumber: true },
+    });
+    logContext = {
+      orderId: payment.orderId,
+      orderNumber: order?.orderNumber,
+      paymentId: payment.id,
+      requestId: String(requestId),
+      event: 'CALLBACK_ERROR',
+    };
 
     // Query Getnet to get authoritative status
     const queryResponse = await fetch(
@@ -425,28 +587,65 @@ router.post('/getnet/callback', async (req, res) => {
       }
     );
 
-    const sessionStatus = await queryResponse.json();
+    const sessionStatus: unknown = await queryResponse.json();
+    const session = sessionStatus !== null && typeof sessionStatus === 'object'
+      ? sessionStatus as Record<string, unknown>
+      : {};
+    const fallbackStatus = status !== null && typeof status === 'object'
+      ? status as Record<string, unknown>
+      : null;
+    const mergedStatus = {
+      ...session,
+      status: session.status ?? fallbackStatus,
+    };
+    const diagnostics = extractGetnetDiagnostics(mergedStatus);
+    logContext = { ...logContext, ...diagnostics };
+    if (!queryResponse.ok) {
+      throw new Error(`Getnet callback query returned HTTP ${queryResponse.status}`);
+    }
 
-    const placetoPayStatus = sessionStatus.status?.status || status?.status;
-    const { paymentStatus, orderStatus } = resolveGetnetStatuses(placetoPayStatus);
+    const { paymentStatus, orderStatus } = resolveGetnetStatuses(diagnostics.gatewayStatus);
 
-    const txn = sessionStatus.payment?.[0] ?? null;
+    const txn = Array.isArray(session.payment) && session.payment[0] !== null && typeof session.payment[0] === 'object'
+      ? session.payment[0] as Record<string, unknown>
+      : null;
 
     await prisma.payment.update({
       where: { id: payment.id },
       data: {
         status: paymentStatus,
-        cardBrand: txn?.franchise || null,
-        cardLast4: txn?.issuerName || null,
+        cardBrand: typeof txn?.franchise === 'string' ? txn.franchise : null,
+        cardLast4: typeof txn?.issuerName === 'string' ? txn.issuerName : null,
         paidAt: paymentStatus === 'APPROVED' ? new Date() : null,
+        getnetStatus: diagnostics.gatewayStatus,
+        getnetResponseCode: diagnostics.responseCode,
+        getnetResponseMessage: diagnostics.responseMessage,
       },
     });
+
+    if (
+      paymentStatus !== 'PENDING' ||
+      !diagnostics.gatewayStatus ||
+      !['PENDING', 'PENDING_VALIDATION'].includes(diagnostics.gatewayStatus.toUpperCase())
+    ) {
+      await recordGetnetLog({
+        ...logContext,
+        event: paymentStatus === 'DECLINED' ? 'PAYMENT_REJECTED' : paymentStatus === 'APPROVED' ? 'PAYMENT_APPROVED' : 'UNRECOGNIZED_STATUS',
+      });
+    }
 
     await updateOrderStatusWithStock(payment.orderId, orderStatus);
 
     res.json({ received: true });
   } catch (error) {
     console.error('Getnet callback error:', error);
+    if (logContext) {
+      await recordGetnetLog({
+        ...logContext,
+        event: 'CALLBACK_ERROR',
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
     res.status(500).json({ error: 'Failed to process callback' });
   }
 });

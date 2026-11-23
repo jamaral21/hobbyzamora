@@ -32,6 +32,7 @@ import ReviewsPage from './pages/admin/ReviewsPage';
 import InstagramAgentPage from './pages/admin/InstagramAgentPage';
 import { PresalesPage as AdminPresalesPage } from './pages/admin/PresalesPage';
 import SectionsConfigPage from './pages/admin/SectionsConfigPage';
+import GetnetPaymentsPage from './pages/admin/GetnetPaymentsPage';
 
 import InstagramHealthPage from './pages/admin/InstagramHealthPage';
 
@@ -195,6 +196,10 @@ export const router = createBrowserRouter([
   {
     path: '/admin/orders',
     Component: OrdersPage,
+  },
+  {
+    path: '/admin/payments/getnet',
+    Component: GetnetPaymentsPage,
   },
   {
     path: '/admin/orders/:id',

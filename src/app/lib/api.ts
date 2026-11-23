@@ -131,6 +131,23 @@ export interface Payment {
   status: 'PENDING' | 'APPROVED' | 'DECLINED' | 'CANCELLED' | 'REFUNDED';
   amount: number;
   paidAt?: string;
+  getnetStatus?: string | null;
+  getnetResponseCode?: string | null;
+  getnetResponseMessage?: string | null;
+}
+
+export interface GetnetPaymentLog {
+  id: string;
+  orderId: string | null;
+  orderNumber: string | null;
+  paymentId: string | null;
+  requestId: string | null;
+  event: string;
+  gatewayStatus: string | null;
+  responseCode: string | null;
+  responseMessage: string | null;
+  errorMessage: string | null;
+  createdAt: string;
 }
 
 export interface CartItem {
@@ -1042,16 +1059,36 @@ export const reviewsAPI = {
 // Payments API
 export const paymentsAPI = {
   checkout: (orderId: string, paymentMethod?: 'credit' | 'debit' | 'cash' | 'transfer') =>
-    fetchAPI<{ paymentId: string; checkoutUrl?: string; requestId?: number; status: string; mode: string }>('/payments/checkout', {
+    fetchAPI<{ paymentId: string; checkoutUrl?: string; requestId?: number | string; status: string; mode: string }>('/payments/checkout', {
       method: 'POST',
       body: JSON.stringify({ orderId, paymentMethod }),
     }),
 
   querySession: (params: { requestId?: number; paymentId?: string }) =>
-    fetchAPI<{ id: string; status: string; orderId: string; orderStatus: string; getnetStatus?: string }>('/payments/getnet/query', {
+    fetchAPI<{
+      id: string;
+      status: string;
+      orderId: string;
+      orderStatus: string;
+      getnetStatus?: string;
+      responseCode?: string | null;
+      responseMessage?: string | null;
+    }>('/payments/getnet/query', {
       method: 'POST',
       body: JSON.stringify(params),
     }),
+
+  getnetLogs: (params?: { search?: string; event?: string; page?: number; limit?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.search) query.set('search', params.search);
+    if (params?.event) query.set('event', params.event);
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.limit) query.set('limit', String(params.limit));
+    return fetchAPI<{
+      logs: GetnetPaymentLog[];
+      pagination: { page: number; limit: number; total: number; totalPages: number };
+    }>(`/payments/getnet/logs${query.size ? `?${query}` : ''}`, undefined, 'admin');
+  },
 
   getStatus: (paymentId: string) =>
     fetchAPI<Payment & { order: { orderNumber: string; status: string } }>(`/payments/${paymentId}/status`),
