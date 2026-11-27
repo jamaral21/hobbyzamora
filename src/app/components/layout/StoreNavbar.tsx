@@ -11,9 +11,11 @@ import { JAPAN_TRAVEL_2026_CATEGORY } from '../../lib/sku';
 export function StoreNavbar({
   hasActiveOffers = false,
   hasJapanTravelSection = false,
+  offersSectionTitle = 'Cyber Week',
 }: {
   hasActiveOffers?: boolean;
   hasJapanTravelSection?: boolean;
+  offersSectionTitle?: string;
 }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
@@ -135,7 +137,7 @@ export function StoreNavbar({
               {hasActiveOffers && (
                 <Link to="/store/offers" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 py-2 text-red-500 hover:text-red-400 font-medium transition-colors">
                   <BadgePercent className="w-4 h-4" />
-                  Cyber Week
+                  {offersSectionTitle}
                 </Link>
               )}
               {hasJapanTravelSection && (
@@ -214,7 +216,7 @@ export function StoreNavbar({
                 }`}
               >
                 <BadgePercent className="w-3.5 h-3.5" />
-                Cyber Week
+                {offersSectionTitle}
               </Link>
             )}
             {hasJapanTravelSection && (

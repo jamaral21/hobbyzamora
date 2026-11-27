@@ -2,14 +2,22 @@ import { StoreNavbar } from './StoreNavbar';
 import { ChatWidget } from '../chat/ChatWidget';
 import { useStoreSections } from '../../hooks/useData';
 import { buildSectionGroups, slugifySection } from '../../lib/sections';
-import { useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { Instagram } from 'lucide-react';
-import { japanTravelSectionAPI, productsAPI } from '../../lib/api';
+import { japanTravelSectionAPI, offersSectionAPI, productsAPI } from '../../lib/api';
 import { JAPAN_TRAVEL_2026_CATEGORY } from '../../lib/sku';
+
+const DEFAULT_OFFERS_SECTION_TITLE = 'Cyber Week';
+const OffersSectionTitleContext = createContext(DEFAULT_OFFERS_SECTION_TITLE);
+
+export function useOffersSectionTitle() {
+  return useContext(OffersSectionTitleContext);
+}
 
 export function StoreLayout({ children }: { children: React.ReactNode }) {
   const [hasActiveOffers, setHasActiveOffers] = useState(false);
   const [hasJapanTravelSection, setHasJapanTravelSection] = useState(false);
+  const [offersSectionTitle, setOffersSectionTitle] = useState(DEFAULT_OFFERS_SECTION_TITLE);
   const { data: sections } = useStoreSections();
   const groups = useMemo(() => buildSectionGroups(sections || []), [sections]);
   const japanTravelCategoryPath = `/store/products?category=${slugifySection(JAPAN_TRAVEL_2026_CATEGORY)}`;
@@ -22,6 +30,20 @@ export function StoreLayout({ children }: { children: React.ReactNode }) {
       })
       .catch(() => {
         if (active) setHasActiveOffers(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    offersSectionAPI.getTitle()
+      .then(({ title }) => {
+        if (active) setOffersSectionTitle(title);
+      })
+      .catch((error: unknown) => {
+        console.error('Could not load offers section title:', error);
       });
     return () => {
       active = false;
@@ -45,8 +67,12 @@ export function StoreLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
-      <StoreNavbar hasActiveOffers={hasActiveOffers} hasJapanTravelSection={hasJapanTravelSection} />
-      <main className="relative z-0">{children}</main>
+      <StoreNavbar hasActiveOffers={hasActiveOffers} hasJapanTravelSection={hasJapanTravelSection} offersSectionTitle={offersSectionTitle} />
+      <main className="relative z-0">
+        <OffersSectionTitleContext.Provider value={offersSectionTitle}>
+          {children}
+        </OffersSectionTitleContext.Provider>
+      </main>
       <footer className="bg-card border-t border-border mt-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
@@ -74,7 +100,7 @@ export function StoreLayout({ children }: { children: React.ReactNode }) {
               <h4 className="text-sm text-foreground mb-4 font-semibold">Tienda</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li><a href="/store/products" className="hover:text-primary transition-colors">Todos los Productos</a></li>
-                {hasActiveOffers && <li><a href="/store/offers" className="hover:text-primary transition-colors">Cyber Week</a></li>}
+                {hasActiveOffers && <li><a href="/store/offers" className="hover:text-primary transition-colors">{offersSectionTitle}</a></li>}
                 {hasJapanTravelSection && <li><a href={japanTravelCategoryPath} className="hover:text-primary transition-colors">🇯🇵 Productos Viaje Japón 2026</a></li>}
                 <li><a href="/store/presales" className="hover:text-primary transition-colors">Preventas</a></li>
                 <li><a href="/store/account" className="hover:text-primary transition-colors">Mi Cuenta</a></li>

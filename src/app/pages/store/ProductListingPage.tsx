@@ -9,6 +9,7 @@ import { useProducts, useStoreSections } from '../../hooks/useData';
 import { useAuth } from '../../contexts/AuthContext';
 import { buildSectionGroups, matchesCategoryFilter, orderSectionLabels, slugifySection } from '../../lib/sections';
 import { getDiscountedPrice, getProductDiscountPercent } from '../../lib/productPricing';
+import { useOffersSectionTitle } from '../../components/layout/StoreLayout';
 
 export default function ProductListingPage() {
   return (
@@ -34,6 +35,7 @@ export function ProductListingPageContent({
   offersOnly?: boolean;
 }) {
   const { isAuthenticated } = useAuth();
+  const offersSectionTitle = useOffersSectionTitle();
   const [sortBy, setSortBy] = useState('featured');
   const [searchParams, setSearchParams] = useSearchParams();
   const categoryParam = searchParams.get('category') || 'all';
@@ -145,7 +147,7 @@ export function ProductListingPageContent({
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl text-foreground mb-2">
-            {presalesOnly ? 'Preventas' : offersOnly ? 'Cyber Week' : selectedCategory || 'Todos los Productos'}
+            {presalesOnly ? 'Preventas' : offersOnly ? offersSectionTitle : selectedCategory || 'Todos los Productos'}
           </h1>
           <p className="text-muted-foreground">
             {presalesOnly

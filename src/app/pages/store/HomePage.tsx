@@ -19,7 +19,7 @@ import { HeroSlider, type HeroSlide } from '../../components/design-system/HeroS
 import { useInstagramFeed, useProducts, useReviews, useStoreSections } from '../../hooks/useData';
 import { useAuth } from '../../contexts/AuthContext';
 import { mockProducts } from '../../data/mockData';
-import { japanTravelSectionAPI } from '../../lib/api';
+import { japanTravelSectionAPI, offersSectionAPI } from '../../lib/api';
 import { JAPAN_TRAVEL_2026_CATEGORY } from '../../lib/sku';
 import { buildSectionGroups, resolveParentCategory } from '../../lib/sections';
 
@@ -70,9 +70,24 @@ export default function HomePage() {
   const { data: sections } = useStoreSections();
   const { data: instagramFeed } = useInstagramFeed({ enabled: INSTAGRAM_FEED_ENABLED });
   const { data: approvedReviews } = useReviews({ status: 'APPROVED', limit: 6 });
+  const [offersSectionTitle, setOffersSectionTitle] = useState('Cyber Week');
   const [japanTravelSectionEnabled, setJapanTravelSectionEnabled] = useState(false);
   const categoryGroups = useMemo(() => buildSectionGroups(sections || []), [sections]);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let active = true;
+    offersSectionAPI.getTitle()
+      .then(({ title }) => {
+        if (active) setOffersSectionTitle(title);
+      })
+      .catch((error: unknown) => {
+        console.error('Could not load offers section title:', error);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -242,12 +257,12 @@ export default function HomePage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between gap-4 mb-8">
               <div>
-                <h2 className="text-primary mb-2">CYBER WEEK</h2>
+                <h2 className="text-primary mb-2">{offersSectionTitle.toLocaleUpperCase()}</h2>
                 <p className="text-muted-foreground">Productos seleccionados con precio especial</p>
               </div>
               <Link to="/store/offers">
                 <Button variant="outline" size="sm">
-                  Ver Cyber Week
+                  Ver {offersSectionTitle}
                   <ArrowRight className="w-4 h-4" />
                 </Button>
               </Link>

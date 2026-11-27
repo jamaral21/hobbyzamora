@@ -9,7 +9,7 @@ import { Dropdown, DropdownItem } from '../../components/design-system/Dropdown'
 import { Modal } from '../../components/design-system/Modal';
 import { ProductEditor } from '../../components/admin/ProductEditor';
 import { useMutation } from '../../hooks/useData';
-import { japanTravelSectionAPI, productsAPI } from '../../lib/api';
+import { japanTravelSectionAPI, offersSectionAPI, productsAPI } from '../../lib/api';
 import { formatChileDate } from '../../lib/chileDate';
 import type { Product } from '../../lib/api';
 import { useAdminAuth } from '../../contexts/AdminAuthContext';
@@ -46,6 +46,10 @@ export default function ProductsPage() {
   const [sectionCategories, setSectionCategories] = useState<string[]>([]);
   const [isClearingDiscounts, setIsClearingDiscounts] = useState(false);
   const [discountClearMessage, setDiscountClearMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [offersSectionTitle, setOffersSectionTitle] = useState('Cyber Week');
+  const [offersTitleDraft, setOffersTitleDraft] = useState('Cyber Week');
+  const [isSavingOffersTitle, setIsSavingOffersTitle] = useState(false);
+  const [offersTitleMessage, setOffersTitleMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [japanTravelEnabled, setJapanTravelEnabled] = useState<boolean | null>(null);
   const [japanTravelBusy, setJapanTravelBusy] = useState(false);
   const [japanTravelError, setJapanTravelError] = useState('');
@@ -140,6 +144,18 @@ export default function ProductsPage() {
   useEffect(() => {
     if (isPresalesView || user?.role !== 'ADMIN') return;
     let cancelled = false;
+    offersSectionAPI.getTitle()
+      .then(({ title }) => {
+        if (!cancelled) {
+          setOffersSectionTitle(title);
+          setOffersTitleDraft(title);
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setOffersTitleMessage({ type: 'error', text: error instanceof Error ? error.message : 'No se pudo cargar el nombre de la sección' });
+        }
+      });
     japanTravelSectionAPI.getStatus()
       .then(({ enabled }) => {
         if (!cancelled) setJapanTravelEnabled(enabled);
@@ -166,7 +182,7 @@ export default function ProductsPage() {
   };
 
   const handleClearDiscounts = async () => {
-    if (!window.confirm('¿Quitar todos los descuentos de todos los productos y desactivar Cyber Week?')) return;
+    if (!window.confirm(`¿Quitar todos los descuentos de todos los productos y desactivar ${offersSectionTitle}?`)) return;
 
     setIsClearingDiscounts(true);
     setDiscountClearMessage(null);
@@ -175,7 +191,7 @@ export default function ProductsPage() {
       setDiscountClearMessage({
         type: 'success',
         text: updatedCount > 0
-          ? `Cyber Week desactivada. Se quitaron los descuentos de ${updatedCount} producto(s).`
+          ? `${offersSectionTitle} desactivada. Se quitaron los descuentos de ${updatedCount} producto(s).`
           : 'No había descuentos activos para quitar.',
       });
       await loadProducts();
@@ -183,6 +199,27 @@ export default function ProductsPage() {
       setDiscountClearMessage({ type: 'error', text: error?.message || 'No se pudieron quitar los descuentos.' });
     } finally {
       setIsClearingDiscounts(false);
+    }
+  };
+
+  const handleSaveOffersTitle = async () => {
+    const title = offersTitleDraft.trim();
+    if (!title || title.length > 40) {
+      setOffersTitleMessage({ type: 'error', text: 'El nombre debe tener entre 1 y 40 caracteres.' });
+      return;
+    }
+
+    setIsSavingOffersTitle(true);
+    setOffersTitleMessage(null);
+    try {
+      const result = await offersSectionAPI.setTitle(title);
+      setOffersSectionTitle(result.title);
+      setOffersTitleDraft(result.title);
+      setOffersTitleMessage({ type: 'success', text: 'Nombre de la sección actualizado.' });
+    } catch (error: unknown) {
+      setOffersTitleMessage({ type: 'error', text: error instanceof Error ? error.message : 'No se pudo actualizar el nombre de la sección.' });
+    } finally {
+      setIsSavingOffersTitle(false);
     }
   };
 
@@ -442,7 +479,7 @@ export default function ProductsPage() {
                 disabled={isClearingDiscounts}
               >
                 {isClearingDiscounts ? <Loader2 className="w-4 h-4 animate-spin" /> : <BadgePercent className="w-4 h-4" />}
-                {isClearingDiscounts ? 'Quitando descuentos...' : 'Desactivar Cyber Week'}
+                {isClearingDiscounts ? 'Quitando descuentos...' : `Desactivar ${offersSectionTitle}`}
               </Button>
             )}
             {!isPresalesView && user?.role === 'ADMIN' && (
@@ -467,6 +504,44 @@ export default function ProductsPage() {
           </div>
         </div>
 
+        {!isPresalesView && user?.role === 'ADMIN' && (
+          <div className="mb-4 flex flex-col gap-3 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-end">
+            <div className="flex-1">
+              <label htmlFor="offers-section-title" className="mb-1.5 block text-sm font-medium text-foreground">
+                Nombre de la sección de ofertas
+              </label>
+              <input
+                id="offers-section-title"
+                type="text"
+                value={offersTitleDraft}
+                maxLength={40}
+                onChange={(event) => setOffersTitleDraft(event.target.value)}
+                className="w-full rounded-lg border border-border bg-input-background px-3 py-2 text-foreground"
+                placeholder="Ej. Cyber Week"
+              />
+            </div>
+            <Button
+              variant="outline"
+              onClick={handleSaveOffersTitle}
+              disabled={isSavingOffersTitle || !offersTitleDraft.trim() || offersTitleDraft.trim() === offersSectionTitle}
+            >
+              {isSavingOffersTitle && <Loader2 className="h-4 w-4 animate-spin" />}
+              Guardar nombre
+            </Button>
+          </div>
+        )}
+        {offersTitleMessage && !isPresalesView && user?.role === 'ADMIN' && (
+          <div className={`mb-4 flex items-center gap-2 rounded-lg border px-4 py-3 text-sm ${
+            offersTitleMessage.type === 'success'
+              ? 'border-[#00e676]/20 bg-[#00e676]/10 text-foreground'
+              : 'border-destructive/20 bg-destructive/10 text-destructive'
+          }`}>
+            {offersTitleMessage.type === 'success'
+              ? <CheckCircle className="h-4 w-4 text-[#00e676]" />
+              : <AlertCircle className="h-4 w-4" />}
+            {offersTitleMessage.text}
+          </div>
+        )}
         {discountClearMessage && (
           <div className={`mb-4 flex items-center gap-2 rounded-lg border px-4 py-3 text-sm ${
             discountClearMessage.type === 'success'

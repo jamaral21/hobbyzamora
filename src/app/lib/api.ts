@@ -484,6 +484,20 @@ export const japanTravelSectionAPI = {
       ),
 };
 
+export const offersSectionAPI = {
+  getTitle: () =>
+    fetchAPI<{ title: string }>('/site-maintenance/offers-title', undefined, 'public'),
+  setTitle: (title: string) =>
+    fetchAPI<{ title: string }>(
+      '/site-maintenance/offers-title',
+      {
+        method: 'PUT',
+        body: JSON.stringify({ title }),
+      },
+      'admin',
+    ),
+};
+
 export const addressesAPI = authAPI.addresses;
 
 // Products API

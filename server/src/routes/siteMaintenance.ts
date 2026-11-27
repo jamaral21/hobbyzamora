@@ -7,6 +7,8 @@ const router = Router();
 const MAINTENANCE_KEY = 'store_maintenance';
 const JAPAN_TRAVEL_SECTION_KEY = 'japan_travel_2026_section';
 const JAPAN_TRAVEL_CATEGORY = 'Productos Viaje Japón 2026';
+const OFFERS_SECTION_TITLE_KEY = 'offers_section_title';
+const DEFAULT_OFFERS_SECTION_TITLE = 'Cyber Week';
 
 async function ensureSettingsTable() {
   await prisma.$executeRawUnsafe(
@@ -55,6 +57,15 @@ async function getJapanTravelSectionStatus() {
   };
 }
 
+async function getOffersSectionTitle(): Promise<string> {
+  await ensureSettingsTable();
+  const rows = await prisma.$queryRawUnsafe<Array<{ value: string }>>(
+    'SELECT value FROM site_settings WHERE key = ? LIMIT 1',
+    OFFERS_SECTION_TITLE_KEY,
+  );
+  return rows[0]?.value || DEFAULT_OFFERS_SECTION_TITLE;
+}
+
 router.get('/', async (_req, res) => {
   try {
     const maintenance = await getMaintenanceValue();
@@ -62,6 +73,15 @@ router.get('/', async (_req, res) => {
   } catch (error) {
     console.error('GET /api/site-maintenance error:', error);
     return res.status(500).json({ error: 'No se pudo obtener el estado de mantenimiento' });
+  }
+});
+
+router.get('/offers-title', async (_req, res) => {
+  try {
+    return res.json({ title: await getOffersSectionTitle() });
+  } catch (error) {
+    console.error('GET /api/site-maintenance/offers-title error:', error);
+    return res.status(500).json({ error: 'No se pudo obtener el nombre de la sección de ofertas' });
   }
 });
 
@@ -91,6 +111,29 @@ router.put('/', authenticate, requireRole('ADMIN', 'STAFF', 'admin', 'staff'), a
   } catch (error) {
     console.error('PUT /api/site-maintenance error:', error);
     return res.status(500).json({ error: 'No se pudo actualizar el estado de mantenimiento' });
+  }
+});
+
+router.put('/offers-title', authenticate, requireRole('ADMIN', 'STAFF', 'admin', 'staff'), async (req: AuthRequest, res) => {
+  try {
+    const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
+    if (!title || title.length > 40) {
+      return res.status(400).json({ error: 'El nombre debe tener entre 1 y 40 caracteres' });
+    }
+
+    await ensureSettingsTable();
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO site_settings (key, value, updatedAt)
+       VALUES (?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = CURRENT_TIMESTAMP`,
+      OFFERS_SECTION_TITLE_KEY,
+      title,
+    );
+
+    return res.json({ title });
+  } catch (error) {
+    console.error('PUT /api/site-maintenance/offers-title error:', error);
+    return res.status(500).json({ error: 'No se pudo actualizar el nombre de la sección de ofertas' });
   }
 });
 
