@@ -15,6 +15,7 @@ import {
   X,
   Star,
   CreditCard,
+  BadgePercent,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useState, useEffect } from 'react';
@@ -28,6 +29,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Panel', icon: LayoutDashboard, path: '/admin' },
+  { label: 'Ofertas', icon: BadgePercent, path: '/admin/offers' },
   { label: 'Productos', icon: Package, path: '/admin/products' },
   { label: 'Pedidos', icon: ShoppingBag, path: '/admin/orders' },
   { label: 'Pagos Getnet', icon: CreditCard, path: '/admin/payments/getnet' },

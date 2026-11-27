@@ -485,6 +485,21 @@ export const japanTravelSectionAPI = {
 };
 
 export const offersSectionAPI = {
+  getConfig: () =>
+    fetchAPI<{ title: string; bannerUrl: string; startDate: string; endDate: string }>(
+      '/site-maintenance/offers-config',
+      undefined,
+      'public',
+    ),
+  setConfig: (config: { title: string; bannerUrl: string; startDate: string; endDate: string }) =>
+    fetchAPI<{ title: string; bannerUrl: string; startDate: string; endDate: string }>(
+      '/site-maintenance/offers-config',
+      {
+        method: 'PUT',
+        body: JSON.stringify(config),
+      },
+      'admin',
+    ),
   getTitle: () =>
     fetchAPI<{ title: string }>('/site-maintenance/offers-title', undefined, 'public'),
   setTitle: (title: string) =>

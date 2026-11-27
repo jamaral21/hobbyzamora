@@ -61,6 +61,19 @@ const heroSlides: HeroSlide[] = [
   },
 ];
 
+function getChileDateString(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: 'America/Santiago',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+  return year && month && day ? `${year}-${month}-${day}` : '';
+}
+
 export default function HomePage() {
   const INSTAGRAM_FEED_ENABLED = import.meta.env.VITE_ENABLE_INSTAGRAM_FEED === 'true';
   const { isAuthenticated } = useAuth();
@@ -70,16 +83,21 @@ export default function HomePage() {
   const { data: sections } = useStoreSections();
   const { data: instagramFeed } = useInstagramFeed({ enabled: INSTAGRAM_FEED_ENABLED });
   const { data: approvedReviews } = useReviews({ status: 'APPROVED', limit: 6 });
-  const [offersSectionTitle, setOffersSectionTitle] = useState('Cyber Week');
+  const [offersConfig, setOffersConfig] = useState({
+    title: 'Cyber Week',
+    bannerUrl: '',
+    startDate: '',
+    endDate: '',
+  });
   const [japanTravelSectionEnabled, setJapanTravelSectionEnabled] = useState(false);
   const categoryGroups = useMemo(() => buildSectionGroups(sections || []), [sections]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let active = true;
-    offersSectionAPI.getTitle()
-      .then(({ title }) => {
-        if (active) setOffersSectionTitle(title);
+    offersSectionAPI.getConfig()
+      .then((config) => {
+        if (active) setOffersConfig(config);
       })
       .catch((error: unknown) => {
         console.error('Could not load offers section title:', error);
@@ -137,10 +155,35 @@ export default function HomePage() {
   }, [sortedByNewest]);
 
   const discountedProducts = useMemo(() => {
-    return allProducts
-      .filter((product: any) => !product.isPresale && Number(product.discountPercent) > 0)
+    return (products || [])
+      .filter((product) =>
+        product.status === 'ACTIVE' &&
+        !product.isPresale &&
+        Number(product.discountPercent) > 0
+      )
       .slice(0, 8);
-  }, [allProducts]);
+  }, [products]);
+  const chileToday = getChileDateString(new Date());
+  const offersBannerIsActive = Boolean(
+    offersConfig.bannerUrl &&
+    offersConfig.startDate &&
+    offersConfig.endDate &&
+    chileToday >= offersConfig.startDate &&
+    chileToday <= offersConfig.endDate &&
+    discountedProducts.length > 0
+  );
+  const homeHeroSlides = offersBannerIsActive
+    ? [
+        {
+          id: 'slide-offers',
+          image: offersConfig.bannerUrl,
+          alt: offersConfig.title,
+          linkLabel: `Ver ${offersConfig.title}`,
+          ctaHref: '/store/offers',
+        },
+        ...heroSlides,
+      ]
+    : heroSlides;
 
   const presaleProducts = useMemo(() => {
     return inStockProducts.filter((p: any) => p.isPresale);
@@ -204,7 +247,7 @@ export default function HomePage() {
       {/* ═══════════════════════════════════════════
           HERO BANNER — Full-width visual
       ═══════════════════════════════════════════ */}
-      <HeroSlider slides={heroSlides} />
+      <HeroSlider slides={homeHeroSlides} />
 
       {/* ═══════════════════════════════════════════
           PRODUCTOS DESTACADOS — Carrusel horizontal
@@ -257,12 +300,12 @@ export default function HomePage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-center justify-between gap-4 mb-8">
               <div>
-                <h2 className="text-primary mb-2">{offersSectionTitle.toLocaleUpperCase()}</h2>
+                <h2 className="text-primary mb-2">{offersConfig.title.toLocaleUpperCase()}</h2>
                 <p className="text-muted-foreground">Productos seleccionados con precio especial</p>
               </div>
               <Link to="/store/offers">
                 <Button variant="outline" size="sm">
-                  Ver {offersSectionTitle}
+                  Ver {offersConfig.title}
                   <ArrowRight className="w-4 h-4" />
                 </Button>
               </Link>

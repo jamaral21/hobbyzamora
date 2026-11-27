@@ -23,6 +23,7 @@ import FAQPage from './pages/store/FAQPage';
 // Admin Pages
 import DashboardPage from './pages/admin/DashboardPage';
 import ProductsPage from './pages/admin/ProductsPage';
+import OffersConfigPage from './pages/admin/OffersConfigPage';
 import AdminProductDetailPage from './pages/admin/AdminProductDetailPage';
 import OrdersPage from './pages/admin/OrdersPage';
 import OrderDetailPage from './pages/admin/OrderDetailPage';
@@ -188,6 +189,10 @@ export const router = createBrowserRouter([
   {
     path: '/admin',
     Component: DashboardPage,
+  },
+  {
+    path: '/admin/offers',
+    Component: OffersConfigPage,
   },
   {
     path: '/admin/products',

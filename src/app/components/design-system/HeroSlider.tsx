@@ -9,6 +9,8 @@ import { Button } from './Button';
 export interface HeroSlide {
   id: string;
   image: string;
+  alt?: string;
+  linkLabel?: string;
   title?: string;
   subtitle?: string;
   ctaText?: string;
@@ -111,7 +113,7 @@ function SlideContent({ slide }: { slide: HeroSlide }) {
   // Image-only slide with a link — make the whole slide clickeable
   if (!hasText && !hasCta && hasLink) {
     return (
-      <Link to={slide.ctaHref!} className="absolute inset-0 z-[1]" aria-label={slide.title || 'Ver categoría'}>
+      <Link to={slide.ctaHref!} className="absolute inset-0 z-[1]" aria-label={slide.linkLabel || slide.title || 'Ver categoría'}>
         <span className="sr-only">Ver categoría</span>
       </Link>
     );
@@ -361,7 +363,7 @@ export function HeroSlider({
         >
           <SlideImage
             src={activeSlide.image}
-            alt={activeSlide.title ?? `Slide ${state.currentIndex + 1}`}
+            alt={activeSlide.alt ?? activeSlide.title ?? `Slide ${state.currentIndex + 1}`}
             loading="eager"
           />
           <SlideContent slide={activeSlide} />
